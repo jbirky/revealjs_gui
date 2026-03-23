@@ -103,6 +103,7 @@ export default function EditorPage({ presentationId, onGoHome }) {
   const [githubToken, setGithubToken] = useState('')
   const [githubPushing, setGithubPushing] = useState(false)
   const [githubStatus, setGithubStatus] = useState(null) // { type: 'success'|'error', message }
+  const [githubCommitMsg, setGithubCommitMsg] = useState('')
 
   // Track if we're programmatically setting editor content (to avoid loops)
   const settingContent = useRef(false)
@@ -162,8 +163,9 @@ export default function EditorPage({ presentationId, onGoHome }) {
     setGithubPushing(true)
     setGithubStatus(null)
     try {
-      const result = await api.pushToGithub(presentationId)
+      const result = await api.pushToGithub(presentationId, githubCommitMsg.trim() || undefined)
       setGithubStatus({ type: 'success', message: 'Pushed to GitHub', url: result.url })
+      setGithubCommitMsg('')
     } catch (err) {
       setGithubStatus({ type: 'error', message: err.message })
     } finally {
@@ -794,21 +796,21 @@ svg.selectAll('circle').data(data).join('circle')
             </optgroup>
           </select>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#a0a0b0', cursor: 'pointer', userSelect: 'none' }}>
             <input type="checkbox" checked={presentation.showPresentGrid || false}
               onChange={e => setPresentation(prev => ({ ...prev, showPresentGrid: e.target.checked }))}
               style={{ accentColor: 'var(--accent)' }} />
             Grid
           </label>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#a0a0b0', cursor: 'pointer', userSelect: 'none' }}>
             <input type="checkbox" checked={presentation.showFooter || false}
               onChange={e => setPresentation(prev => ({ ...prev, showFooter: e.target.checked }))}
               style={{ accentColor: 'var(--accent)' }} />
             Footer
           </label>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#a0a0b0', cursor: 'pointer', userSelect: 'none' }}>
             <input type="checkbox" checked={presentation.showPageNumbers || false}
               onChange={e => setPresentation(prev => ({ ...prev, showPageNumbers: e.target.checked }))}
               style={{ accentColor: 'var(--accent)' }} />
@@ -879,9 +881,9 @@ svg.selectAll('circle').data(data).join('circle')
       {showGithubModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}
           onClick={e => { if (e.target === e.currentTarget) setShowGithubModal(false) }}>
-          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 24, width: 420, maxWidth: '90vw', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
+          <div style={{ background: '#1e1e2e', borderRadius: 12, padding: 24, width: 420, maxWidth: '90vw', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>Save to GitHub</h3>
+              <h3 style={{ margin: 0, fontSize: 16, color: '#e0e0e0' }}>Save to GitHub</h3>
               <button className="btn btn-ghost" onClick={() => setShowGithubModal(false)} style={{ padding: 4 }}>
                 <X size={16} />
               </button>
@@ -889,30 +891,30 @@ svg.selectAll('circle').data(data).join('circle')
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Repository Owner</label>
+                <label style={{ fontSize: 12, color: '#a0a0b0', display: 'block', marginBottom: 4 }}>Repository Owner</label>
                 <input
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: 14, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 14, boxSizing: 'border-box' }}
                   value={githubConfig.owner}
                   onChange={e => setGithubConfig(prev => ({ ...prev, owner: e.target.value }))}
                   placeholder="username or org"
                 />
               </div>
               <div>
-                <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Repository Name</label>
+                <label style={{ fontSize: 12, color: '#a0a0b0', display: 'block', marginBottom: 4 }}>Repository Name</label>
                 <input
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: 14, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 14, boxSizing: 'border-box' }}
                   value={githubConfig.repo}
                   onChange={e => setGithubConfig(prev => ({ ...prev, repo: e.target.value }))}
                   placeholder="my-presentations"
                 />
               </div>
               <div>
-                <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>
-                  Personal Access Token {githubConfig.hasToken && <span style={{ color: 'var(--success)' }}>(saved)</span>}
+                <label style={{ fontSize: 12, color: '#a0a0b0', display: 'block', marginBottom: 4 }}>
+                  Personal Access Token {githubConfig.hasToken && <span style={{ color: '#22c55e' }}>(saved)</span>}
                 </label>
                 <input
                   type="password"
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: 14, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 14, boxSizing: 'border-box' }}
                   value={githubToken}
                   onChange={e => setGithubToken(e.target.value)}
                   placeholder={githubConfig.hasToken ? '••••••••  (leave blank to keep)' : 'ghp_...'}
@@ -927,7 +929,17 @@ svg.selectAll('circle').data(data).join('circle')
                 Save Settings
               </button>
 
-              <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '4px 0' }} />
+              <hr style={{ border: 'none', borderTop: '1px solid #3a3a4e', margin: '4px 0' }} />
+
+              <div>
+                <label style={{ fontSize: 12, color: '#a0a0b0', display: 'block', marginBottom: 4 }}>Commit Message (optional)</label>
+                <input
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 14, boxSizing: 'border-box' }}
+                  value={githubCommitMsg}
+                  onChange={e => setGithubCommitMsg(e.target.value)}
+                  placeholder={`${presentation?.title || 'Untitled'} ${new Date().toLocaleString()}`}
+                />
+              </div>
 
               <button
                 className="btn btn-primary"
@@ -942,8 +954,8 @@ svg.selectAll('circle').data(data).join('circle')
               {githubStatus && (
                 <div style={{
                   padding: '8px 12px', borderRadius: 6, fontSize: 13,
-                  background: githubStatus.type === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                  color: githubStatus.type === 'success' ? 'var(--success, #22c55e)' : 'var(--error, #ef4444)',
+                  background: githubStatus.type === 'success' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                  color: githubStatus.type === 'success' ? '#22c55e' : '#ef4444',
                   display: 'flex', alignItems: 'center', gap: 8,
                 }}>
                   {githubStatus.type === 'success' ? <Check size={14} /> : <X size={14} />}
@@ -1091,7 +1103,7 @@ svg.selectAll('circle').data(data).join('circle')
               <select
                 value={codeEditorState.language}
                 onChange={e => setCodeEditorState(s => ({ ...s, language: e.target.value }))}
-                style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '4px 8px', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
+                style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: '#e0e0e0', padding: '4px 8px', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
               >
                 {[
                   { id: 'plaintext', label: 'Plain Text' },
@@ -1149,7 +1161,7 @@ svg.selectAll('circle').data(data).join('circle')
                     {key === 'two-column' && <div style={{display:'flex',gap:4,width:'80%',height:'60%'}}><div style={{flex:1,background:'rgba(255,255,255,0.1)',borderRadius:2}}/><div style={{flex:1,background:'rgba(255,255,255,0.1)',borderRadius:2}}/></div>}
                     {key === 'image-text' && <div style={{display:'flex',gap:4,width:'80%',height:'60%'}}><div style={{flex:1,background:'rgba(99,102,241,0.3)',borderRadius:2,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}>🖼</div><div style={{flex:1,background:'rgba(255,255,255,0.1)',borderRadius:2}}/></div>}
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500 }}>{tmpl.label}</div>
+                  <div style={{ fontSize: 12, color: '#e0e0e0', fontWeight: 500 }}>{tmpl.label}</div>
                 </button>
               ))}
             </div>

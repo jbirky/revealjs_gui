@@ -485,13 +485,48 @@ app.post('/api/presentations/:id/github/push', async (req, res) => {
     const repoInfo = await gh(`/repos/${owner}/${repo}`)
     const branch = repoInfo.default_branch || 'main'
 
-    // Get latest commit SHA on the branch
-    const refData = await gh(`/repos/${owner}/${repo}/git/ref/heads/${branch}`)
-    const latestCommitSha = refData.object.sha
+    // Check if repo has any commits (empty repo)
+    let latestCommitSha = null
+    let baseTreeSha = null
+    try {
+      const refData = await gh(`/repos/${owner}/${repo}/git/ref/heads/${branch}`)
+      latestCommitSha = refData.object.sha
+      const commitData = await gh(`/repos/${owner}/${repo}/git/commits/${latestCommitSha}`)
+      baseTreeSha = commitData.tree.sha
+    } catch {
+      // Repo is empty — bootstrap with an initial commit via the Contents API
+      // (the Git Data API doesn't work on repos with zero commits)
+      await gh(`/repos/${owner}/${repo}/contents/.gitkeep`, {
+        method: 'PUT',
+        body: JSON.stringify({ message: 'Initial commit', content: '' }),
+      })
+      const refData = await gh(`/repos/${owner}/${repo}/git/ref/heads/${branch}`)
+      latestCommitSha = refData.object.sha
+      const commitData = await gh(`/repos/${owner}/${repo}/git/commits/${latestCommitSha}`)
+      baseTreeSha = commitData.tree.sha
+    }
 
-    // Get the tree of the latest commit
-    const commitData = await gh(`/repos/${owner}/${repo}/git/commits/${latestCommitSha}`)
-    const baseTreeSha = commitData.tree.sha
+    // Discover existing presentation folders in the repo tree
+    const existingFolders = new Set()
+    if (baseTreeSha) {
+      const rootTree = await gh(`/repos/${owner}/${repo}/git/trees/${baseTreeSha}`)
+      for (const item of rootTree.tree || []) {
+        if (item.type === 'tree' && item.path !== '.github') {
+          existingFolders.add(item.path)
+        }
+      }
+    }
+    existingFolders.add(folderName)
+
+    // Build README with links to all presentations
+    const readmeLines = [`# Presentations\n`]
+    const sortedFolders = [...existingFolders].sort()
+    for (const folder of sortedFolders) {
+      const displayName = folder.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      const viewUrl = `https://htmlpreview.github.io/?https://github.com/${owner}/${repo}/blob/${branch}/${encodeURIComponent(folder)}/presentation.html`
+      readmeLines.push(`- [${displayName}](${viewUrl})`)
+    }
+    const readmeContent = readmeLines.join('\n') + '\n'
 
     // Create blobs for our files
     const htmlBlob = await gh(`/repos/${owner}/${repo}/git/blobs`, {
@@ -502,34 +537,53 @@ app.post('/api/presentations/:id/github/push', async (req, res) => {
       method: 'POST',
       body: JSON.stringify({ content: Buffer.from(jsonContent).toString('base64'), encoding: 'base64' }),
     })
+    const readmeBlob = await gh(`/repos/${owner}/${repo}/git/blobs`, {
+      method: 'POST',
+      body: JSON.stringify({ content: Buffer.from(readmeContent).toString('base64'), encoding: 'base64' }),
+    })
 
-    // Create a new tree with our files
+    // Create a new tree with our files + README
+    const treePayload = {
+      tree: [
+        { path: `${folderName}/presentation.html`, mode: '100644', type: 'blob', sha: htmlBlob.sha },
+        { path: `${folderName}/presentation.json`, mode: '100644', type: 'blob', sha: jsonBlob.sha },
+        { path: 'README.md', mode: '100644', type: 'blob', sha: readmeBlob.sha },
+      ],
+    }
+    if (baseTreeSha) treePayload.base_tree = baseTreeSha
     const newTree = await gh(`/repos/${owner}/${repo}/git/trees`, {
       method: 'POST',
-      body: JSON.stringify({
-        base_tree: baseTreeSha,
-        tree: [
-          { path: `${folderName}/presentation.html`, mode: '100644', type: 'blob', sha: htmlBlob.sha },
-          { path: `${folderName}/presentation.json`, mode: '100644', type: 'blob', sha: jsonBlob.sha },
-        ],
-      }),
+      body: JSON.stringify(treePayload),
     })
 
-    // Create a commit
+    // Create a commit (no parents for initial commit)
+    const now = new Date()
+    const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+    const defaultMessage = `${presentation.title || 'Untitled'} [${dateStr} ${timeStr}]`
+    const commitMessage = (req.body && req.body.message) ? req.body.message : defaultMessage
+    const commitPayload = {
+      message: commitMessage,
+      tree: newTree.sha,
+      parents: latestCommitSha ? [latestCommitSha] : [],
+    }
     const newCommit = await gh(`/repos/${owner}/${repo}/git/commits`, {
       method: 'POST',
-      body: JSON.stringify({
-        message: `Update presentation: ${presentation.title || 'Untitled'}`,
-        tree: newTree.sha,
-        parents: [latestCommitSha],
-      }),
+      body: JSON.stringify(commitPayload),
     })
 
-    // Update the branch reference
-    await gh(`/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ sha: newCommit.sha }),
-    })
+    // Update or create the branch reference
+    if (latestCommitSha) {
+      await gh(`/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ sha: newCommit.sha }),
+      })
+    } else {
+      await gh(`/repos/${owner}/${repo}/git/refs`, {
+        method: 'POST',
+        body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: newCommit.sha }),
+      })
+    }
 
     res.json({
       success: true,

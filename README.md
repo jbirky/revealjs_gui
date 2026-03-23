@@ -226,6 +226,58 @@ Caddy handles HTTPS automatically via Let's Encrypt.
 
 ---
 
+## Save to GitHub
+
+You can push presentations directly to a GitHub repository from the editor. Each presentation is saved as a folder containing `presentation.html` (standalone viewable file) and `presentation.json` (full project data). The repo README is automatically updated with links to open each presentation in the browser.
+
+### 1. Create a GitHub Personal Access Token
+
+Go to **GitHub → Settings → Developer settings → [Fine-grained personal access tokens](https://github.com/settings/personal-access-tokens/new)** and create a token with these minimum permissions:
+
+| Setting | Value |
+|---------|-------|
+| **Repository access** | **Only select repositories** → select your target repo |
+| **Permissions → Contents** | **Read and write** |
+
+That's it — no other permissions are needed. Copy the token (`github_pat_...`).
+
+> **Classic tokens** also work: create one at [github.com/settings/tokens](https://github.com/settings/tokens) with the `repo` scope. Fine-grained tokens are recommended because they limit access to a single repository.
+
+### 2. Create a target repository
+
+Create a new repo on GitHub (e.g. `presentations`). It can be empty — the first push will initialize it.
+
+### 3. Configure in the editor
+
+1. Open any presentation and click the **GitHub** button in the header toolbar.
+2. Enter your GitHub username (or org) as **Repository Owner**.
+3. Enter the repository name (e.g. `presentations`).
+4. Paste your token into **Personal Access Token**.
+5. Click **Save Settings** — the token is stored server-side and only needs to be entered once.
+
+### 4. Push a presentation
+
+1. Click the **GitHub** button in the editor header.
+2. Optionally enter a **Commit Message** (if left blank, defaults to `Presentation Title [MM/DD/YYYY HH:MM]`).
+3. Click **Push to GitHub**.
+
+The presentation will be committed to a folder named after the presentation title:
+
+```
+my-repo/
+├── README.md                          ← auto-generated with links to all presentations
+├── my_first_talk/
+│   ├── presentation.html              ← open in browser to view
+│   └── presentation.json              ← full project data
+└── another_presentation/
+    ├── presentation.html
+    └── presentation.json
+```
+
+The README links use [htmlpreview.github.io](https://htmlpreview.github.io) so anyone with the link can view the slides directly in their browser.
+
+---
+
 ## Requirements
 
 | Method | Requirement |

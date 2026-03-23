@@ -26,8 +26,10 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   }).then(r => r.json()),
-  pushToGithub: (id) => fetch(`${BASE}/presentations/${id}/github/push`, {
+  pushToGithub: (id, message) => fetch(`${BASE}/presentations/${id}/github/push`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
   }).then(async r => {
     const body = await r.json()
     if (!r.ok) throw new Error(body.error || 'Push failed')
