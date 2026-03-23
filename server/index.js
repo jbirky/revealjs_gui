@@ -140,7 +140,7 @@ function generateRevealHTML(presentation) {
         }
         if (el.type === 'html') {
           const srcdoc = (el.content || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-          return `<iframe${fragClass}${fragIdx} srcdoc="${srcdoc}" style="${style}border:none;" sandbox="allow-scripts allow-same-origin" scrolling="no"></iframe>`
+          return `<iframe${fragClass}${fragIdx} srcdoc="${srcdoc}" style="${style}border:none;" scrolling="no"></iframe>`
         }
         if (el.type === 'code') {
           const lang = el.language || 'plaintext'
