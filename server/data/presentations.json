@@ -1,0 +1,187 @@
+[
+  {
+    "id": "09fb9145-9d15-4d82-93a5-9dd81236fd25",
+    "title": "example",
+    "theme": "sky",
+    "transition": "slide",
+    "slides": [
+      {
+        "id": "2537c2e2-4834-4d34-8f32-c2fe511be76d",
+        "html": "<h2>New Slide</h2><p>Add your content here</p>",
+        "notes": "",
+        "background": {
+          "type": "color",
+          "color": "#1e1e2e"
+        },
+        "layout": "top",
+        "elements": [
+          {
+            "id": "18c6f666-ff97-4008-ad3c-0ea7a4fa0bef",
+            "type": "shape",
+            "shape": "circle",
+            "x": 77.8378378378377,
+            "y": 311.66023166023166,
+            "width": 200,
+            "height": 200,
+            "zIndex": 4,
+            "fill": "#6366f1",
+            "stroke": "none",
+            "strokeWidth": 0,
+            "borderRadius": 0,
+            "opacity": 1,
+            "text": "",
+            "fontSize": 16,
+            "textColor": "#ffffff",
+            "fragment": true,
+            "fragmentIndex": 1
+          },
+          {
+            "id": "7e994642-ac91-48b5-89cc-0f983a980bd4",
+            "type": "text",
+            "x": 0,
+            "y": 0,
+            "width": 284.94208494208493,
+            "height": 111.42857142857143,
+            "zIndex": 1,
+            "content": "<p><span data-math-latex=\"PV = nRT\" data-math-display=\"false\" class=\"math-node math-inline\"></span></p>"
+          },
+          {
+            "id": "cdeef157-6cc7-437a-be96-74ca7f806d86",
+            "type": "text",
+            "x": 25.40540540540536,
+            "y": 113.74517374517376,
+            "width": 600,
+            "height": 316.6795366795367,
+            "zIndex": 1,
+            "content": "<p><span style=\"font-family: &quot;Computer Modern Sans&quot;, sans-serif;\">computer modern</span></p><p><span style=\"font-family: &quot;Computer Modern Serif&quot;, serif;\">computer modern</span></p><p><span style=\"font-family: &quot;Latin Modern Roman&quot;, serif;\">latin modern</span></p>"
+          }
+        ],
+        "section": "section 1"
+      },
+      {
+        "id": "7ac70041-5af7-432a-8b86-e286727a1417",
+        "elements": [
+          {
+            "id": "f632c1a9-daa0-4eaa-bb3e-3a6fd7d3d94b",
+            "type": "html",
+            "x": 80,
+            "y": 80,
+            "width": 500,
+            "height": 380,
+            "zIndex": 2,
+            "content": "  <script src=\"https://cdn.jsdelivr.net/npm/d3@7\"></script>\n  <style>\n    * { box-sizing: border-box; margin: 0; }\n    body { background: transparent; overflow: hidden; }\n    .node circle { stroke: rgba(255,255,255,0.3); stroke-width: 1.5; cursor: grab; }\n    .node circle:active { cursor: grabbing; }\n    .node text { fill: white; font: 12px sans-serif; pointer-events: none; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }\n    .link { stroke: rgba(255,255,255,0.15); stroke-width: 1.5; }\n    .tooltip { position: fixed; background: rgba(0,0,0,0.75); color: white; padding: 6px 10px; border-radius: 6px; font: 13px\n   sans-serif; pointer-events: none; opacity: 0; transition: opacity 0.15s; }\n  </style>\n\n  <svg id=\"viz\"></svg>\n  <div class=\"tooltip\" id=\"tip\"></div>\n\n  <script>\n  const W = window.innerWidth, H = window.innerHeight;\n  const svg = d3.select('#viz').attr('width', W).attr('height', H);\n  const tip = document.getElementById('tip');\n\n  const nodes = [\n    {id:'ML',     r:28, color:'#6366f1'},\n    {id:'Neural\\nNets', r:22, color:'#8b5cf6'},\n    {id:'CNN',    r:18, color:'#a78bfa'},\n    {id:'RNN',    r:18, color:'#a78bfa'},\n    {id:'Transformers',r:22,color:'#7c3aed'},\n    {id:'NLP',    r:20, color:'#06b6d4'},\n    {id:'Vision', r:20, color:'#0891b2'},\n    {id:'Data',   r:22, color:'#10b981'},\n    {id:'Stats',  r:18, color:'#34d399'},\n    {id:'Python', r:20, color:'#f59e0b'},\n    {id:'PyTorch',r:18, color:'#fb923c'},\n    {id:'TF',     r:18, color:'#ef4444'},\n  ];\n\n  const links = [\n    {source:'ML',target:'Neural\\nNets'},{source:'ML',target:'Data'},\n    {source:'ML',target:'Stats'},{source:'Neural\\nNets',target:'CNN'},\n    {source:'Neural\\nNets',target:'RNN'},{source:'Neural\\nNets',target:'Transformers'},\n    {source:'Transformers',target:'NLP'},{source:'CNN',target:'Vision'},\n    {source:'ML',target:'Python'},{source:'Python',target:'PyTorch'},\n    {source:'Python',target:'TF'},{source:'PyTorch',target:'Neural\\nNets'},\n    {source:'TF',target:'Neural\\nNets'},{source:'NLP',target:'Transformers'},\n    {source:'Data',target:'Python'},{source:'Stats',target:'Data'},\n  ];\n\n  const g = svg.append('g');\n\n  svg.call(d3.zoom().scaleExtent([0.4,3]).on('zoom', e => g.attr('transform', e.transform)));\n\n  const sim = d3.forceSimulation(nodes)\n    .force('link', d3.forceLink(links).id(d=>d.id).distance(90).strength(0.6))\n    .force('charge', d3.forceManyBody().strength(-300))\n    .force('center', d3.forceCenter(W/2, H/2))\n    .force('collision', d3.forceCollide(d => d.r + 10));\n\n  const link = g.selectAll('.link').data(links).join('line').attr('class','link');\n\n  const node = g.selectAll('.node').data(nodes).join('g').attr('class','node')\n    .call(d3.drag()\n      .on('start', (e,d) => { if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })\n      .on('drag',  (e,d) => { d.fx=e.x; d.fy=e.y; })\n      .on('end',   (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }))\n    .on('mouseover', (e,d) => { tip.style.opacity=1; tip.textContent=d.id.replace('\\n',' '); })\n    .on('mousemove', e  => { tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY-28)+'px'; })\n    .on('mouseout',  ()  => { tip.style.opacity=0; });\n\n  node.append('circle').attr('r', d=>d.r).attr('fill', d=>d.color);\n  node.append('text').attr('text-anchor','middle').attr('dy','0.35em')\n    .style('font-size', d => Math.max(9, d.r*0.55)+'px')\n    .selectAll('tspan').data(d => d.id.split('\\n')).join('tspan')\n      .attr('x',0).attr('dy',(d,i,a) => i===0 && a.length>1 ? '-0.5em' : i>0 ? '1.1em' : 0)\n      .text(d=>d);\n\n  sim.on('tick', () => {\n    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)\n        .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);\n    node.attr('transform', d=>`translate(${d.x},${d.y})`);\n  });\n  </script>\n"
+          }
+        ],
+        "notes": "",
+        "background": {
+          "type": "color",
+          "color": "#1e1e2e"
+        },
+        "section": "section 2"
+      },
+      {
+        "id": "a8344edd-741c-421e-ad60-1f314c045a48",
+        "elements": [
+          {
+            "id": "c8d6c070-feff-4198-b8ff-eba459739f2d",
+            "type": "text",
+            "x": 80,
+            "y": 160,
+            "width": 800,
+            "height": 220,
+            "zIndex": 1,
+            "content": "<p style=\"text-align: left;\"><span style=\"color: rgb(245, 158, 11); font-family: &quot;Latin Modern Roman&quot;, serif;\">some code</span></p><pre><code>a = b + 1</code></pre>"
+          }
+        ],
+        "notes": "",
+        "background": {
+          "type": "color",
+          "color": "#1e1e2e"
+        },
+        "section": "section 3"
+      },
+      {
+        "id": "ea9b2430-1357-488b-9d69-2b37cd844abc",
+        "elements": [
+          {
+            "id": "3d34b899-12a9-4321-9d6b-ca0b57f02e74",
+            "type": "image",
+            "x": 11.88416988416978,
+            "y": 9.050193050193002,
+            "width": 400,
+            "height": 300,
+            "zIndex": 2,
+            "src": "/uploads/0ebecf33-5202-4e80-98dc-bd3c673a3fd4.gif",
+            "objectFit": "contain",
+            "alt": ""
+          },
+          {
+            "id": "4eea91e8-0aff-47f6-b012-b59dd8e49b90",
+            "type": "code",
+            "x": 460.6177606177607,
+            "y": 74.51737451737449,
+            "width": 484.6332046332046,
+            "height": 320,
+            "zIndex": 2,
+            "content": "// Write your code here\nfunction hello() {\n  return \"Hello, World!\"\n}",
+            "language": "javascript",
+            "fontSize": 14
+          },
+          {
+            "id": "97c326c0-e40c-4a57-9484-bead0cd71f9f",
+            "type": "text",
+            "x": 0,
+            "y": 270.73359073359075,
+            "width": 426.25482625482624,
+            "height": 188.80308880308883,
+            "zIndex": 1,
+            "content": "<p style=\"text-align: left;\"></p><p style=\"text-align: left;\"><span style=\"color: rgb(79, 70, 229);\"><span data-math-latex=\"\\int_0^\\infty e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}\" data-math-display=\"true\" class=\"math-node math-display\"></span></span></p><p style=\"text-align: left;\"></p>"
+          }
+        ],
+        "notes": "",
+        "background": {
+          "type": "color",
+          "color": "#ffffff"
+        }
+      }
+    ],
+    "createdAt": "2026-03-21T04:08:46.222Z",
+    "updatedAt": "2026-03-23T00:19:09.362Z",
+    "showFooter": true,
+    "showPageNumbers": true,
+    "showPresentGrid": false,
+    "footerColor": "#99c1f1",
+    "footerFontFamily": "'Fira Code',monospace",
+    "codeTheme": "github-dark"
+  },
+  {
+    "id": "aa88a86b-c1b2-4b02-bc63-74556a62ff57",
+    "title": "presentation",
+    "theme": "black",
+    "transition": "slide",
+    "slides": [
+      {
+        "id": "7e9c087f-8818-4d1c-abb4-c28adf402d4f",
+        "elements": [
+          {
+            "id": "661f64f7-748e-4e3e-bb41-ae6354b03068",
+            "type": "text",
+            "x": 80,
+            "y": 160,
+            "width": 800,
+            "height": 220,
+            "zIndex": 1,
+            "content": "<h2 style=\"text-align: center\">Welcome to your presentation</h2><p style=\"text-align: center\">Double-click to start editing</p>"
+          }
+        ],
+        "notes": "",
+        "background": {
+          "type": "color",
+          "color": "#1e1e2e"
+        }
+      }
+    ],
+    "createdAt": "2026-03-23T00:10:13.899Z",
+    "updatedAt": "2026-03-23T00:10:13.899Z"
+  }
+]
