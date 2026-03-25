@@ -1,21 +1,4 @@
-import { useState, useRef } from 'react'
-import { Upload } from 'lucide-react'
-import { api } from '../utils/api'
-
-const COLOR_SWATCHES = [
-  '#1e1e2e', '#0a0a0f', '#1a1a4e', '#0d3349',
-  '#1a3a1a', '#3a1a1a', '#2d1b69', '#000000',
-  '#ffffff', '#f8f9fa', '#4a4a6a', '#6b3fa0'
-]
-
-const GRADIENT_PRESETS = [
-  'linear-gradient(135deg, #1e1e2e, #4a0e8f)',
-  'linear-gradient(135deg, #0f2027, #203a43, #2c5364)',
-  'linear-gradient(135deg, #360033, #0b8793)',
-  'radial-gradient(ellipse at center, #1e3c72 0%, #2a5298 100%)',
-  'linear-gradient(135deg, #0f0c29, #302b63, #24243e)',
-  'linear-gradient(135deg, #2c3e50, #3498db)'
-]
+import { useState } from 'react'
 
 const CODE_LANGUAGES = [
   { id: 'plaintext', label: 'Plain Text' },
@@ -44,10 +27,7 @@ const CODE_LANGUAGES = [
   { id: 'latex', label: 'LaTeX' },
 ]
 
-export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide, onUpdateElement, onDeleteElement, onBringForward, onSendBackward, onEditHtml, onEditCode, presentation, onUpdatePresentation, selectedElementIds, onDeleteSelectedElements }) {
-  const [uploading, setUploading] = useState(false)
-  const fileInputRef = useRef(null)
-
+export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide, onUpdateElement, onDeleteElement, onBringForward, onSendBackward, onEditHtml, onEditCode, onEditLatex, presentation, onUpdatePresentation, selectedElementIds, onDeleteSelectedElements, isTemplate = false }) {
   if (!slide) {
     return (
       <div className="properties-panel">
@@ -56,42 +36,6 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
         </div>
       </div>
     )
-  }
-
-  const bg = slide.background || { type: 'color', color: '#1e1e2e' }
-  const bgType = bg.type || 'color'
-
-  function setBgType(type) {
-    onUpdateSlide({ background: { ...bg, type } })
-  }
-
-  function setBgColor(color) {
-    onUpdateSlide({ background: { ...bg, type: 'color', color } })
-  }
-
-  function setBgGradient(gradient) {
-    onUpdateSlide({ background: { ...bg, type: 'gradient', gradient } })
-  }
-
-  function setBgImage(image) {
-    onUpdateSlide({ background: { ...bg, type: 'image', image, size: bg.size || 'cover', position: bg.position || 'center' } })
-  }
-
-  async function handleFileUpload(e) {
-    const file = e.target.files[0]
-    if (!file) return
-    setUploading(true)
-    try {
-      const result = await api.uploadFile(file)
-      if (result.url) {
-        setBgImage(result.url)
-      }
-    } catch (err) {
-      console.error('Upload failed', err)
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
   }
 
   return (
@@ -109,7 +53,7 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
           )}
 
           {/* Position */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
             <div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>X</div>
               <input className="prop-input" type="number" value={Math.round(selectedElement.x)} onChange={e => onUpdateElement({ x: Number(e.target.value) })} />
@@ -117,6 +61,10 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
             <div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Y</div>
               <input className="prop-input" type="number" value={Math.round(selectedElement.y)} onChange={e => onUpdateElement({ y: Number(e.target.value) })} />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Rot</div>
+              <input className="prop-input" type="number" step="1" value={Math.round(selectedElement.rotation || 0)} onChange={e => onUpdateElement({ rotation: Number(e.target.value) % 360 })} title="Rotation angle in degrees" />
             </div>
             <div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>W</div>
@@ -149,6 +97,135 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
             </div>
           )}
 
+          {/* LaTeX / TikZ options */}
+          {selectedElement.type === 'latex' && (
+            <div style={{ marginBottom: 10 }}>
+              <button
+                className="btn btn-secondary"
+                style={{ width: '100%', justifyContent: 'center', fontSize: 12, marginBottom: 6 }}
+                onClick={onEditLatex}
+              >
+                Edit LaTeX / TikZ
+              </button>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Double-click element to open editor</p>
+            </div>
+          )}
+
+          {/* Markdown options */}
+          {selectedElement.type === 'markdown' && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Markdown Content</div>
+              <textarea
+                value={selectedElement.content || ''}
+                onChange={e => onUpdateElement({ content: e.target.value })}
+                style={{ width: '100%', minHeight: 120, background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '6px 8px', borderRadius: 4, fontSize: 11, fontFamily: 'monospace', resize: 'vertical', boxSizing: 'border-box' }}
+                spellCheck={false}
+              />
+            </div>
+          )}
+
+          {/* Chart options */}
+          {selectedElement.type === 'chart' && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Chart Type</div>
+              <select className="prop-input" value={selectedElement.chartType || 'bar'} onChange={e => onUpdateElement({ chartType: e.target.value })} style={{ padding: '4px 6px', marginBottom: 8 }}>
+                {['bar', 'line', 'pie', 'doughnut', 'radar', 'polarArea'].map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+              </select>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Labels (comma-separated)</div>
+              <input className="prop-input" type="text"
+                value={(selectedElement.chartData?.labels || []).join(', ')}
+                onChange={e => onUpdateElement({ chartData: { ...selectedElement.chartData, labels: e.target.value.split(',').map(s => s.trim()) } })}
+                style={{ marginBottom: 6, fontSize: 11, padding: '4px 6px' }}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Values (comma-separated)</div>
+              <input className="prop-input" type="text"
+                value={((selectedElement.chartData?.datasets || [])[0]?.data || []).join(', ')}
+                onChange={e => {
+                  const data = e.target.value.split(',').map(s => Number(s.trim()) || 0)
+                  const datasets = [...(selectedElement.chartData?.datasets || [{ label: 'Series 1', data: [], color: '#6366f1' }])]
+                  datasets[0] = { ...datasets[0], data }
+                  onUpdateElement({ chartData: { ...selectedElement.chartData, datasets } })
+                }}
+                style={{ marginBottom: 6, fontSize: 11, padding: '4px 6px' }}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Series Label</div>
+              <input className="prop-input" type="text"
+                value={(selectedElement.chartData?.datasets || [])[0]?.label || ''}
+                onChange={e => {
+                  const datasets = [...(selectedElement.chartData?.datasets || [{ label: '', data: [], color: '#6366f1' }])]
+                  datasets[0] = { ...datasets[0], label: e.target.value }
+                  onUpdateElement({ chartData: { ...selectedElement.chartData, datasets } })
+                }}
+                style={{ marginBottom: 6, fontSize: 11, padding: '4px 6px' }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Color</div>
+                <input type="color"
+                  value={(selectedElement.chartData?.datasets || [])[0]?.color || '#6366f1'}
+                  onChange={e => {
+                    const datasets = [...(selectedElement.chartData?.datasets || [{ label: '', data: [], color: '#6366f1' }])]
+                    datasets[0] = { ...datasets[0], color: e.target.value }
+                    onUpdateElement({ chartData: { ...selectedElement.chartData, datasets } })
+                  }}
+                  style={{ width: 28, height: 28, padding: 2, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Callout options */}
+          {selectedElement.type === 'callout' && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Number</div>
+                  <input className="prop-input" type="number" min="1" max="99"
+                    value={selectedElement.calloutNumber || 1}
+                    onChange={e => onUpdateElement({ calloutNumber: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Font Size</div>
+                  <input className="prop-input" type="number" min="8" max="48"
+                    value={selectedElement.fontSize || 16}
+                    onChange={e => onUpdateElement({ fontSize: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>BG Color</div>
+                  <input type="color" style={{ width: '100%', height: 28, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer' }}
+                    value={selectedElement.calloutColor || '#ef4444'}
+                    onChange={e => onUpdateElement({ calloutColor: e.target.value })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Text Color</div>
+                  <input type="color" style={{ width: '100%', height: 28, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer' }}
+                    value={selectedElement.calloutTextColor || '#ffffff'}
+                    onChange={e => onUpdateElement({ calloutTextColor: e.target.value })} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Icon options */}
+          {selectedElement.type === 'icon' && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Color</div>
+                  <input type="color" style={{ width: '100%', height: 28, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer' }}
+                    value={selectedElement.iconColor || '#ffffff'}
+                    onChange={e => onUpdateElement({ iconColor: e.target.value })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Stroke</div>
+                  <input className="prop-input" type="number" min="0.5" max="4" step="0.5"
+                    value={selectedElement.iconStrokeWidth || 2}
+                    onChange={e => onUpdateElement({ iconStrokeWidth: Number(e.target.value) })} />
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Icon: {selectedElement.iconName || 'Star'}</div>
+            </div>
+          )}
+
           {/* Code block options */}
           {selectedElement.type === 'code' && (
             <div style={{ marginBottom: 10 }}>
@@ -177,6 +254,12 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                   />
                 </div>
               </div>
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Round Corners: {selectedElement.borderRadius || 0}px</div>
+                <input type="range" min="0" max="50" value={selectedElement.borderRadius || 0}
+                  onChange={e => onUpdateElement({ borderRadius: Number(e.target.value) })}
+                  style={{ width: '100%', accentColor: 'var(--accent)' }} />
+              </div>
             </div>
           )}
 
@@ -203,6 +286,12 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Grayscale: {selectedElement.filterGrayscale ?? 0}%</div>
                 <input type="range" min="0" max="100" value={selectedElement.filterGrayscale ?? 0}
                   onChange={e => onUpdateElement({ filterGrayscale: Number(e.target.value) })}
+                  style={{ width: '100%', accentColor: 'var(--accent)' }} />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Round Corners: {selectedElement.borderRadius || 0}px</div>
+                <input type="range" min="0" max="100" value={selectedElement.borderRadius || 0}
+                  onChange={e => onUpdateElement({ borderRadius: Number(e.target.value) })}
                   style={{ width: '100%', accentColor: 'var(--accent)' }} />
               </div>
             </div>
@@ -278,6 +367,160 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 </div>
               )}
             </>
+          )}
+
+          {/* Video options */}
+          {selectedElement.type === 'video' && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Source URL</div>
+              <input className="prop-input" type="text"
+                value={selectedElement.src || ''}
+                onChange={e => onUpdateElement({ src: e.target.value })}
+                placeholder="Video URL"
+                style={{ marginBottom: 8 }}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Poster Image URL</div>
+              <input className="prop-input" type="text"
+                value={selectedElement.poster || ''}
+                onChange={e => onUpdateElement({ poster: e.target.value })}
+                placeholder="Thumbnail URL (optional)"
+                style={{ marginBottom: 8 }}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Object Fit</div>
+              <select className="prop-input" value={selectedElement.objectFit || 'contain'} onChange={e => onUpdateElement({ objectFit: e.target.value })} style={{ padding: '4px 6px', marginBottom: 8 }}>
+                {['contain', 'cover', 'fill', 'none'].map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {[
+                  ['controls', 'Show controls'],
+                  ['autoplay', 'Autoplay'],
+                  ['loop', 'Loop'],
+                  ['muted', 'Muted'],
+                ].map(([key, label]) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={key === 'controls' ? selectedElement[key] !== false : selectedElement[key] || false}
+                      onChange={e => onUpdateElement({ [key]: e.target.checked })}
+                      style={{ accentColor: 'var(--accent)' }} />
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Audio options */}
+          {selectedElement.type === 'audio' && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Source URL</div>
+              <input className="prop-input" type="text"
+                value={selectedElement.src || ''}
+                onChange={e => onUpdateElement({ src: e.target.value })}
+                placeholder="Audio URL"
+                style={{ marginBottom: 8 }}
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {[
+                  ['autoplay', 'Autoplay'],
+                  ['loop', 'Loop'],
+                  ['muted', 'Muted'],
+                ].map(([key, label]) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={selectedElement[key] || false}
+                      onChange={e => onUpdateElement({ [key]: e.target.checked })}
+                      style={{ accentColor: 'var(--accent)' }} />
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Table options */}
+          {selectedElement.type === 'table' && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                <button className="btn btn-secondary" style={{ flex: 1, fontSize: 11, padding: '4px 6px', justifyContent: 'center' }}
+                  onClick={() => {
+                    const data = [...(selectedElement.data || [['']])]
+                    const cols = (data[0] || ['']).length
+                    data.push(Array(cols).fill(''))
+                    onUpdateElement({ data })
+                  }}>+ Row</button>
+                <button className="btn btn-secondary" style={{ flex: 1, fontSize: 11, padding: '4px 6px', justifyContent: 'center' }}
+                  onClick={() => {
+                    const data = (selectedElement.data || [['']])
+                    if (data.length > 1) onUpdateElement({ data: data.slice(0, -1) })
+                  }}>- Row</button>
+                <button className="btn btn-secondary" style={{ flex: 1, fontSize: 11, padding: '4px 6px', justifyContent: 'center' }}
+                  onClick={() => {
+                    const data = (selectedElement.data || [['']])
+                    onUpdateElement({ data: data.map(row => [...row, '']) })
+                  }}>+ Col</button>
+                <button className="btn btn-secondary" style={{ flex: 1, fontSize: 11, padding: '4px 6px', justifyContent: 'center' }}
+                  onClick={() => {
+                    const data = (selectedElement.data || [['']])
+                    if ((data[0] || []).length > 1) onUpdateElement({ data: data.map(row => row.slice(0, -1)) })
+                  }}>- Col</button>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginBottom: 8 }}>
+                <input type="checkbox" checked={selectedElement.headerRow || false}
+                  onChange={e => onUpdateElement({ headerRow: e.target.checked })}
+                  style={{ accentColor: 'var(--accent)' }} />
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Header row</span>
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Header BG</div>
+                  <input type="color" style={{ width: '100%', height: 28, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer' }}
+                    value={selectedElement.headerBgColor || '#6366f1'}
+                    onChange={e => onUpdateElement({ headerBgColor: e.target.value })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Text Color</div>
+                  <input type="color" style={{ width: '100%', height: 28, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer' }}
+                    value={selectedElement.textColor || '#ffffff'}
+                    onChange={e => onUpdateElement({ textColor: e.target.value })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Border</div>
+                  <input type="color" style={{ width: '100%', height: 28, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer' }}
+                    value={selectedElement.borderColor || '#555555'}
+                    onChange={e => onUpdateElement({ borderColor: e.target.value })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Font Size</div>
+                  <input className="prop-input" type="number" min="8" max="32"
+                    value={selectedElement.fontSize || 14}
+                    onChange={e => onUpdateElement({ fontSize: Number(e.target.value) })} />
+                </div>
+              </div>
+              {/* Table cell editor */}
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Edit Cells</div>
+              <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 4 }}>
+                {(selectedElement.data || []).map((row, ri) => (
+                  <div key={ri} style={{ display: 'flex' }}>
+                    {(row || []).map((cell, ci) => (
+                      <input
+                        key={ci}
+                        type="text"
+                        value={cell || ''}
+                        onChange={e => {
+                          const data = (selectedElement.data || []).map(r => [...r])
+                          data[ri][ci] = e.target.value
+                          onUpdateElement({ data })
+                        }}
+                        style={{
+                          flex: 1, minWidth: 0, padding: '4px 6px', border: '1px solid var(--border)',
+                          background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 11,
+                          outline: 'none', borderRadius: 0,
+                        }}
+                        placeholder={ri === 0 ? `H${ci + 1}` : `R${ri}C${ci + 1}`}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Fragment animation */}
@@ -366,18 +609,127 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
 
       {/* Slide Section + Footer Style */}
       <div className="prop-section">
-        <h3>Section</h3>
-        <input
-          className="prop-input"
-          type="text"
-          value={slide.section || ''}
-          onChange={e => onUpdateSlide({ section: e.target.value })}
-          placeholder="Section name (shown in footer)"
-          style={{ marginBottom: 10 }}
-        />
+        <h3>Slide Footer</h3>
+
+        {/* Per-slide page number toggle */}
+        {presentation?.showPageNumbers && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginBottom: 8, userSelect: 'none' }}>
+            <input type="checkbox" checked={slide.showPageNumber !== false}
+              onChange={e => onUpdateSlide({ showPageNumber: e.target.checked })}
+              style={{ accentColor: 'var(--accent)' }} />
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Show page number on this slide</span>
+          </label>
+        )}
+
+        {/* Basic mode: section name input */}
+        {(presentation?.footerMode || 'basic') === 'basic' && (
+          <input
+            className="prop-input"
+            type="text"
+            value={slide.section || ''}
+            onChange={e => onUpdateSlide({ section: e.target.value })}
+            placeholder="Section name (shown in footer)"
+            style={{ marginBottom: 10 }}
+          />
+        )}
+
+        {/* Sequence mode: pick active section for this slide */}
+        {presentation?.footerMode === 'sequence' && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Active Section</div>
+            {(presentation.sequenceSections || []).length === 0 ? (
+              <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>No sections defined. Add them in Footer Style below.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <button
+                  style={{
+                    padding: '4px 8px', fontSize: 11, textAlign: 'left', cursor: 'pointer',
+                    background: slide.activeSection == null ? 'var(--accent)' : 'var(--bg-hover)',
+                    border: '1px solid var(--border)', borderRadius: 4,
+                    color: slide.activeSection == null ? 'white' : 'var(--text-secondary)',
+                  }}
+                  onClick={() => onUpdateSlide({ activeSection: null })}
+                >
+                  None
+                </button>
+                {(presentation.sequenceSections || []).map((sec, i) => (
+                  <button
+                    key={i}
+                    style={{
+                      padding: '4px 8px', fontSize: 11, textAlign: 'left', cursor: 'pointer',
+                      background: slide.activeSection === i ? 'var(--accent)' : 'var(--bg-hover)',
+                      border: '1px solid var(--border)', borderRadius: 4,
+                      color: slide.activeSection === i ? 'white' : 'var(--text-secondary)',
+                    }}
+                    onClick={() => onUpdateSlide({ activeSection: i })}
+                  >
+                    {sec || `Section ${i + 1}`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {(presentation?.showFooter || presentation?.showPageNumbers) && presentation && onUpdatePresentation && (
           <>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Footer Style</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, marginTop: 6 }}>Footer Style</div>
+
+            {/* Footer mode selector */}
+            <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+              {[['basic', 'Basic'], ['sequence', 'Sequence']].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  className={`bg-type-tab ${(presentation.footerMode || 'basic') === mode ? 'active' : ''}`}
+                  onClick={() => onUpdatePresentation({ footerMode: mode })}
+                  style={{ flex: 1 }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Sequence mode: define section titles */}
+            {presentation.footerMode === 'sequence' && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>Section Titles</div>
+                {(presentation.sequenceSections || []).map((sec, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 3 }}>
+                    <input
+                      className="prop-input"
+                      type="text"
+                      value={sec}
+                      onChange={e => {
+                        const sections = [...(presentation.sequenceSections || [])]
+                        sections[i] = e.target.value
+                        onUpdatePresentation({ sequenceSections: sections })
+                      }}
+                      placeholder={`Section ${i + 1}`}
+                      style={{ flex: 1, fontSize: 11, padding: '3px 6px' }}
+                    />
+                    <button
+                      className="btn-icon"
+                      style={{ width: 22, height: 22, fontSize: 12, flexShrink: 0 }}
+                      title="Remove section"
+                      onClick={() => {
+                        const sections = [...(presentation.sequenceSections || [])]
+                        sections.splice(i, 1)
+                        onUpdatePresentation({ sequenceSections: sections })
+                      }}
+                    >×</button>
+                  </div>
+                ))}
+                <button
+                  className="btn btn-secondary"
+                  style={{ width: '100%', justifyContent: 'center', fontSize: 11, padding: '3px 8px', marginTop: 2 }}
+                  onClick={() => {
+                    const sections = [...(presentation.sequenceSections || []), '']
+                    onUpdatePresentation({ sequenceSections: sections })
+                  }}
+                >+ Add Section</button>
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 48px 28px', gap: 6, alignItems: 'end' }}>
               <div>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Font</div>
@@ -413,7 +765,7 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 />
               </div>
               <div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Color</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Active</div>
                 <input type="color"
                   value={presentation.footerColor || '#a8b4c8'}
                   onChange={e => onUpdatePresentation({ footerColor: e.target.value })}
@@ -421,173 +773,17 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 />
               </div>
             </div>
-          </>
-        )}
-      </div>
-
-      {/* Background Section */}
-      <div className="prop-section">
-        <h3>Background</h3>
-
-        <div className="bg-type-tabs">
-          {['color', 'gradient', 'image', 'none'].map(type => (
-            <button
-              key={type}
-              className={`bg-type-tab ${bgType === type ? 'active' : ''}`}
-              onClick={() => setBgType(type)}
-            >
-              {type.charAt(0).toUpperCase() + type.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        {bgType === 'color' && (
-          <>
-            <div className="color-row">
-              <input
-                type="color"
-                value={bg.color || '#1e1e2e'}
-                onChange={e => setBgColor(e.target.value)}
-                title="Pick background color"
-              />
-              <input
-                className="prop-input"
-                type="text"
-                value={bg.color || '#1e1e2e'}
-                onChange={e => setBgColor(e.target.value)}
-                placeholder="#1e1e2e"
-              />
-            </div>
-            <div className="color-swatch-row">
-              {COLOR_SWATCHES.map(color => (
-                <div
-                  key={color}
-                  className={`color-swatch ${bg.color === color ? 'active' : ''}`}
-                  style={{ backgroundColor: color, border: color === '#ffffff' || color === '#f8f9fa' ? '1px solid var(--border)' : undefined }}
-                  onClick={() => setBgColor(color)}
-                  title={color}
+            {presentation.footerMode === 'sequence' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Inactive color</div>
+                <input type="color"
+                  value={presentation.footerInactiveColor || '#404060'}
+                  onChange={e => onUpdatePresentation({ footerInactiveColor: e.target.value })}
+                  style={{ width: 28, height: 28, padding: 2, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }}
                 />
-              ))}
-            </div>
-          </>
-        )}
-
-        {bgType === 'gradient' && (
-          <>
-            <div
-              style={{
-                height: 40,
-                borderRadius: 6,
-                background: bg.gradient || 'linear-gradient(135deg, #1e1e2e, #4a0e8f)',
-                marginBottom: 10,
-                border: '1px solid var(--border)'
-              }}
-            />
-            <input
-              className="prop-input"
-              type="text"
-              value={bg.gradient || ''}
-              onChange={e => setBgGradient(e.target.value)}
-              placeholder="linear-gradient(135deg, #1e1e2e, #4a0e8f)"
-              style={{ marginBottom: 10 }}
-            />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {GRADIENT_PRESETS.map((preset, i) => (
-                <button
-                  key={i}
-                  onClick={() => setBgGradient(preset)}
-                  style={{
-                    height: 28,
-                    borderRadius: 4,
-                    background: preset,
-                    border: bg.gradient === preset ? '2px solid white' : '1px solid var(--border)',
-                    cursor: 'pointer',
-                    transition: 'border 0.1s'
-                  }}
-                  title={preset}
-                />
-              ))}
-            </div>
-          </>
-        )}
-
-        {bgType === 'image' && (
-          <>
-            {bg.image && (
-              <div
-                style={{
-                  height: 80,
-                  borderRadius: 6,
-                  backgroundImage: `url(${bg.image})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  marginBottom: 10,
-                  border: '1px solid var(--border)'
-                }}
-              />
+              </div>
             )}
-            <input
-              className="prop-input"
-              type="text"
-              value={bg.image || ''}
-              onChange={e => setBgImage(e.target.value)}
-              placeholder="https://example.com/image.jpg"
-              style={{ marginBottom: 8 }}
-            />
-            <button
-              className="btn btn-secondary"
-              style={{ width: '100%', justifyContent: 'center', marginBottom: 8, fontSize: 12 }}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-            >
-              <Upload size={13} />
-              {uploading ? 'Uploading...' : 'Upload Image'}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={handleFileUpload}
-            />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Size</div>
-                <select
-                  className="prop-input"
-                  value={bg.size || 'cover'}
-                  onChange={e => onUpdateSlide({ background: { ...bg, size: e.target.value } })}
-                  style={{ padding: '4px 6px' }}
-                >
-                  <option value="cover">Cover</option>
-                  <option value="contain">Contain</option>
-                  <option value="auto">Auto</option>
-                  <option value="100% 100%">Stretch</option>
-                </select>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Position</div>
-                <select
-                  className="prop-input"
-                  value={bg.position || 'center'}
-                  onChange={e => onUpdateSlide({ background: { ...bg, position: e.target.value } })}
-                  style={{ padding: '4px 6px' }}
-                >
-                  <option value="center">Center</option>
-                  <option value="top">Top</option>
-                  <option value="bottom">Bottom</option>
-                  <option value="left">Left</option>
-                  <option value="right">Right</option>
-                </select>
-              </div>
-            </div>
           </>
-        )}
-
-        {bgType === 'none' && (
-          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            No background (uses theme default)
-          </p>
         )}
       </div>
 
@@ -601,6 +797,39 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
           placeholder="Add speaker notes here..."
         />
       </div>
+
+      {/* Custom CSS — template editor only */}
+      {isTemplate && presentation && onUpdatePresentation && (
+        <div className="prop-section">
+          <h3>Custom CSS</h3>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+            CSS applied to all slides in presentations created from this template.
+          </p>
+          <textarea
+            value={presentation.customCSS || ''}
+            onChange={e => onUpdatePresentation({ customCSS: e.target.value })}
+            placeholder={`/* Example */\n.reveal .slides section h1 {\n  color: #6366f1;\n  text-transform: uppercase;\n}`}
+            spellCheck={false}
+            style={{
+              width: '100%', minHeight: 140, background: '#0d0d1a', color: '#e2e8f0',
+              fontFamily: "'Fira Code','JetBrains Mono',monospace", fontSize: 11,
+              padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6,
+              outline: 'none', resize: 'vertical', lineHeight: 1.5, tabSize: 2,
+              boxSizing: 'border-box',
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Tab') {
+                e.preventDefault()
+                const { selectionStart: s, selectionEnd: end, value } = e.target
+                const next = value.substring(0, s) + '  ' + value.substring(end)
+                e.target.value = next
+                onUpdatePresentation({ customCSS: next })
+                requestAnimationFrame(() => { e.target.selectionStart = e.target.selectionEnd = s + 2 })
+              }
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }

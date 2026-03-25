@@ -18,6 +18,9 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 
+# Install rclone for cloud sync (Proton Drive, etc.)
+RUN apk add --no-cache rclone
+
 # Copy workspace manifests
 COPY package.json package-lock.json ./
 COPY server/package.json ./server/

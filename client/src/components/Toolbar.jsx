@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { api } from '../utils/api'
 import {
   Undo2, Redo2,
   Bold, Italic, Underline, Strikethrough,
@@ -13,7 +14,15 @@ import {
   Image as ImageIcon,
   Upload,
   Grid,
-  Shapes
+  Shapes,
+  Video,
+  Music,
+  Table2,
+  Magnet,
+  Highlighter,
+  Ruler,
+  Group,
+  Ungroup,
 } from 'lucide-react'
 import { SHAPES } from '../utils/shapeUtils'
 
@@ -25,10 +34,31 @@ const COLOR_PALETTE = [
   '#d8b4fe','#c084fc','#a855f7','#7c3aed','#f5d0fe','#f0abfc','#e879f9','#d946ef',
 ]
 
-export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddImage, onAddImageUpload, onAddShape, onAddHtml, onAddCode, selectedCount, onAlignElements }) {
+const COLOR_SWATCHES_BG = [
+  '#1e1e2e', '#0a0a0f', '#1a1a4e', '#0d3349',
+  '#1a3a1a', '#3a1a1a', '#2d1b69', '#000000',
+  '#ffffff', '#f8f9fa', '#4a4a6a', '#6b3fa0'
+]
+
+const GRADIENT_PRESETS_BG = [
+  'linear-gradient(135deg, #1e1e2e, #4a0e8f)',
+  'linear-gradient(135deg, #0f2027, #203a43, #2c5364)',
+  'linear-gradient(135deg, #360033, #0b8793)',
+  'radial-gradient(ellipse at center, #1e3c72 0%, #2a5298 100%)',
+  'linear-gradient(135deg, #0f0c29, #302b63, #24243e)',
+  'linear-gradient(135deg, #2c3e50, #3498db)'
+]
+
+export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddImage, onAddImageUpload, onAddShape, onAddHtml, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddAudio, onAddTable, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers }) {
   const [showShapeMenu, setShowShapeMenu] = useState(false)
   const [showTableMenu, setShowTableMenu] = useState(false)
   const [showColorPalette, setShowColorPalette] = useState(false)
+  const [showHighlightPalette, setShowHighlightPalette] = useState(false)
+  const [showBgMenu, setShowBgMenu] = useState(false)
+  const [showIconPicker, setShowIconPicker] = useState(false)
+  const [iconSearch, setIconSearch] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const bgFileRef = useRef(null)
 
   useEffect(() => {
     if (!showColorPalette) return
@@ -36,6 +66,24 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [showColorPalette])
+
+  useEffect(() => {
+    if (!showHighlightPalette) return
+    const close = () => setShowHighlightPalette(false)
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [showHighlightPalette])
+
+  useEffect(() => {
+    if (!showBgMenu) return
+    const close = (e) => {
+      // Don't close if clicking inside the popup
+      if (e.target.closest?.('.bg-popup-container')) return
+      setShowBgMenu(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [showBgMenu])
 
   function handleLink() {
     if (!editor) return
@@ -87,6 +135,88 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
         <Code size={14} /> Code
       </button>
 
+      <button className="btn-icon" title="Insert LaTeX / TikZ block" onClick={onAddLatex} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center', fontFamily: 'serif', fontWeight: 'bold' }}>
+        <span style={{ fontSize: 14 }}>T<sub style={{ fontSize: 9 }}>E</sub>X</span>
+      </button>
+      <button className="btn-icon" title="Insert Markdown block" onClick={onAddMarkdown} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>M↓</span>
+      </button>
+      <button className="btn-icon" title="Insert Chart" onClick={onAddChart} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+        <span style={{ fontSize: 14 }}>&#9776;</span> Chart
+      </button>
+      <button className="btn-icon" title="Insert Callout" onClick={() => onAddCallout?.()} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 700, lineHeight: 1 }}>1</span>
+      </button>
+
+      {/* Icon picker */}
+      <div style={{ position: 'relative' }}>
+        <button className={`btn-icon ${showIconPicker ? 'active' : ''}`} title="Insert Icon" onClick={() => setShowIconPicker(v => !v)} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+          <span style={{ fontSize: 14 }}>&#9733;</span> Icon
+        </button>
+        {showIconPicker && (
+          <div
+            onMouseDown={e => e.stopPropagation()}
+            style={{
+              position: 'absolute', top: '100%', left: 0, marginTop: 4,
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              borderRadius: 8, padding: 8, zIndex: 1000, width: 240,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            }}
+          >
+            <input
+              type="text" placeholder="Search icons..." value={iconSearch}
+              onChange={e => setIconSearch(e.target.value)}
+              style={{ width: '100%', padding: '5px 8px', background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4, fontSize: 12, marginBottom: 6, boxSizing: 'border-box' }}
+              autoFocus
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 3, maxHeight: 180, overflow: 'auto' }}>
+              {['Star', 'Heart', 'Check', 'X', 'AlertTriangle', 'Info', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown',
+                'Zap', 'Target', 'Award', 'BookOpen', 'Briefcase', 'Calendar', 'Camera', 'Cloud', 'Coffee', 'Cpu',
+                'Database', 'Eye', 'Flag', 'Globe', 'Home', 'Key', 'Layers', 'Lock', 'Mail', 'Map',
+                'MessageCircle', 'Monitor', 'Moon', 'Music', 'Phone', 'Play', 'Search', 'Settings', 'Shield', 'Sun',
+                'ThumbsUp', 'ThumbsDown', 'Trash2', 'TrendingUp', 'TrendingDown', 'User', 'Users', 'Wifi', 'Wrench', 'Lightbulb',
+                'Rocket', 'Clock', 'Gift', 'Link', 'Clipboard', 'FileText', 'Folder', 'Image', 'PieChart', 'BarChart3',
+              ].filter(name => !iconSearch || name.toLowerCase().includes(iconSearch.toLowerCase()))
+                .map(name => (
+                  <button
+                    key={name}
+                    title={name}
+                    style={{ padding: 6, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontSize: 10, color: 'var(--text-primary)', textAlign: 'center' }}
+                    onClick={() => { onAddIcon?.(name); setShowIconPicker(false); setIconSearch('') }}
+                  >
+                    {name.slice(0, 3)}
+                  </button>
+                ))
+              }
+            </div>
+          </div>
+        )}
+      </div>
+
+      <button className="btn-icon" title="Add Video (URL)" onClick={() => { const url = window.prompt('Video URL:'); if (url) onAddVideo?.(url) }} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+        <Video size={14} /> Video
+      </button>
+      <label className="btn-icon" title="Upload Video" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+        <Music size={14} /> Audio
+        <input type="file" accept="audio/*,video/*" style={{ display: 'none' }} onChange={async e => {
+          const f = e.target.files?.[0]; if (!f) return; e.target.value = ''
+          // Upload file then add as element
+          const fd = new FormData(); fd.append('file', f)
+          const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json())
+          if (res.url) {
+            if (f.type.startsWith('video/')) onAddVideo?.(res.url)
+            else onAddAudio?.(res.url)
+          }
+        }} />
+      </label>
+      <button className="btn-icon" title="Add Table" onClick={() => {
+        const r = parseInt(window.prompt('Rows:', '3') || '3')
+        const c = parseInt(window.prompt('Columns:', '3') || '3')
+        if (r && c) onAddTable?.(r, c)
+      }} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+        <Table2 size={14} /> Table
+      </button>
+
       {/* Shape picker dropdown */}
       <div style={{ position: 'relative' }}>
         <button
@@ -121,6 +251,136 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
         )}
       </div>
 
+      {/* Slide Background popup */}
+      {slide && onUpdateSlide && (() => {
+        const bg = slide.background || { type: 'color', color: '#1e1e2e' }
+        const bgType = bg.type || 'color'
+        const setBgType = (type) => onUpdateSlide({ background: { ...bg, type } })
+        const setBgColor = (color) => onUpdateSlide({ background: { ...bg, type: 'color', color } })
+        const setBgGradient = (gradient) => onUpdateSlide({ background: { ...bg, type: 'gradient', gradient } })
+        const setBgImage = (image) => onUpdateSlide({ background: { ...bg, type: 'image', image, size: bg.size || 'cover', position: bg.position || 'center' } })
+        return (
+          <div style={{ position: 'relative' }}>
+            <button
+              className={`btn-icon ${showBgMenu ? 'active' : ''}`}
+              style={{ width: 'auto', padding: '0 8px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+              title="Slide Background"
+              onClick={() => setShowBgMenu(v => !v)}
+            >
+              <div style={{
+                width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+                border: '1px solid rgba(255,255,255,0.3)',
+                ...(bgType === 'color' ? { backgroundColor: bg.color || '#1e1e2e' } :
+                    bgType === 'gradient' ? { background: bg.gradient || '#1e1e2e' } :
+                    bgType === 'image' ? { backgroundImage: `url(${bg.image})`, backgroundSize: 'cover' } :
+                    { backgroundColor: '#1e1e2e' })
+              }} />
+              BG
+            </button>
+            {showBgMenu && (
+              <div
+                className="bg-popup-container"
+                style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: 4,
+                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: 12, zIndex: 1000,
+                  width: 260, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                }}
+                onMouseDown={e => e.stopPropagation()}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Slide Background</div>
+                <div className="bg-type-tabs" style={{ marginBottom: 8 }}>
+                  {['color', 'gradient', 'image', 'none'].map(type => (
+                    <button key={type} className={`bg-type-tab ${bgType === type ? 'active' : ''}`}
+                      onClick={() => setBgType(type)}
+                    >{type.charAt(0).toUpperCase() + type.slice(1)}</button>
+                  ))}
+                </div>
+
+                {bgType === 'color' && (
+                  <>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                      <input type="color" value={bg.color || '#1e1e2e'} onChange={e => setBgColor(e.target.value)}
+                        style={{ width: 32, height: 28, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer', padding: 1 }} />
+                      <input className="prop-input" type="text" value={bg.color || '#1e1e2e'} onChange={e => setBgColor(e.target.value)}
+                        style={{ flex: 1, fontSize: 12, padding: '4px 6px' }} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+                      {COLOR_SWATCHES_BG.map(color => (
+                        <div key={color} onClick={() => setBgColor(color)} title={color}
+                          style={{
+                            width: '100%', aspectRatio: '1', borderRadius: 4, cursor: 'pointer',
+                            backgroundColor: color,
+                            border: bg.color === color ? '2px solid white' : color === '#ffffff' || color === '#f8f9fa' ? '1px solid var(--border)' : '1px solid transparent',
+                          }} />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {bgType === 'gradient' && (
+                  <>
+                    <div style={{ height: 32, borderRadius: 4, background: bg.gradient || 'linear-gradient(135deg, #1e1e2e, #4a0e8f)', marginBottom: 8, border: '1px solid var(--border)' }} />
+                    <input className="prop-input" type="text" value={bg.gradient || ''} onChange={e => setBgGradient(e.target.value)}
+                      placeholder="linear-gradient(...)" style={{ marginBottom: 8, fontSize: 11, padding: '4px 6px' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {GRADIENT_PRESETS_BG.map((preset, i) => (
+                        <button key={i} onClick={() => setBgGradient(preset)}
+                          style={{ height: 24, borderRadius: 4, background: preset, cursor: 'pointer',
+                            border: bg.gradient === preset ? '2px solid white' : '1px solid var(--border)' }}
+                          title={preset} />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {bgType === 'image' && (
+                  <>
+                    {bg.image && (
+                      <div style={{ height: 60, borderRadius: 4, backgroundImage: `url(${bg.image})`, backgroundSize: 'cover', backgroundPosition: 'center', marginBottom: 8, border: '1px solid var(--border)' }} />
+                    )}
+                    <input className="prop-input" type="text" value={bg.image || ''} onChange={e => setBgImage(e.target.value)}
+                      placeholder="https://example.com/image.jpg" style={{ marginBottom: 6, fontSize: 11, padding: '4px 6px' }} />
+                    <button className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', marginBottom: 6, fontSize: 11, padding: '4px 8px' }}
+                      onClick={() => bgFileRef.current?.click()} disabled={uploading}
+                    >
+                      <Upload size={12} />
+                      {uploading ? 'Uploading...' : 'Upload Image'}
+                    </button>
+                    <input ref={bgFileRef} type="file" accept="image/*" style={{ display: 'none' }}
+                      onChange={async e => {
+                        const file = e.target.files?.[0]; if (!file) return
+                        setUploading(true)
+                        try { const res = await api.uploadFile(file); if (res.url) setBgImage(res.url) }
+                        catch(err) { console.error('Upload failed', err) }
+                        finally { setUploading(false); if (bgFileRef.current) bgFileRef.current.value = '' }
+                      }} />
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Size</div>
+                        <select className="prop-input" value={bg.size || 'cover'} onChange={e => onUpdateSlide({ background: { ...bg, size: e.target.value } })} style={{ padding: '3px 4px', fontSize: 11 }}>
+                          <option value="cover">Cover</option><option value="contain">Contain</option><option value="auto">Auto</option><option value="100% 100%">Stretch</option>
+                        </select>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Position</div>
+                        <select className="prop-input" value={bg.position || 'center'} onChange={e => onUpdateSlide({ background: { ...bg, position: e.target.value } })} style={{ padding: '3px 4px', fontSize: 11 }}>
+                          <option value="center">Center</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option>
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {bgType === 'none' && (
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>No background (uses theme default)</p>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
       {/* Grid toggle */}
       <button
         className={`btn-icon ${showGrid ? 'active' : ''}`}
@@ -146,6 +406,24 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
         />
       )}
 
+      {/* Smart guides toggle */}
+      <button
+        className={`btn-icon ${smartGuidesEnabled ? 'active' : ''}`}
+        onClick={onToggleSmartGuides}
+        title={smartGuidesEnabled ? 'Disable smart guides' : 'Enable smart guides'}
+      >
+        <Magnet size={14} />
+      </button>
+
+      {/* Ruler toggle */}
+      <button
+        className={`btn-icon ${showRulers ? 'active' : ''}`}
+        onClick={onToggleRulers}
+        title={showRulers ? 'Hide rulers' : 'Show rulers (drag to add guides)'}
+      >
+        <Ruler size={14} />
+      </button>
+
       {selectedCount >= 2 && (
         <>
           <span className="toolbar-divider" />
@@ -160,6 +438,13 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
               onClick={() => onAlignElements(type)}
             >{label}</button>
           ))}
+          <span className="toolbar-divider" />
+          <button className="btn-icon" title="Group selected elements" onClick={onGroupElements} style={{ width: 'auto', padding: '0 6px', fontSize: 11 }}>
+            <Group size={13} />
+          </button>
+          <button className="btn-icon" title="Ungroup elements" onClick={onUngroupElements} style={{ width: 'auto', padding: '0 6px', fontSize: 11 }}>
+            <Ungroup size={13} />
+          </button>
         </>
       )}
 
@@ -363,6 +648,72 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
                     />
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Highlight color palette */}
+          <div style={{ position: 'relative' }}>
+            <button
+              className={`btn-icon ${showHighlightPalette ? 'active' : ''}`}
+              style={{ position: 'relative' }}
+              onClick={() => setShowHighlightPalette(v => !v)}
+              title="Highlight color"
+            >
+              <Highlighter size={15} />
+              <span className="color-indicator" style={{ background: editor.getAttributes('highlight').color || 'transparent', border: '1px solid rgba(255,255,255,0.2)' }} />
+            </button>
+            {showHighlightPalette && (
+              <div
+                onMouseDown={e => e.stopPropagation()}
+                style={{
+                  position: 'absolute', top: 'calc(100% + 4px)', left: '50%', transform: 'translateX(-50%)',
+                  zIndex: 1000, background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                  display: 'grid', gridTemplateColumns: 'repeat(6, 26px)', gap: 3,
+                }}
+              >
+                {[
+                  '#fef08a','#fde047','#facc15',
+                  '#bbf7d0','#86efac','#4ade80',
+                  '#bfdbfe','#93c5fd','#60a5fa',
+                  '#fbcfe8','#f9a8d4','#f472b6',
+                  '#fed7aa','#fdba74','#fb923c',
+                  '#e9d5ff','#d8b4fe','#c084fc',
+                  '#fecaca','#fca5a5','#f87171',
+                  '#e2e8f0','#94a3b8','#64748b',
+                ].map(color => (
+                  <button
+                    key={color}
+                    title={color}
+                    style={{
+                      width: 26, height: 26, background: color, padding: 0,
+                      border: '1px solid rgba(0,0,0,0.15)',
+                      borderRadius: 4, cursor: 'pointer',
+                    }}
+                    onMouseDown={e => {
+                      e.preventDefault()
+                      editor.chain().focus().setHighlight({ color }).run()
+                      setShowHighlightPalette(false)
+                    }}
+                  />
+                ))}
+                <button
+                  title="Remove highlight"
+                  style={{
+                    gridColumn: '1 / -1', padding: '4px 8px', marginTop: 4,
+                    background: 'var(--bg-hover)', border: '1px solid var(--border)',
+                    borderRadius: 4, cursor: 'pointer', color: 'var(--text-primary)',
+                    fontSize: 11, textAlign: 'center',
+                  }}
+                  onMouseDown={e => {
+                    e.preventDefault()
+                    editor.chain().focus().unsetHighlight().run()
+                    setShowHighlightPalette(false)
+                  }}
+                >
+                  Remove highlight
+                </button>
               </div>
             )}
           </div>

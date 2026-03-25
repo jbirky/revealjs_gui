@@ -1,0 +1,32 @@
+appId: com.slides-editor.app
+productName: SlidesEditor
+directories:
+  output: dist-electron
+
+files:
+  - electron/**/*
+  - "!node_modules"
+
+extraResources:
+  - from: server/
+    to: server/
+  - from: client/dist/
+    to: client/dist/
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - zip
+
+win:
+  target:
+    - nsis
+    - portable
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Office
+  executableArgs:
+    - "--no-sandbox"

@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import { EditorContent } from '@tiptap/react'
 import katex from 'katex'
 import hljs from 'highlight.js'
+import { calculateGuides } from '../utils/smartGuides'
 
 function highlightCode(code, language) {
   try {
@@ -140,7 +141,7 @@ function getBgStyle(bg) {
   return { backgroundColor: '#1e1e2e' }
 }
 
-export default function SlideCanvas({ editor, slide, selectedElementIds, editingElementId, showGrid, gridSize = 40, showFooter, showPageNumbers, pageNumberFormat, pageNumber, totalSlides, sectionName, footerFontSize = 14, footerFontFamily = '-apple-system,sans-serif', footerColor = 'rgba(255,255,255,0.65)', onToggleSelectElement, onStartEdit, onStopEdit, onUpdateElement, onUpdateElements, onDeleteElement, onDeleteSelectedElements, onAddImage, onOpenHtmlEditor, onOpenCodeEditor }) {
+export default function SlideCanvas({ editor, slide, selectedElementIds, editingElementId, showGrid, gridSize = 40, showFooter, showPageNumbers, pageNumberFormat, pageNumber, totalSlides, sectionName, footerFontSize = 14, footerFontFamily = '-apple-system,sans-serif', footerColor = 'rgba(255,255,255,0.65)', footerInactiveColor = 'rgba(255,255,255,0.25)', smartGuidesEnabled = true, footerMode = 'basic', sequenceSections = [], activeSection = null, showRulers = false, persistentGuides = [], onAddGuide, onRemoveGuide, onToggleSelectElement, onStartEdit, onStopEdit, onUpdateElement, onUpdateElements, onDeleteElement, onDeleteSelectedElements, onAddImage, onOpenHtmlEditor, onOpenCodeEditor, onOpenLatexEditor }) {
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
   const [scale, setScale] = useState(1)
@@ -154,12 +155,17 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
   const [cropMode, setCropMode] = useState(null) // { elementId, x, y, w, h }
   const cropDragRef = useRef(null) // { handle, startX, startY, startCrop, elW, elH }
   const [dragOver, setDragOver] = useState(false)
+  const [activeGuides, setActiveGuides] = useState([])
   const scaleRef = useRef(scale)
+  const smartGuidesRef = useRef(smartGuidesEnabled)
 
   useEffect(() => { showGridRef.current = showGrid }, [showGrid])
   useEffect(() => { gridSizeRef.current = gridSize }, [gridSize])
   useEffect(() => { scaleRef.current = scale }, [scale])
   useEffect(() => { selectedElementIdsRef.current = selectedElementIds }, [selectedElementIds])
+  useEffect(() => { smartGuidesRef.current = smartGuidesEnabled }, [smartGuidesEnabled])
+  const slideRef = useRef(slide)
+  useEffect(() => { slideRef.current = slide }, [slide])
 
   // Scale to fit container
   useEffect(() => {
@@ -219,9 +225,24 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
         } else {
           const rawX = Math.max(0, Math.min(SLIDE_W - drag.startEl.width, drag.startEl.x + dx))
           const rawY = Math.max(0, Math.min(SLIDE_H - drag.startEl.height, drag.startEl.y + dy))
-          const { x: snappedX, y: snappedY } = snapWithRef(rawX, rawY, drag.startEl.width, drag.startEl.height, drag.startEl.snapRef || 'ul', snap)
-          const newX = Math.max(0, Math.min(SLIDE_W - drag.startEl.width, snappedX))
-          const newY = Math.max(0, Math.min(SLIDE_H - drag.startEl.height, snappedY))
+          let newX, newY
+          if (showGridRef.current) {
+            const { x: snappedX, y: snappedY } = snapWithRef(rawX, rawY, drag.startEl.width, drag.startEl.height, drag.startEl.snapRef || 'ul', snap)
+            newX = Math.max(0, Math.min(SLIDE_W - drag.startEl.width, snappedX))
+            newY = Math.max(0, Math.min(SLIDE_H - drag.startEl.height, snappedY))
+            setActiveGuides([])
+          } else if (smartGuidesRef.current) {
+            const allEls = (slideRef.current?.elements || [])
+            const draggedEl = { id: drag.elementId, x: rawX, y: rawY, width: drag.startEl.width, height: drag.startEl.height }
+            const { guides, snappedX, snappedY } = calculateGuides(draggedEl, allEls, SLIDE_W, SLIDE_H)
+            newX = Math.max(0, Math.min(SLIDE_W - drag.startEl.width, snappedX))
+            newY = Math.max(0, Math.min(SLIDE_H - drag.startEl.height, snappedY))
+            setActiveGuides(guides)
+          } else {
+            newX = rawX
+            newY = rawY
+            setActiveGuides([])
+          }
           onUpdateElement(drag.elementId, { x: newX, y: newY })
         }
       } else if (drag.type === 'resize') {
@@ -245,12 +266,24 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
         updates.width = Math.max(MIN_SIZE, updates.width)
         updates.height = Math.max(MIN_SIZE, updates.height)
         onUpdateElement(drag.elementId, updates)
+      } else if (drag.type === 'rotate') {
+        // Calculate angle from element center to mouse position
+        const centerX = drag.startEl.x + drag.startEl.width / 2
+        const centerY = drag.startEl.y + drag.startEl.height / 2
+        const angle = Math.atan2(mouseY - centerY, mouseX - centerX) * (180 / Math.PI) + 90
+        // Snap to 15-degree increments when holding shift
+        let rotation = Math.round(angle)
+        if (e.shiftKey) rotation = Math.round(rotation / 15) * 15
+        // Normalize to 0-360
+        rotation = ((rotation % 360) + 360) % 360
+        onUpdateElement(drag.elementId, { rotation })
       }
     }
     const onMouseUp = () => {
       cropDragRef.current = null
       pendingDragRef.current = null
       draggingRef.current = null
+      setActiveGuides([])
       forceUpdate(n => n + 1)
     }
     document.addEventListener('mousemove', onMouseMove)
@@ -360,7 +393,7 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
   const onDrop = async (e) => {
     e.preventDefault()
     setDragOver(false)
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || f.type.startsWith('audio/'))
     if (!files.length || !onAddImage) return
     // Get drop position in slide coordinates
     let dropX = 130, dropY = 100
@@ -374,11 +407,70 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
     }
   }
 
+  const handleRulerMouseDown = (axis, e) => {
+    if (!canvasRef.current) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    const onMove = (me) => {
+      // Show a preview line while dragging
+    }
+    const onUp = (me) => {
+      const pos = axis === 'x'
+        ? (me.clientX - rect.left) / scale
+        : (me.clientY - rect.top) / scale
+      if (pos >= 0 && pos <= (axis === 'x' ? SLIDE_W : SLIDE_H)) {
+        onAddGuide?.({ axis, position: Math.round(pos) })
+      }
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
   return (
     <div
       ref={containerRef}
-      style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
+      style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}
     >
+      {/* Rulers */}
+      {showRulers && (
+        <>
+          {/* Top ruler */}
+          <div
+            style={{
+              position: 'absolute', top: 0, left: '50%',
+              transform: `translateX(calc(-50% * 1)) scale(${scale})`, transformOrigin: 'top center',
+              width: SLIDE_W, height: 20, background: 'rgba(30,30,46,0.9)', zIndex: 100,
+              cursor: 'crosshair', overflow: 'hidden', borderBottom: '1px solid var(--border)',
+              display: 'flex', alignItems: 'flex-end', userSelect: 'none', fontSize: 8, color: 'rgba(255,255,255,0.4)',
+            }}
+            onMouseDown={e => handleRulerMouseDown('x', e)}
+          >
+            {Array.from({ length: Math.ceil(SLIDE_W / 50) }, (_, i) => (
+              <div key={i} style={{ position: 'absolute', left: i * 50, bottom: 0, borderLeft: '1px solid rgba(255,255,255,0.2)', height: '100%', paddingLeft: 2 }}>
+                {i * 50}
+              </div>
+            ))}
+          </div>
+          {/* Left ruler */}
+          <div
+            style={{
+              position: 'absolute', left: 0, top: '50%',
+              transform: `translateY(calc(-50% * 1)) scale(${scale})`, transformOrigin: 'left center',
+              width: 20, height: SLIDE_H, background: 'rgba(30,30,46,0.9)', zIndex: 100,
+              cursor: 'crosshair', overflow: 'hidden', borderRight: '1px solid var(--border)',
+              userSelect: 'none', fontSize: 8, color: 'rgba(255,255,255,0.4)',
+            }}
+            onMouseDown={e => handleRulerMouseDown('y', e)}
+          >
+            {Array.from({ length: Math.ceil(SLIDE_H / 50) }, (_, i) => (
+              <div key={i} style={{ position: 'absolute', top: i * 50, left: 0, borderTop: '1px solid rgba(255,255,255,0.2)', width: '100%', paddingLeft: 2, paddingTop: 1 }}>
+                {i * 50}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       <div
         ref={canvasRef}
         className="slide-canvas"
@@ -407,6 +499,42 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
           }} />
         )}
 
+        {/* Persistent guide lines (user-placed from rulers) */}
+        {persistentGuides.map((guide, i) => (
+          guide.axis === 'x' ? (
+            <div key={`pg${i}`} style={{
+              position: 'absolute', left: guide.position, top: 0, width: 1, height: SLIDE_H,
+              background: '#22d3ee', zIndex: 998, pointerEvents: 'auto', cursor: 'col-resize',
+            }}
+            onDoubleClick={() => onRemoveGuide?.(i)}
+            title="Double-click to remove guide"
+            />
+          ) : (
+            <div key={`pg${i}`} style={{
+              position: 'absolute', top: guide.position, left: 0, height: 1, width: SLIDE_W,
+              background: '#22d3ee', zIndex: 998, pointerEvents: 'auto', cursor: 'row-resize',
+            }}
+            onDoubleClick={() => onRemoveGuide?.(i)}
+            title="Double-click to remove guide"
+            />
+          )
+        ))}
+
+        {/* Smart guide lines */}
+        {activeGuides.map((guide, i) => (
+          guide.axis === 'x' ? (
+            <div key={`g${i}`} style={{
+              position: 'absolute', left: guide.position, top: 0, width: 1, height: SLIDE_H,
+              background: '#f59e0b', zIndex: 999, pointerEvents: 'none',
+            }} />
+          ) : (
+            <div key={`g${i}`} style={{
+              position: 'absolute', top: guide.position, left: 0, height: 1, width: SLIDE_W,
+              background: '#f59e0b', zIndex: 999, pointerEvents: 'none',
+            }} />
+          )
+        ))}
+
         {slide?.elements?.slice().sort((a,b) => (a.zIndex||0) - (b.zIndex||0)).map(element => (
           <CanvasElement
             key={element.id}
@@ -431,6 +559,7 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
               if (element.type === 'text') onStartEdit(element.id)
               else if (element.type === 'html') onOpenHtmlEditor?.(element.id)
               else if (element.type === 'code') onOpenCodeEditor?.(element.id)
+              else if (element.type === 'latex') onOpenLatexEditor?.(element.id)
             }}
             onContextMenu={(e) => {
               e.preventDefault(); e.stopPropagation()
@@ -455,15 +584,42 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
 
         {/* Footer overlay */}
         {(showFooter || showPageNumbers) && (
-          <div style={{
-            position: 'absolute', bottom: 8, left: 16, right: 16, zIndex: 900,
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            fontSize: footerFontSize, color: footerColor, fontFamily: footerFontFamily,
-            pointerEvents: 'none', boxSizing: 'border-box'
-          }}>
-            <span>{showFooter ? sectionName : ''}</span>
-            <span>{showPageNumbers ? (pageNumberFormat === 'c/t' ? `${pageNumber} / ${totalSlides}` : `${pageNumber}`) : ''}</span>
-          </div>
+          footerMode === 'sequence' && sequenceSections.length > 0 ? (
+            <div style={{
+              position: 'absolute', bottom: 6, left: 16, right: 16, zIndex: 900,
+              display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0,
+              fontSize: footerFontSize, fontFamily: footerFontFamily,
+              pointerEvents: 'none', boxSizing: 'border-box'
+            }}>
+              <div style={{ display: 'flex', flex: 1, justifyContent: 'space-evenly', alignItems: 'center' }}>
+                {sequenceSections.map((sec, i) => (
+                  <span key={i} style={{
+                    color: activeSection === i ? (footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor,
+                    fontWeight: activeSection === i ? 700 : 400,
+                    fontSize: footerFontSize,
+                    transition: 'color 0.2s, font-weight 0.2s',
+                  }}>
+                    {sec || `Section ${i + 1}`}
+                  </span>
+                ))}
+              </div>
+              {showPageNumbers && pageNumber != null && (
+                <span style={{ color: footerColor, marginLeft: 12, flexShrink: 0 }}>
+                  {pageNumberFormat === 'c/t' ? `${pageNumber} / ${totalSlides}` : `${pageNumber}`}
+                </span>
+              )}
+            </div>
+          ) : (
+            <div style={{
+              position: 'absolute', bottom: 8, left: 16, right: 16, zIndex: 900,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              fontSize: footerFontSize, color: footerColor, fontFamily: footerFontFamily,
+              pointerEvents: 'none', boxSizing: 'border-box'
+            }}>
+              <span>{showFooter ? sectionName : ''}</span>
+              <span>{showPageNumbers && pageNumber != null ? (pageNumberFormat === 'c/t' ? `${pageNumber} / ${totalSlides}` : `${pageNumber}`) : ''}</span>
+            </div>
+          )
         )}
 
         {/* Drop hint */}
@@ -564,6 +720,8 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
         userSelect: isEditing ? 'text' : 'none',
         overflow: 'hidden',
         boxSizing: 'border-box',
+        borderRadius: (element.type === 'image' || element.type === 'code') && element.borderRadius ? element.borderRadius : undefined,
+        transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
         boxShadow: (element.shadowBlur || element.shadowX || element.shadowY)
           ? `${element.shadowX||0}px ${element.shadowY||0}px ${element.shadowBlur||0}px ${element.shadowColor||'rgba(0,0,0,0.5)'}`
           : undefined,
@@ -651,6 +809,43 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
           <code dangerouslySetInnerHTML={{ __html: highlightCode(element.content || '', element.language || 'plaintext') }} />
         </pre>
       )}
+      {element.type === 'video' && (
+        <video
+          src={element.src}
+          controls={element.controls !== false}
+          muted={element.muted || false}
+          loop={element.loop || false}
+          poster={element.poster || undefined}
+          style={{ width: '100%', height: '100%', objectFit: element.objectFit || 'contain', display: 'block', pointerEvents: isSelected ? 'auto' : 'none' }}
+        />
+      )}
+      {element.type === 'audio' && (
+        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: 4 }}>
+          <audio
+            src={element.src}
+            controls
+            style={{ width: '90%', pointerEvents: isSelected ? 'auto' : 'none' }}
+          />
+        </div>
+      )}
+      {element.type === 'table' && (
+        <TableRenderer element={element} isEditing={isEditing} />
+      )}
+      {element.type === 'latex' && (
+        <LatexRenderer element={element} isSelected={isSelected} />
+      )}
+      {element.type === 'markdown' && (
+        <MarkdownRenderer element={element} />
+      )}
+      {element.type === 'chart' && (
+        <ChartRenderer element={element} isSelected={isSelected} />
+      )}
+      {element.type === 'callout' && (
+        <CalloutRenderer element={element} />
+      )}
+      {element.type === 'icon' && (
+        <IconRenderer element={element} />
+      )}
 
       {/* Fragment badge */}
       {element.fragment && (
@@ -660,6 +855,17 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
           padding: '2px 6px', borderRadius: 3, userSelect: 'none', whiteSpace: 'nowrap'
         }}>
           ▶ {element.fragmentIndex ?? 1}
+        </div>
+      )}
+
+      {/* Group badge */}
+      {element.groupId && isSelected && (
+        <div style={{
+          position: 'absolute', top: -20, right: 0, zIndex: 101, pointerEvents: 'none',
+          background: '#14b8a6', color: 'white', fontSize: '9px', fontFamily: 'sans-serif',
+          padding: '1px 5px', borderRadius: 3, userSelect: 'none',
+        }}>
+          Group
         </div>
       )}
 
@@ -675,6 +881,25 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
           onMouseDown={(e) => { e.stopPropagation(); onPointerDown(e, 'resize', handle) }}
         />
       ))}
+
+      {/* Rotation handle */}
+      {isSelected && !isEditing && !isCropping && !element.locked && (
+        <>
+          <div style={{
+            position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)',
+            width: 1, height: 20, background: '#6366f1', zIndex: 100, pointerEvents: 'none',
+          }} />
+          <div
+            style={{
+              position: 'absolute', top: -40, left: '50%', transform: 'translateX(-50%)',
+              width: 14, height: 14, borderRadius: '50%',
+              background: '#6366f1', border: '2px solid white', zIndex: 100,
+              cursor: 'grab',
+            }}
+            onMouseDown={(e) => { e.stopPropagation(); onPointerDown(e, 'rotate', null) }}
+          />
+        </>
+      )}
     </div>
   )
 }
@@ -750,6 +975,252 @@ function CropOverlay({ crop, elW, elH, onHandleDown, onCommit }) {
       >
         Apply ↵
       </div>
+    </div>
+  )
+}
+
+// Simple Markdown to HTML converter (no external deps)
+function markdownToHtml(md) {
+  let html = md
+    // Code blocks
+    .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+      `<pre style="background:rgba(0,0,0,0.3);padding:10px 14px;border-radius:6px;overflow:auto;font-family:'Fira Code',monospace;font-size:13px;"><code>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`)
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.1);padding:2px 5px;border-radius:3px;font-family:monospace;font-size:0.9em;">$1</code>')
+    // Headings
+    .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Bold + italic
+    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:#60a5fa;text-decoration:underline;">$1</a>')
+    // Horizontal rules
+    .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid rgba(255,255,255,0.2);margin:12px 0;">')
+    // Unordered lists
+    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+  // Wrap consecutive <li> in <ul>
+  html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul style="padding-left:1.5em;margin:0.4em 0;">$1</ul>')
+  // Paragraphs (lines not already wrapped)
+  html = html.split('\n').map(line => {
+    if (!line.trim()) return ''
+    if (/^<(h[1-4]|ul|ol|li|pre|hr|div|blockquote)/.test(line.trim())) return line
+    return `<p style="margin:0 0 0.4em;line-height:1.6;">${line}</p>`
+  }).join('\n')
+  return html
+}
+
+function MarkdownRenderer({ element }) {
+  const html = markdownToHtml(element.content || '')
+  return (
+    <div
+      style={{ width: '100%', height: '100%', overflow: 'auto', padding: '8px 12px', boxSizing: 'border-box', color: 'white', fontSize: '18px', lineHeight: 1.5 }}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
+}
+
+function ChartRenderer({ element, isSelected }) {
+  const { chartType = 'bar', chartData = {} } = element
+  const labels = chartData.labels || []
+  const datasets = chartData.datasets || []
+
+  const chartHtml = `<!doctype html><html><head>
+<meta charset="utf-8">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"><\/script>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:transparent;overflow:hidden}</style>
+</head><body>
+<canvas id="c" style="width:100%;height:100%"></canvas>
+<script>
+new Chart(document.getElementById('c'),{
+  type:'${chartType}',
+  data:{
+    labels:${JSON.stringify(labels)},
+    datasets:${JSON.stringify(datasets.map(ds => ({
+      label: ds.label || '',
+      data: ds.data || [],
+      backgroundColor: ds.color || '#6366f1',
+      borderColor: ds.color || '#6366f1',
+      borderWidth: chartType === 'line' ? 2 : 0,
+      fill: chartType === 'line' ? false : undefined,
+    })))}
+  },
+  options:{
+    responsive:true,
+    maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'rgba(255,255,255,0.7)',font:{size:12}}}},
+    scales:${chartType === 'pie' || chartType === 'doughnut' ? '{}' : `{x:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}},y:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}}}`}
+  }
+});
+<\/script></body></html>`
+
+  return (
+    <iframe
+      srcDoc={chartHtml}
+      style={{ width: '100%', height: '100%', border: 'none', display: 'block', pointerEvents: isSelected ? 'auto' : 'none', background: 'transparent' }}
+      sandbox="allow-scripts"
+      title="Chart"
+    />
+  )
+}
+
+function CalloutRenderer({ element }) {
+  const num = element.calloutNumber || 1
+  const bg = element.calloutColor || '#ef4444'
+  const textColor = element.calloutTextColor || '#ffffff'
+  const fontSize = element.fontSize || 16
+  return (
+    <div style={{
+      width: '100%', height: '100%', borderRadius: '50%',
+      background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: textColor, fontSize, fontWeight: 700, fontFamily: '-apple-system, sans-serif',
+      boxSizing: 'border-box', userSelect: 'none',
+    }}>
+      {num}
+    </div>
+  )
+}
+
+// Lucide icon SVG paths (subset)
+const ICON_PATHS = {
+  Star: '<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>',
+  Heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
+  Check: '<polyline points="20,6 9,17 4,12"/>',
+  X: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  AlertTriangle: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  Info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+  ArrowRight: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12,5 19,12 12,19"/>',
+  ArrowLeft: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/>',
+  ArrowUp: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/>',
+  ArrowDown: '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19,12 12,19 5,12"/>',
+  Zap: '<polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/>',
+  Target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  Award: '<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>',
+  BookOpen: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+  Globe: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  Home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/>',
+  Lightbulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+  Rocket: '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>',
+  Clock: '<circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/>',
+  User: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  Users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  TrendingUp: '<polyline points="22,7 13.5,15.5 8.5,10.5 2,17"/><polyline points="16,7 22,7 22,13"/>',
+  TrendingDown: '<polyline points="22,17 13.5,8.5 8.5,13.5 2,7"/><polyline points="16,17 22,17 22,11"/>',
+  ThumbsUp: '<path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/>',
+  Shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  Sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  Moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  Search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  Settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  PieChart: '<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
+  BarChart3: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+}
+
+function IconRenderer({ element }) {
+  const svgPath = ICON_PATHS[element.iconName] || ICON_PATHS['Star']
+  const color = element.iconColor || '#ffffff'
+  const sw = element.iconStrokeWidth || 2
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"
+        dangerouslySetInnerHTML={{ __html: svgPath }}
+      />
+    </div>
+  )
+}
+
+function generateLatexIframeHtml(content) {
+  // Detect if content has tikzpicture
+  const hasTikz = /\\begin\{tikzpicture\}/.test(content)
+  const tikzScript = hasTikz
+    ? `<link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css">
+       <script src="https://tikzjax.com/v1/tikzjax.js"><\/script>`
+    : ''
+
+  // Wrap content: if it has tikzpicture, use <script type="text/tikz">, otherwise render as KaTeX display math
+  let bodyContent
+  if (hasTikz) {
+    bodyContent = `<script type="text/tikz">${content}<\/script>`
+  } else {
+    // Treat as display math
+    const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    bodyContent = `<div id="math"></div>
+    <script>
+      try {
+        katex.render(${JSON.stringify(content)}, document.getElementById('math'), { displayMode: true, throwOnError: false });
+      } catch(e) {
+        document.getElementById('math').textContent = e.message;
+      }
+    <\/script>`
+  }
+
+  return `<!doctype html><html><head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\/script>
+${tikzScript}
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: transparent; overflow: hidden; color: white; }
+  .katex { font-size: 1.4em; }
+  svg { max-width: 100%; max-height: 100%; }
+</style>
+</head><body>${bodyContent}</body></html>`
+}
+
+function LatexRenderer({ element, isSelected }) {
+  const html = generateLatexIframeHtml(element.content || '')
+  return (
+    <iframe
+      srcDoc={html}
+      style={{ width: '100%', height: '100%', border: 'none', display: 'block', pointerEvents: isSelected ? 'auto' : 'none', background: 'transparent' }}
+      sandbox="allow-scripts"
+      title="LaTeX / TikZ"
+    />
+  )
+}
+
+function TableRenderer({ element, isEditing }) {
+  const data = element.data || [['']]
+  const headerBg = element.headerBgColor || 'rgba(99,102,241,0.3)'
+  const cellBg = element.cellBgColor || 'transparent'
+  const borderColor = element.borderColor || 'rgba(255,255,255,0.2)'
+  const borderWidth = element.borderWidth ?? 1
+  const textColor = element.textColor || '#ffffff'
+  const fontSize = element.fontSize || 14
+  const cellPadding = element.cellPadding || 8
+
+  return (
+    <div style={{ width: '100%', height: '100%', overflow: 'auto' }}>
+      <table style={{ width: '100%', height: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <tbody>
+          {data.map((row, ri) => (
+            <tr key={ri}>
+              {(row || []).map((cell, ci) => (
+                <td
+                  key={ci}
+                  style={{
+                    padding: cellPadding,
+                    border: `${borderWidth}px solid ${borderColor}`,
+                    background: (element.headerRow && ri === 0) ? headerBg : cellBg,
+                    color: textColor,
+                    fontSize,
+                    fontWeight: (element.headerRow && ri === 0) ? 600 : 400,
+                    verticalAlign: 'middle',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {cell || ''}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

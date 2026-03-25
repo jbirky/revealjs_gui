@@ -1,41 +1,147 @@
 # Slides Editor
 
-A self-hostable WYSIWYG presentation editor powered by [reveal.js](https://revealjs.com/). Build and present slides in the browser — no account, no cloud, no tracking.
+A self-hostable WYSIWYG presentation editor powered by [reveal.js](https://revealjs.com/). Build and present slides in the browser — no account, no cloud, no tracking. Also available as a standalone desktop app via Electron.
 
 ## Features
 
+### Editing
 - **WYSIWYG editing** — click and type directly on slides with TipTap rich text
-- **Rich formatting** — headings, bold/italic/underline/strikethrough, text color, font family, font size, alignment, lists, tables, code blocks, links, images
+- **Rich formatting** — headings, bold/italic/underline/strikethrough, text color, text highlighting, font family, font size, alignment, lists, tables, code blocks, links, images
 - **Multi-select** — shift-click to select multiple elements, move or delete them together
+- **Group / ungroup** — group multiple elements so they select, move, and resize as a unit
 - **Align & distribute** — align selected elements left/center/right/top/middle/bottom, or distribute evenly
+- **Element rotation** — rotate any element by dragging the rotation handle or entering a degree value
+- **Smart guides & snapping** — alignment lines appear when dragging near other elements' edges or the canvas center; toggle with the magnet icon
+- **Rulers & guides** — toggle pixel rulers on the top/left edges; drag from a ruler onto the canvas to place persistent guide lines; double-click a guide to remove it
 - **Element controls** — resize, reposition, lock, z-order, drop shadow, aspect-ratio lock (hold Shift while resizing)
-- **Image tools** — upload or URL, crop, pan, brightness/contrast/grayscale filters
-- **Shapes** — rectangle, circle, triangle, arrow, star, and more with fill/stroke/opacity controls
-- **Code blocks** — syntax-highlighted code with 10 themes (Monokai, GitHub Dark, Tokyo Night, etc.)
-- **LaTeX math** — inline and display KaTeX math rendering
-- **HTML embeds** — arbitrary HTML/CSS/JS or D3 visualizations in iframes
-- **Slide management** — add from templates (blank, title, two-column, image+text), duplicate, drag-to-reorder, delete
-- **Slide backgrounds** — solid color, CSS gradient, or image per slide
-- **Slide templates** — starter layouts to speed up slide creation
-- **Fragments** — per-element appear animations with configurable order
-- **Themes** — all 11 reveal.js themes (black, white, league, beige, sky, night, serif, simple, solarized, moon, dracula)
-- **Transitions** — none, fade, slide, convex, concave, zoom
-- **Footer & page numbers** — configurable font, size, color; shown on every slide
-- **Speaker notes** — per-slide notes shown in reveal.js speaker view (press `S` in presentation)
-- **Present mode** — full-screen reveal.js presentation maximized to fill the display
-- **Export HTML** — download as a self-contained HTML file (no server needed to share)
-- **Export PDF** — print-ready HTML layout, one page per slide
-- **Undo / Redo** — Ctrl+Z / Ctrl+Y with 50-step history
+- **Round corners** — adjustable border radius on images and code blocks
+- **Find & replace** — Ctrl+F to search text across all slides with case-sensitive matching, navigate between matches, replace one or all
+- **Undo / redo** — Ctrl+Z / Ctrl+Y with 50-step history
 - **Clipboard** — Ctrl+C/X/V and Ctrl+D to copy/cut/paste/duplicate elements
-- **Auto-save** — debounced saves to server every 1.5 s
+- **Auto-save** — debounced saves every 1.5 s with last-saved timestamp display
+
+### Element Types
+- **Text boxes** — rich HTML content with full TipTap formatting
+- **Images** — upload or URL, crop, pan, brightness/contrast/grayscale filters, round corners
+- **Shapes** — rectangle, circle, triangle, arrow, star, line with fill/stroke/opacity/corner radius
+- **Code blocks** — syntax-highlighted code with 10 themes and 25+ languages, round corners
+- **LaTeX / TikZ** — full LaTeX math blocks and TikZ diagrams rendered via KaTeX and TikZJax, with a split-pane editor showing live preview
+- **Inline math** — inline and display KaTeX math within text elements
+- **HTML embeds** — arbitrary HTML/CSS/JS or D3 visualizations in iframes
+- **Markdown blocks** — write raw Markdown that renders as formatted content
+- **Charts** — bar, line, pie, doughnut, radar, and polar area charts via Chart.js with editable data
+- **Video / audio** — embed media files via URL or upload with playback controls, autoplay, loop, and muted options
+- **Tables** — first-class drag/resize table elements with header row, inline cell editing, and style controls
+- **Icons** — searchable library of 60+ Lucide-style SVG icons with color and stroke customization
+- **Callout bubbles** — numbered annotation circles with customizable color and size
+
+### Slides
+- **Slide templates** — blank, title, two-column, three-column, image+text, section header, comparison, big number
+- **Slide backgrounds** — solid color, CSS gradient, or image per slide via toolbar popup
+- **Fragment animations** — per-element appear animations with visual timeline editor for sequencing
+- **Per-slide page numbers** — toggle page numbers on/off per slide; skipped slides don't count in numbering
+- **Hidden slides** — mark slides as hidden to skip during presentation
+
+### Footer System
+- **Basic mode** — section label on the left, page number on the right
+- **Sequence mode** — define section titles (e.g., Intro / Methods / Results / Discussion) that display evenly spaced at the bottom; the active section appears bold, others appear faded; customizable active and inactive colors
+- **Footer styling** — configurable font family, size, active color, and inactive color
+
+### Themes & Templates
+- **11 reveal.js themes** — black, white, league, beige, sky, night, serif, simple, solarized, moon, dracula
+- **Transitions** — none, fade, slide, convex, concave, zoom
+- **Preset themes** — 6 built-in design presets: Minimal Dark, Minimal Light, Academic, Gradient, Corporate, Neon
+- **Custom templates** — create, edit, and manage your own reusable presentation templates; start new presentations from any template
+- **Dark / light editor theme** — toggle the editor UI between dark and light mode
+
+### Export & Sharing
+- **Present mode** — full-screen reveal.js presentation with speaker notes (press `S`)
+- **Export HTML** — download as a self-contained HTML file
+- **Export offline HTML** — inlines all CDN resources (Reveal.js, KaTeX, highlight.js) so the file works without internet
+- **Export PDF** — print-ready layout with one page per slide, fragment states expanded
+- **Export PPTX** — generate a PowerPoint file for sharing with non-technical users
+- **Shareable links** — generate public URLs to view presentations without the editor; toggle on/off per presentation
+- **GitHub integration** — push presentations directly to a GitHub repo with auto-generated README
+
+### Cloud Sync
+- **Proton Drive sync** — sync presentations to Proton Drive via rclone; configure credentials in-app, sync individual presentations or all at once
+- **Configurable remote** — works with any rclone-supported cloud provider (Proton Drive, Google Drive, S3, etc.)
+
+### Version History
+- **Named snapshots** — save named versions of your presentation at any point
+- **Restore** — restore any previous snapshot, overwriting the current state
+- **Delete** — remove individual snapshots
 
 ---
 
-## Self-Hosting
+## Installation
 
-### Option A — Docker (recommended)
+### Option A — Desktop App (Electron)
 
-The easiest way to run the app. Requires [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/).
+Run Slides Editor as a native desktop application. No server, no Docker, no browser needed.
+
+#### Pre-built packages
+
+Download from the [Releases](https://github.com/jbirky/revealjs_gui/releases) page:
+
+| Platform | Format |
+|----------|--------|
+| Linux | `.AppImage` (run directly) or `.deb` (install via dpkg) |
+| macOS | `.zip` (extract and open the `.app`) |
+| Windows | `.exe` installer or portable `.exe` |
+
+**Linux `.deb` install:**
+```bash
+sudo dpkg -i revealjs-editor_1.0.0_amd64.deb
+```
+
+**Linux `.AppImage`:**
+```bash
+chmod +x Slides\ Editor-1.0.0.AppImage
+./Slides\ Editor-1.0.0.AppImage
+```
+
+#### Build from source
+
+Requires **Node.js 18+**.
+
+```bash
+git clone https://github.com/jbirky/revealjs_gui.git
+cd revealjs_gui
+npm install
+```
+
+Build for your platform:
+
+```bash
+npm run electron:build:linux   # → .AppImage + .deb
+npm run electron:build:mac     # → .zip (extract for .app)
+npm run electron:build:win     # → .exe installer + portable
+```
+
+Output goes to `dist-electron/`.
+
+Or run in dev mode without building a package:
+
+```bash
+npm run electron:dev
+```
+
+#### Data location
+
+The desktop app stores data in your OS app data folder:
+
+| Platform | Path |
+|----------|------|
+| Linux | `~/.config/Slides Editor/` |
+| macOS | `~/Library/Application Support/Slides Editor/` |
+| Windows | `%APPDATA%/Slides Editor/` |
+
+---
+
+### Option B — Docker (recommended for servers)
+
+Requires [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/).
 
 #### 1. Clone the repository
 
@@ -52,10 +158,11 @@ docker compose up -d
 
 This will:
 - Build the React frontend and bundle it with the Express server
+- Install rclone for cloud sync support
 - Start the container on port **3002**
 - Create two named Docker volumes to persist your data across restarts:
-  - `revealjs-data` — presentation JSON (`server/data/presentations.json`)
-  - `revealjs-uploads` — uploaded images (`server/uploads/`)
+  - `revealjs-data` — presentation data, templates, share tokens, version history
+  - `revealjs-uploads` — uploaded images, videos, and audio files
 
 Open `http://localhost:3002` in your browser.
 
@@ -84,29 +191,17 @@ ports:
   - "8080:3002"   # now accessible at http://localhost:8080
 ```
 
-#### Build and run without Compose
-
-```bash
-docker build -t slides-editor .
-docker run -d \
-  -p 3002:3002 \
-  -v slides-data:/app/server/data \
-  -v slides-uploads:/app/server/uploads \
-  --name slides-editor \
-  slides-editor
-```
-
 ---
 
-### Option B — Node.js / npm from source
+### Option C — Node.js / npm from source
 
 Requires **Node.js 18+** and npm 8+.
 
 #### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
-cd YOUR_REPO
+git clone https://github.com/jbirky/revealjs_gui.git
+cd revealjs_gui
 ```
 
 #### 2. Install dependencies
@@ -114,8 +209,6 @@ cd YOUR_REPO
 ```bash
 npm install
 ```
-
-This installs dependencies for the root workspace, the React client, and the Express server in one command.
 
 #### 3a. Development mode
 
@@ -145,8 +238,6 @@ Open `http://localhost:3002`.
 
 #### Run on a custom port
 
-Set the `PORT` environment variable before starting:
-
 ```bash
 PORT=8080 npm start
 ```
@@ -157,12 +248,16 @@ PORT=8080 npm start
 
 | Path | Contents |
 |------|----------|
-| `server/data/presentations.json` | All presentation data (slides, elements, settings) |
-| `server/uploads/` | Uploaded image files |
+| `server/data/presentations.json` | All presentation data |
+| `server/data/templates.json` | Custom presentation templates |
+| `server/data/share-tokens.json` | Shareable link tokens |
+| `server/data/github-config.json` | GitHub integration credentials |
+| `server/data/history/` | Version history snapshots |
+| `server/uploads/` | Uploaded images, videos, and audio files |
 
-Both locations are created automatically on first run. Back them up to preserve your work.
+All locations are created automatically on first run. Back them up to preserve your work.
 
-**Docker:** data lives in named volumes (`revealjs-data`, `revealjs-uploads`). To back up or migrate:
+**Docker:** data lives in named volumes (`revealjs-data`, `revealjs-uploads`). To back up:
 
 ```bash
 # Copy presentations JSON out of the volume
@@ -170,29 +265,69 @@ docker run --rm \
   -v revealjs-data:/data \
   -v $(pwd):/backup \
   alpine cp /data/presentations.json /backup/presentations.json
-
-# Copy it back
-docker run --rm \
-  -v revealjs-data:/data \
-  -v $(pwd):/backup \
-  alpine cp /backup/presentations.json /data/presentations.json
 ```
+
+---
+
+## Save to GitHub
+
+Push presentations directly to a GitHub repository from the editor.
+
+### 1. Create a GitHub Personal Access Token
+
+Go to **GitHub → Settings → Developer settings → [Fine-grained personal access tokens](https://github.com/settings/personal-access-tokens/new)** and create a token with:
+
+| Setting | Value |
+|---------|-------|
+| **Repository access** | **Only select repositories** → select your target repo |
+| **Permissions → Contents** | **Read and write** |
+
+### 2. Create a target repository
+
+Create a new repo on GitHub (e.g. `presentations`). It can be empty.
+
+### 3. Configure in the editor
+
+1. Open any presentation and click the **GitHub** button.
+2. Enter your GitHub username as **Repository Owner**.
+3. Enter the repository name.
+4. Paste your token and click **Save Settings**.
+
+### 4. Push a presentation
+
+Click **GitHub** → optionally enter a commit message → **Push to GitHub**.
+
+```
+my-repo/
+├── README.md                          ← auto-generated with links
+├── my_first_talk/
+│   ├── presentation.html              ← viewable in browser
+│   └── presentation.json              ← full project data
+└── another_presentation/
+    ├── presentation.html
+    └── presentation.json
+```
+
+---
+
+## Cloud Sync (Proton Drive)
+
+Sync presentations to Proton Drive or any rclone-supported cloud provider.
+
+1. Click the **Sync** button in the editor header.
+2. Enter your Proton Drive username and password.
+3. Click **Connect** to verify the connection.
+4. Use **Sync This Presentation** or **Sync All** to upload.
+
+Files are exported as HTML + JSON and uploaded via rclone. The Docker image includes rclone pre-installed. For the desktop app, install rclone separately on your system.
 
 ---
 
 ## Reverse Proxy (optional)
 
-To expose the app on a domain with HTTPS, put Nginx or Caddy in front of the container.
-
-**Nginx example** (`/etc/nginx/sites-available/slides`):
+**Nginx:**
 
 ```nginx
-server {
-    listen 80;
-    server_name slides.example.com;
-    return 301 https://$host$request_uri;
-}
-
 server {
     listen 443 ssl;
     server_name slides.example.com;
@@ -200,8 +335,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/slides.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/slides.example.com/privkey.pem;
 
-    # Allow large image uploads
-    client_max_body_size 20M;
+    client_max_body_size 100M;
 
     location / {
         proxy_pass         http://localhost:3002;
@@ -214,7 +348,7 @@ server {
 }
 ```
 
-**Caddy example** (`Caddyfile`):
+**Caddy:**
 
 ```
 slides.example.com {
@@ -222,59 +356,24 @@ slides.example.com {
 }
 ```
 
-Caddy handles HTTPS automatically via Let's Encrypt.
-
 ---
 
-## Save to GitHub
+## Keyboard Shortcuts
 
-You can push presentations directly to a GitHub repository from the editor. Each presentation is saved as a folder containing `presentation.html` (standalone viewable file) and `presentation.json` (full project data). The repo README is automatically updated with links to open each presentation in the browser.
-
-### 1. Create a GitHub Personal Access Token
-
-Go to **GitHub → Settings → Developer settings → [Fine-grained personal access tokens](https://github.com/settings/personal-access-tokens/new)** and create a token with these minimum permissions:
-
-| Setting | Value |
-|---------|-------|
-| **Repository access** | **Only select repositories** → select your target repo |
-| **Permissions → Contents** | **Read and write** |
-
-That's it — no other permissions are needed. Copy the token (`github_pat_...`).
-
-> **Classic tokens** also work: create one at [github.com/settings/tokens](https://github.com/settings/tokens) with the `repo` scope. Fine-grained tokens are recommended because they limit access to a single repository.
-
-### 2. Create a target repository
-
-Create a new repo on GitHub (e.g. `presentations`). It can be empty — the first push will initialize it.
-
-### 3. Configure in the editor
-
-1. Open any presentation and click the **GitHub** button in the header toolbar.
-2. Enter your GitHub username (or org) as **Repository Owner**.
-3. Enter the repository name (e.g. `presentations`).
-4. Paste your token into **Personal Access Token**.
-5. Click **Save Settings** — the token is stored server-side and only needs to be entered once.
-
-### 4. Push a presentation
-
-1. Click the **GitHub** button in the editor header.
-2. Optionally enter a **Commit Message** (if left blank, defaults to `Presentation Title [MM/DD/YYYY HH:MM]`).
-3. Click **Push to GitHub**.
-
-The presentation will be committed to a folder named after the presentation title:
-
-```
-my-repo/
-├── README.md                          ← auto-generated with links to all presentations
-├── my_first_talk/
-│   ├── presentation.html              ← open in browser to view
-│   └── presentation.json              ← full project data
-└── another_presentation/
-    ├── presentation.html
-    └── presentation.json
-```
-
-The README links use [htmlpreview.github.io](https://htmlpreview.github.io) so anyone with the link can view the slides directly in their browser.
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Z` | Undo |
+| `Ctrl+Y` / `Ctrl+Shift+Z` | Redo |
+| `Ctrl+C` | Copy element |
+| `Ctrl+X` | Cut element |
+| `Ctrl+V` | Paste element |
+| `Ctrl+D` | Duplicate element |
+| `Ctrl+F` | Find & replace |
+| `Delete` / `Backspace` | Delete selected element(s) |
+| `Escape` | Deselect / stop editing / close panel |
+| `Shift+drag` | Maintain aspect ratio while resizing |
+| `Shift+rotate` | Snap rotation to 15-degree increments |
+| `S` (in presentation) | Open speaker notes view |
 
 ---
 
@@ -282,6 +381,7 @@ The README links use [htmlpreview.github.io](https://htmlpreview.github.io) so a
 
 | Method | Requirement |
 |--------|-------------|
+| Desktop app | Node.js 18+ (build only) |
 | Docker | Docker 20.10+ and Docker Compose v2+ |
 | Node.js | Node.js 18+ and npm 8+ |
 
@@ -295,6 +395,13 @@ The README links use [htmlpreview.github.io](https://htmlpreview.github.io) so a
 | Rich text editor | TipTap 2 |
 | Presentation engine | reveal.js 5 |
 | Math rendering | KaTeX |
+| Diagrams | TikZJax |
+| Charts | Chart.js 4 |
 | Syntax highlighting | highlight.js |
+| Markdown | Built-in converter + marked.js (export) |
+| Icons | Lucide (editor UI) + inline SVG (slide icons) |
+| PowerPoint export | pptxgenjs |
 | Backend | Node.js, Express 4 |
-| Storage | JSON file + local filesystem |
+| Desktop app | Electron |
+| Cloud sync | rclone |
+| Storage | JSON files + local filesystem |

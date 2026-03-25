@@ -8,13 +8,36 @@ const { v4: uuidv4 } = require('uuid')
 const app = express()
 const PORT = process.env.PORT || 3002
 
-const DATA_FILE = path.join(__dirname, 'data', 'presentations.json')
-const GITHUB_CONFIG_FILE = path.join(__dirname, 'data', 'github-config.json')
-const UPLOADS_DIR = path.join(__dirname, 'uploads')
+// Support custom data directory (used by Electron to write to user's app data folder)
+const DATA_DIR = process.env.SLIDES_DATA_DIR || path.join(__dirname, 'data')
+const UPLOADS_BASE = process.env.SLIDES_UPLOADS_DIR || path.join(__dirname, 'uploads')
+
+const DATA_FILE = path.join(DATA_DIR, 'presentations.json')
+const GITHUB_CONFIG_FILE = path.join(DATA_DIR, 'github-config.json')
+const UPLOADS_DIR = UPLOADS_BASE
+const SHARE_FILE = path.join(DATA_DIR, 'share-tokens.json')
+const TEMPLATES_FILE = path.join(DATA_DIR, 'templates.json')
+const RCLONE_CONFIG_FILE = path.join(DATA_DIR, 'rclone.conf')
+const SYNC_DIR = path.join(DATA_DIR, 'sync-export')
+const HISTORY_DIR = path.join(DATA_DIR, 'history')
 
 // Ensure directories exist
-fs.ensureDirSync(path.join(__dirname, 'data'))
+fs.ensureDirSync(DATA_DIR)
 fs.ensureDirSync(UPLOADS_DIR)
+
+// Initialize share tokens file if missing
+if (!fs.existsSync(SHARE_FILE)) {
+  fs.writeJsonSync(SHARE_FILE, {})
+}
+
+// Initialize templates file if missing
+if (!fs.existsSync(TEMPLATES_FILE)) {
+  fs.writeJsonSync(TEMPLATES_FILE, [])
+}
+
+// Helper: read/write templates
+async function readTemplates() { return fs.readJson(TEMPLATES_FILE) }
+async function writeTemplates(data) { return fs.writeJson(TEMPLATES_FILE, data, { spaces: 2 }) }
 
 // Initialize data file if missing
 if (!fs.existsSync(DATA_FILE)) {
@@ -34,10 +57,10 @@ const storage = multer.diskStorage({
     cb(null, `${uuidv4()}${ext}`)
   }
 })
-const upload = multer({ storage })
+const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } }) // 100MB limit for video
 
 app.use(cors())
-app.use(express.json({ limit: '10mb' }))
+app.use(express.json({ limit: '50mb' }))
 app.use('/uploads', express.static(UPLOADS_DIR))
 
 // Helper: read all presentations
@@ -92,12 +115,16 @@ function shapeSvgString(el) {
 function generateRevealHTML(presentation) {
   const theme = presentation.theme || 'black'
   const transition = presentation.transition || 'slide'
-  const totalSlides = (presentation.slides || []).length
   const showFooter = presentation.showFooter || false
   const showPageNumbers = presentation.showPageNumbers || false
   const pageNumberFormat = presentation.pageNumberFormat || 'c/t'
   const footerFontSize = presentation.footerFontSize || 14
   const footerFontFamily = presentation.footerFontFamily || '-apple-system,sans-serif'
+  const footerMode = presentation.footerMode || 'basic'
+  const sequenceSections = presentation.sequenceSections || []
+  const footerInactiveColor = presentation.footerInactiveColor || 'rgba(255,255,255,0.25)'
+  const totalNumberedSlides = (presentation.slides || []).filter(s => s.showPageNumber !== false).length
+  let pageCounter = 0
   const footerColor = presentation.footerColor || 'rgba(255,255,255,0.65)'
   const showPresentGrid = presentation.showPresentGrid || false
   const presentGridSize = presentation.gridSize || 40
@@ -113,7 +140,9 @@ function generateRevealHTML(presentation) {
       .map(el => {
         const shadowStyle = (el.shadowBlur || el.shadowX || el.shadowY)
           ? `box-shadow:${el.shadowX||0}px ${el.shadowY||0}px ${el.shadowBlur||0}px ${el.shadowColor||'rgba(0,0,0,0.5)'};` : ''
-        const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;z-index:${el.zIndex || 1};overflow:hidden;box-sizing:border-box;${shadowStyle}`
+        const borderRadiusStyle = (el.type === 'image' || el.type === 'code') && el.borderRadius ? `border-radius:${el.borderRadius}px;` : ''
+        const rotationStyle = el.rotation ? `transform:rotate(${el.rotation}deg);` : ''
+        const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;z-index:${el.zIndex || 1};overflow:hidden;box-sizing:border-box;${shadowStyle}${borderRadiusStyle}${rotationStyle}`
         const fragClass = el.fragment ? ` class="fragment ${el.fragmentAnimation || 'fade-in'}"` : ''
         const fragIdx = el.fragment && el.fragmentIndex != null ? ` data-fragment-index="${el.fragmentIndex}"` : ''
         if (el.type === 'text') {
@@ -147,12 +176,112 @@ function generateRevealHTML(presentation) {
           const codeContent = escapeHtml(el.content || '')
           return `<div${fragClass}${fragIdx} style="${style}"><pre style="margin:0;padding:10px 14px;width:100%;height:100%;overflow:hidden;box-sizing:border-box;font-family:'Fira Code','JetBrains Mono','Courier New',monospace;font-size:${el.fontSize || 14}px;line-height:1.5;"><code class="language-${lang}" data-trim>${codeContent}</code></pre></div>`
         }
+        if (el.type === 'markdown') {
+          const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script><style>*{margin:0;padding:0;box-sizing:border-box}html,body{background:transparent;color:white;font-family:-apple-system,sans-serif;font-size:18px;line-height:1.6;padding:8px 12px;overflow:auto}h1,h2,h3,h4{margin:0 0 .4em}p{margin:0 0 .4em}ul,ol{padding-left:1.5em;margin:0 0 .4em}a{color:#60a5fa}pre{background:rgba(0,0,0,0.3);padding:10px 14px;border-radius:6px;overflow:auto;font-size:13px}code{font-family:'Fira Code',monospace}</style></head><body><div id="out"></div><script>document.getElementById('out').innerHTML=marked.parse(${JSON.stringify(el.content || '')});<\/script></body></html>`
+          const escaped = srcdoc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+          return `<iframe${fragClass}${fragIdx} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+        }
+        if (el.type === 'chart') {
+          const { chartType = 'bar', chartData = {} } = el
+          const labels = JSON.stringify(chartData.labels || [])
+          const datasets = JSON.stringify((chartData.datasets || []).map(ds => ({
+            label: ds.label || '', data: ds.data || [],
+            backgroundColor: ds.color || '#6366f1', borderColor: ds.color || '#6366f1',
+            borderWidth: chartType === 'line' ? 2 : 0, fill: chartType === 'line' ? false : undefined,
+          })))
+          const scalesOpt = chartType === 'pie' || chartType === 'doughnut' ? '{}' : `{x:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}},y:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}}}`
+          const chartSrc = `<!doctype html><html><head><meta charset="utf-8"><script src="https://cdn.jsdelivr.net/npm/chart.js@4"><\/script><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:transparent;overflow:hidden}</style></head><body><canvas id="c" style="width:100%;height:100%"></canvas><script>new Chart(document.getElementById('c'),{type:'${chartType}',data:{labels:${labels},datasets:${datasets}},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'rgba(255,255,255,0.7)',font:{size:12}}}},scales:${scalesOpt}}});<\/script></body></html>`
+          const escaped = chartSrc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+          return `<iframe${fragClass}${fragIdx} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+        }
+        if (el.type === 'callout') {
+          const bg = el.calloutColor || '#ef4444'
+          const tc = el.calloutTextColor || '#ffffff'
+          const fs = el.fontSize || 16
+          return `<div${fragClass}${fragIdx} style="${style}border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;color:${tc};font-size:${fs}px;font-weight:700;font-family:-apple-system,sans-serif;">${el.calloutNumber || 1}</div>`
+        }
+        if (el.type === 'icon') {
+          const color = el.iconColor || '#ffffff'
+          const sw = el.iconStrokeWidth || 2
+          const iconPaths = { Star:'<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>', Heart:'<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>', Check:'<polyline points="20,6 9,17 4,12"/>', X:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>', Zap:'<polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/>', Target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>' }
+          const path = iconPaths[el.iconName] || iconPaths['Star']
+          return `<div${fragClass}${fragIdx} style="${style}display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${path}</svg></div>`
+        }
+        if (el.type === 'latex') {
+          const content = el.content || ''
+          const hasTikz = /\\begin\{tikzpicture\}/.test(content)
+          const tikzScript = hasTikz
+            ? `<link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css"><script src="https://tikzjax.com/v1/tikzjax.js"><\/script>`
+            : ''
+          let bodyContent
+          if (hasTikz) {
+            bodyContent = `<script type="text/tikz">${content}<\/script>`
+          } else {
+            bodyContent = `<div id="m"></div><script>try{katex.render(${JSON.stringify(content)},document.getElementById('m'),{displayMode:true,throwOnError:false})}catch(e){document.getElementById('m').textContent=e.message}<\/script>`
+          }
+          const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"><script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\/script>${tikzScript}<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:transparent;overflow:hidden;color:white}.katex{font-size:1.4em}svg{max-width:100%;max-height:100%}</style></head><body>${bodyContent}</body></html>`
+          const escaped = srcdoc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+          return `<iframe${fragClass}${fragIdx} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+        }
+        if (el.type === 'video') {
+          const attrs = []
+          if (el.controls !== false) attrs.push('controls')
+          if (el.autoplay) attrs.push('autoplay')
+          if (el.loop) attrs.push('loop')
+          if (el.muted) attrs.push('muted')
+          const posterAttr = el.poster ? ` poster="${el.poster}"` : ''
+          return `<div${fragClass}${fragIdx} style="${style}"><video src="${el.src}" ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:${el.objectFit||'contain'};display:block;"></video></div>`
+        }
+        if (el.type === 'audio') {
+          const attrs = ['controls']
+          if (el.autoplay) attrs.push('autoplay')
+          if (el.loop) attrs.push('loop')
+          if (el.muted) attrs.push('muted')
+          return `<div${fragClass}${fragIdx} style="${style}display:flex;align-items:center;justify-content:center;"><audio src="${el.src}" ${attrs.join(' ')} style="width:90%;"></audio></div>`
+        }
+        if (el.type === 'table') {
+          const data = el.data || [['']]
+          const headerBg = el.headerBgColor || 'rgba(99,102,241,0.3)'
+          const cellBg = el.cellBgColor || 'transparent'
+          const borderColor = el.borderColor || 'rgba(255,255,255,0.2)'
+          const borderWidth = el.borderWidth ?? 1
+          const textColor = el.textColor || '#ffffff'
+          const fontSize = el.fontSize || 14
+          const cellPadding = el.cellPadding || 8
+          const rows = data.map((row, ri) => {
+            const cells = (row || []).map((cell, ci) => {
+              const bg = (el.headerRow && ri === 0) ? headerBg : cellBg
+              return `<td style="padding:${cellPadding}px;border:${borderWidth}px solid ${borderColor};background:${bg};color:${textColor};font-size:${fontSize}px;">${escapeHtml(cell || '')}</td>`
+            }).join('')
+            return `<tr>${cells}</tr>`
+          }).join('')
+          return `<div${fragClass}${fragIdx} style="${style}overflow:auto;"><table style="width:100%;height:100%;border-collapse:collapse;">${rows}</table></div>`
+        }
         return ''
       }).join('\n')
 
-    const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
-    const pageLabel = showPageNumbers ? (pageNumberFormat === 'c/t' ? `${slideIndex + 1} / ${totalSlides}` : `${slideIndex + 1}`) : ''
-    const footerHtml = (sectionLabel || pageLabel) ? `      <div class="reveal-footer" style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>` : ''
+    // Per-slide page numbering
+    const slideHasPageNum = slide.showPageNumber !== false
+    if (slideHasPageNum) pageCounter++
+    const pageLabel = showPageNumbers && slideHasPageNum
+      ? (pageNumberFormat === 'c/t' ? `${pageCounter} / ${totalNumberedSlides}` : `${pageCounter}`)
+      : ''
+
+    let footerHtml = ''
+    if (footerMode === 'sequence' && sequenceSections.length > 0 && showFooter) {
+      const activeIdx = slide.activeSection
+      const seqSpans = sequenceSections.map((sec, i) => {
+        const isActive = activeIdx === i
+        const color = isActive ? (footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor
+        const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
+        return `<span style="color:${color};${weight}">${escapeHtml(sec || 'Section ' + (i+1))}</span>`
+      }).join('')
+      const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
+      footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
+    } else {
+      const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
+      footerHtml = (sectionLabel || pageLabel) ? `      <div class="reveal-footer" style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>` : ''
+    }
     const gridHtml = showPresentGrid ? `      <div style="position:absolute;inset:0;z-index:950;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,0.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.12) 1px,transparent 1px);background-size:${presentGridSize}px ${presentGridSize}px;"></div>` : ''
 
     return `    <section${bgAttrs} style="padding:0;width:960px;height:540px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`
@@ -205,7 +334,7 @@ function generateRevealHTML(presentation) {
     }
     #fs-btn:hover { background: rgba(0,0,0,0.75); }
     :fullscreen #fs-btn, :-webkit-full-screen #fs-btn { display: none; }
-  </style>
+  </style>${presentation.customCSS ? `\n  <style>\n${presentation.customCSS}\n  </style>` : ''}
 </head>
 <body>
   <div class="reveal">
@@ -281,36 +410,189 @@ app.get('/api/presentations', async (req, res) => {
   }
 })
 
-// POST /api/presentations - create new
+// POST /api/presentations - create new (optionally from template)
 app.post('/api/presentations', async (req, res) => {
   try {
-    const { title, theme, transition } = req.body
+    const { title, theme, transition, templateId, slides: providedSlides, ...extraFields } = req.body
     const now = new Date().toISOString()
-    const presentation = {
-      id: uuidv4(),
-      title: title || 'Untitled Presentation',
-      theme: theme || 'black',
-      transition: transition || 'slide',
-      slides: [
-        {
+    let presentation
+
+    if (providedSlides && Array.isArray(providedSlides)) {
+      // Create from provided slide data (preset templates)
+      presentation = {
+        ...extraFields,
+        id: uuidv4(),
+        title: title || 'Untitled Presentation',
+        theme: theme || extraFields.theme || 'black',
+        transition: transition || extraFields.transition || 'slide',
+        slides: providedSlides.map(s => ({
+          ...s,
+          id: s.id || uuidv4(),
+          elements: (s.elements || []).map(el => ({ ...el, id: el.id || uuidv4() }))
+        })),
+        createdAt: now,
+        updatedAt: now
+      }
+      delete presentation.isTemplate
+      delete presentation.description
+      delete presentation.thumbnail
+    } else if (templateId) {
+      // Create from template
+      const templates = await readTemplates()
+      const template = templates.find(t => t.id === templateId)
+      if (template) {
+        const cloned = JSON.parse(JSON.stringify(template))
+        presentation = {
+          ...cloned,
           id: uuidv4(),
-          elements: [{
+          title: title || cloned.title || 'Untitled Presentation',
+          createdAt: now,
+          updatedAt: now,
+          slides: (cloned.slides || []).map(s => ({
+            ...s,
             id: uuidv4(),
-            type: 'text',
-            x: 80, y: 160, width: 800, height: 220, zIndex: 1,
-            content: '<h2 style="text-align: center">Welcome to your presentation</h2><p style="text-align: center">Double-click to start editing</p>'
-          }],
-          notes: '',
-          background: { type: 'color', color: '#1e1e2e' }
+            elements: (s.elements || []).map(el => ({ ...el, id: uuidv4() }))
+          }))
         }
-      ],
-      createdAt: now,
-      updatedAt: now
+        // Remove template-specific fields
+        delete presentation.isTemplate
+      }
     }
+
+    if (!presentation) {
+      presentation = {
+        id: uuidv4(),
+        title: title || 'Untitled Presentation',
+        theme: theme || 'black',
+        transition: transition || 'slide',
+        slides: [
+          {
+            id: uuidv4(),
+            elements: [{
+              id: uuidv4(),
+              type: 'text',
+              x: 80, y: 160, width: 800, height: 220, zIndex: 1,
+              content: '<h2 style="text-align: center">Welcome to your presentation</h2><p style="text-align: center">Double-click to start editing</p>'
+            }],
+            notes: '',
+            background: { type: 'color', color: '#1e1e2e' }
+          }
+        ],
+        createdAt: now,
+        updatedAt: now
+      }
+    }
+
     const presentations = await readPresentations()
     presentations.push(presentation)
     await writePresentations(presentations)
     res.status(201).json(presentation)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// --- Templates ---
+
+// GET /api/templates
+app.get('/api/templates', async (req, res) => {
+  try {
+    const templates = await readTemplates()
+    const summaries = templates.map(t => ({
+      id: t.id,
+      title: t.title,
+      theme: t.theme,
+      transition: t.transition,
+      slideCount: (t.slides || []).length,
+      updatedAt: t.updatedAt,
+      createdAt: t.createdAt,
+      thumbnail: (t.slides && t.slides[0]) ? t.slides[0].background : null
+    }))
+    res.json(summaries)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/templates - create new template
+app.post('/api/templates', async (req, res) => {
+  try {
+    const now = new Date().toISOString()
+    const template = {
+      ...req.body,
+      id: uuidv4(),
+      isTemplate: true,
+      createdAt: now,
+      updatedAt: now
+    }
+    const templates = await readTemplates()
+    templates.push(template)
+    await writeTemplates(templates)
+    res.status(201).json(template)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/templates/:id
+app.get('/api/templates/:id', async (req, res) => {
+  try {
+    const templates = await readTemplates()
+    const template = templates.find(t => t.id === req.params.id)
+    if (!template) return res.status(404).json({ error: 'Not found' })
+    res.json(template)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /api/templates/:id
+app.put('/api/templates/:id', async (req, res) => {
+  try {
+    const templates = await readTemplates()
+    const index = templates.findIndex(t => t.id === req.params.id)
+    if (index === -1) return res.status(404).json({ error: 'Not found' })
+    templates[index] = { ...templates[index], ...req.body, id: req.params.id, updatedAt: new Date().toISOString() }
+    await writeTemplates(templates)
+    res.json(templates[index])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/templates/:id
+app.delete('/api/templates/:id', async (req, res) => {
+  try {
+    const templates = await readTemplates()
+    const index = templates.findIndex(t => t.id === req.params.id)
+    if (index === -1) return res.status(404).json({ error: 'Not found' })
+    templates.splice(index, 1)
+    await writeTemplates(templates)
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/presentations/:id/save-as-template
+app.post('/api/presentations/:id/save-as-template', async (req, res) => {
+  try {
+    const presentations = await readPresentations()
+    const pres = presentations.find(p => p.id === req.params.id)
+    if (!pres) return res.status(404).json({ error: 'Not found' })
+    const now = new Date().toISOString()
+    const template = {
+      ...JSON.parse(JSON.stringify(pres)),
+      id: uuidv4(),
+      title: (req.body.title || pres.title || 'Untitled') + ' (template)',
+      isTemplate: true,
+      createdAt: now,
+      updatedAt: now
+    }
+    const templates = await readTemplates()
+    templates.push(template)
+    await writeTemplates(templates)
+    res.status(201).json(template)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -413,6 +695,273 @@ app.get('/api/presentations/:id/present', async (req, res) => {
     res.setHeader('Content-Type', 'text/html')
     res.send(html)
   } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// --- Share Links ---
+
+// Helper: read/write share tokens
+async function readShareTokens() { return fs.readJson(SHARE_FILE) }
+async function writeShareTokens(data) { return fs.writeJson(SHARE_FILE, data, { spaces: 2 }) }
+
+// POST /api/presentations/:id/share - enable sharing, return token
+app.post('/api/presentations/:id/share', async (req, res) => {
+  try {
+    const presentations = await readPresentations()
+    const presentation = presentations.find(p => p.id === req.params.id)
+    if (!presentation) return res.status(404).json({ error: 'Not found' })
+
+    const tokens = await readShareTokens()
+    // Check if already shared
+    let token = Object.entries(tokens).find(([t, id]) => id === req.params.id)?.[0]
+    if (!token) {
+      token = uuidv4()
+      tokens[token] = req.params.id
+      await writeShareTokens(tokens)
+    }
+    res.json({ token, shared: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/presentations/:id/share - disable sharing
+app.delete('/api/presentations/:id/share', async (req, res) => {
+  try {
+    const tokens = await readShareTokens()
+    for (const [token, id] of Object.entries(tokens)) {
+      if (id === req.params.id) delete tokens[token]
+    }
+    await writeShareTokens(tokens)
+    res.json({ shared: false })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/presentations/:id/share - get share status
+app.get('/api/presentations/:id/share', async (req, res) => {
+  try {
+    const tokens = await readShareTokens()
+    const entry = Object.entries(tokens).find(([t, id]) => id === req.params.id)
+    res.json({ shared: !!entry, token: entry ? entry[0] : null })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /share/:token - public view of shared presentation
+app.get('/share/:token', async (req, res) => {
+  try {
+    const tokens = await readShareTokens()
+    const presentationId = tokens[req.params.token]
+    if (!presentationId) return res.status(404).send('Presentation not found or sharing disabled')
+
+    const presentations = await readPresentations()
+    const presentation = presentations.find(p => p.id === presentationId)
+    if (!presentation) return res.status(404).send('Presentation not found')
+
+    const html = generateRevealHTML(presentation)
+    res.setHeader('Content-Type', 'text/html')
+    res.send(html)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// --- Version History ---
+
+fs.ensureDirSync(HISTORY_DIR)
+
+// POST /api/presentations/:id/snapshot - save named snapshot
+app.post('/api/presentations/:id/snapshot', async (req, res) => {
+  try {
+    const presentations = await readPresentations()
+    const pres = presentations.find(p => p.id === req.params.id)
+    if (!pres) return res.status(404).json({ error: 'Not found' })
+    const name = req.body.name || new Date().toISOString()
+    const presDir = path.join(HISTORY_DIR, req.params.id)
+    fs.ensureDirSync(presDir)
+    const snapshotId = uuidv4()
+    const snapshot = { id: snapshotId, name, createdAt: new Date().toISOString(), data: JSON.parse(JSON.stringify(pres)) }
+    fs.writeJsonSync(path.join(presDir, `${snapshotId}.json`), snapshot, { spaces: 2 })
+    res.json({ id: snapshotId, name, createdAt: snapshot.createdAt })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/presentations/:id/snapshots - list snapshots
+app.get('/api/presentations/:id/snapshots', async (req, res) => {
+  try {
+    const presDir = path.join(HISTORY_DIR, req.params.id)
+    if (!fs.existsSync(presDir)) return res.json([])
+    const files = fs.readdirSync(presDir).filter(f => f.endsWith('.json')).sort()
+    const snapshots = files.map(f => {
+      const s = fs.readJsonSync(path.join(presDir, f))
+      return { id: s.id, name: s.name, createdAt: s.createdAt, slideCount: (s.data?.slides || []).length }
+    }).reverse()
+    res.json(snapshots)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/presentations/:id/restore/:snapshotId - restore a snapshot
+app.post('/api/presentations/:id/restore/:snapshotId', async (req, res) => {
+  try {
+    const presDir = path.join(HISTORY_DIR, req.params.id)
+    const snapFile = path.join(presDir, `${req.params.snapshotId}.json`)
+    if (!fs.existsSync(snapFile)) return res.status(404).json({ error: 'Snapshot not found' })
+    const snapshot = fs.readJsonSync(snapFile)
+    const presentations = await readPresentations()
+    const index = presentations.findIndex(p => p.id === req.params.id)
+    if (index === -1) return res.status(404).json({ error: 'Presentation not found' })
+    presentations[index] = { ...snapshot.data, id: req.params.id, updatedAt: new Date().toISOString() }
+    await writePresentations(presentations)
+    res.json(presentations[index])
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /api/presentations/:id/snapshots/:snapshotId
+app.delete('/api/presentations/:id/snapshots/:snapshotId', async (req, res) => {
+  try {
+    const snapFile = path.join(HISTORY_DIR, req.params.id, `${req.params.snapshotId}.json`)
+    if (fs.existsSync(snapFile)) fs.removeSync(snapFile)
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// --- Rclone / Proton Drive Sync ---
+
+const { execFile } = require('child_process')
+
+function runRclone(args, env = {}) {
+  return new Promise((resolve, reject) => {
+    const mergedEnv = { ...process.env, RCLONE_CONFIG: RCLONE_CONFIG_FILE, ...env }
+    execFile('rclone', args, { env: mergedEnv, timeout: 120000 }, (err, stdout, stderr) => {
+      if (err) return reject(new Error(stderr || err.message))
+      resolve(stdout.trim())
+    })
+  })
+}
+
+// GET /api/rclone/status - check if rclone is available and configured
+app.get('/api/rclone/status', async (req, res) => {
+  try {
+    let installed = false
+    let version = ''
+    try {
+      version = await runRclone(['version'])
+      installed = true
+    } catch { }
+    const hasConfig = fs.existsSync(RCLONE_CONFIG_FILE)
+    let remotes = []
+    if (installed && hasConfig) {
+      try {
+        const out = await runRclone(['listremotes'])
+        remotes = out.split('\n').filter(Boolean).map(r => r.replace(/:$/, ''))
+      } catch { }
+    }
+    res.json({ installed, version: version.split('\n')[0] || '', hasConfig, remotes })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/rclone/config - save rclone config for Proton Drive
+app.post('/api/rclone/config', async (req, res) => {
+  try {
+    const { username, password, remoteName } = req.body
+    if (!username || !password) return res.status(400).json({ error: 'Username and password required' })
+    const name = remoteName || 'protondrive'
+    const configContent = `[${name}]
+type = protondrive
+username = ${username}
+password = ${password}
+`
+    await fs.writeFile(RCLONE_CONFIG_FILE, configContent)
+    // Verify connection
+    try {
+      await runRclone(['lsd', `${name}:`])
+    } catch (err) {
+      return res.status(400).json({ error: 'Connection failed: ' + err.message })
+    }
+    res.json({ success: true, remote: name })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/rclone/sync - sync presentations to remote
+app.post('/api/rclone/sync', async (req, res) => {
+  try {
+    const { remote, remotePath } = req.body
+    if (!remote) return res.status(400).json({ error: 'Remote name required' })
+    const dest = remotePath || '/slides-backup'
+
+    // Export all presentations as HTML + JSON into sync dir
+    fs.ensureDirSync(SYNC_DIR)
+    // Clean sync dir
+    fs.emptyDirSync(SYNC_DIR)
+
+    const presentations = await readPresentations()
+    for (const pres of presentations) {
+      const folderName = (pres.title || 'untitled').replace(/[^a-z0-9_-]/gi, '_').toLowerCase()
+      const folder = path.join(SYNC_DIR, folderName)
+      fs.ensureDirSync(folder)
+      // Write HTML
+      const html = generateRevealHTML(pres)
+      fs.writeFileSync(path.join(folder, 'presentation.html'), html)
+      // Write JSON
+      fs.writeFileSync(path.join(folder, 'presentation.json'), JSON.stringify(pres, null, 2))
+    }
+
+    // Also copy uploads directory
+    const uploadsSync = path.join(SYNC_DIR, '_uploads')
+    if (fs.existsSync(UPLOADS_DIR)) {
+      fs.copySync(UPLOADS_DIR, uploadsSync)
+    }
+
+    // Run rclone sync
+    const remoteDest = `${remote}:${dest}`
+    await runRclone(['sync', SYNC_DIR, remoteDest, '--progress'])
+
+    // Cleanup
+    fs.removeSync(SYNC_DIR)
+
+    res.json({ success: true, synced: presentations.length, destination: remoteDest })
+  } catch (err) {
+    // Cleanup on error
+    try { fs.removeSync(SYNC_DIR) } catch {}
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/rclone/sync-single - sync a single presentation
+app.post('/api/rclone/sync-single', async (req, res) => {
+  try {
+    const { remote, remotePath, presentationId } = req.body
+    if (!remote || !presentationId) return res.status(400).json({ error: 'Remote and presentationId required' })
+    const dest = remotePath || '/slides-backup'
+
+    const presentations = await readPresentations()
+    const pres = presentations.find(p => p.id === presentationId)
+    if (!pres) return res.status(404).json({ error: 'Presentation not found' })
+
+    fs.ensureDirSync(SYNC_DIR)
+    const folderName = (pres.title || 'untitled').replace(/[^a-z0-9_-]/gi, '_').toLowerCase()
+    const folder = path.join(SYNC_DIR, folderName)
+    fs.ensureDirSync(folder)
+
+    const html = generateRevealHTML(pres)
+    fs.writeFileSync(path.join(folder, 'presentation.html'), html)
+    fs.writeFileSync(path.join(folder, 'presentation.json'), JSON.stringify(pres, null, 2))
+
+    const remoteDest = `${remote}:${dest}/${folderName}`
+    await runRclone(['sync', folder, remoteDest])
+
+    fs.removeSync(SYNC_DIR)
+    res.json({ success: true, destination: remoteDest })
+  } catch (err) {
+    try { fs.removeSync(SYNC_DIR) } catch {}
     res.status(500).json({ error: err.message })
   }
 })
@@ -597,13 +1146,32 @@ app.post('/api/presentations/:id/github/push', async (req, res) => {
 
 // In production, serve client build with SPA fallback
 if (process.env.NODE_ENV === 'production') {
-  const clientDist = path.join(__dirname, '..', 'client', 'dist')
-  app.use(express.static(clientDist))
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'))
+  // Support both Docker layout (../client/dist) and Electron layout (resourcesPath/client/dist)
+  let clientDist = path.join(__dirname, '..', 'client', 'dist')
+  if (!fs.existsSync(clientDist) && process.resourcesPath) {
+    clientDist = path.join(process.resourcesPath, 'client', 'dist')
+  }
+  if (fs.existsSync(clientDist)) {
+    app.use(express.static(clientDist))
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(clientDist, 'index.html'))
+    })
+  }
+}
+
+// When required as a module (Electron), export startServer. Otherwise start directly.
+function startServer(port) {
+  const p = port || PORT
+  return new Promise((resolve) => {
+    const server = app.listen(p, () => {
+      console.log(`Server running on http://localhost:${p}`)
+      resolve(server)
+    })
   })
 }
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`)
-})
+if (require.main === module) {
+  startServer()
+}
+
+module.exports = { app, startServer }

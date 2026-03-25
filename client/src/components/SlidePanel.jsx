@@ -78,6 +78,48 @@ export default function SlidePanel({ slides, currentIndex, onSelect, onAdd, onDe
                         {el.language || 'code'}
                       </div>
                     )}
+                    {el.type === 'video' && (
+                      <div style={{ width: '100%', height: '100%', background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: 'rgba(255,255,255,0.5)' }}>
+                        &#9654;
+                      </div>
+                    )}
+                    {el.type === 'audio' && (
+                      <div style={{ width: '100%', height: '100%', background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 6, color: 'rgba(255,255,255,0.4)' }}>
+                        &#9835;
+                      </div>
+                    )}
+                    {el.type === 'table' && (
+                      <div style={{ width: '100%', height: '100%', background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 6, color: 'rgba(255,255,255,0.4)' }}>
+                        &#9638;
+                      </div>
+                    )}
+                    {el.type === 'latex' && (
+                      <div style={{ width: '100%', height: '100%', background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 6, color: 'rgba(255,255,255,0.4)', fontFamily: 'serif', fontStyle: 'italic' }}>
+                        TeX
+                      </div>
+                    )}
+                    {el.type === 'markdown' && (
+                      <div style={{ width: '100%', height: '100%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 6, color: 'rgba(255,255,255,0.4)', fontWeight: 700 }}>
+                        MD
+                      </div>
+                    )}
+                    {el.type === 'chart' && (
+                      <div style={{ width: '100%', height: '100%', background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 6, color: 'rgba(255,255,255,0.4)' }}>
+                        &#9776;
+                      </div>
+                    )}
+                    {el.type === 'callout' && (
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: '60%', height: '60%', borderRadius: '50%', background: el.calloutColor || '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 5, fontWeight: 700 }}>
+                          {el.calloutNumber || 1}
+                        </div>
+                      </div>
+                    )}
+                    {el.type === 'icon' && (
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: 'rgba(255,255,255,0.4)' }}>
+                        &#9733;
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

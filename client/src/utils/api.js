@@ -35,4 +35,55 @@ export const api = {
     if (!r.ok) throw new Error(body.error || 'Push failed')
     return body
   }),
+
+  // Templates
+  getTemplates: () => fetch(`${BASE}/templates`).then(r => r.json()),
+  getTemplate: (id) => fetch(`${BASE}/templates/${id}`).then(r => r.json()),
+  createTemplate: (data) => fetch(`${BASE}/templates`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(r => r.json()),
+  updateTemplate: (id, data) => fetch(`${BASE}/templates/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(r => r.json()),
+  deleteTemplate: (id) => fetch(`${BASE}/templates/${id}`, { method: 'DELETE' }).then(r => r.json()),
+  saveAsTemplate: (id, title) => fetch(`${BASE}/presentations/${id}/save-as-template`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title })
+  }).then(r => r.json()),
+
+  // Version History
+  saveSnapshot: (id, name) => fetch(`${BASE}/presentations/${id}/snapshot`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
+  }).then(r => r.json()),
+  getSnapshots: (id) => fetch(`${BASE}/presentations/${id}/snapshots`).then(r => r.json()),
+  restoreSnapshot: (id, snapshotId) => fetch(`${BASE}/presentations/${id}/restore/${snapshotId}`, { method: 'POST' }).then(r => r.json()),
+  deleteSnapshot: (id, snapshotId) => fetch(`${BASE}/presentations/${id}/snapshots/${snapshotId}`, { method: 'DELETE' }).then(r => r.json()),
+
+  // Rclone / Proton Drive
+  getRcloneStatus: () => fetch(`${BASE}/rclone/status`).then(r => r.json()),
+  configureRclone: (data) => fetch(`${BASE}/rclone/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(async r => { const b = await r.json(); if (!r.ok) throw new Error(b.error); return b }),
+  syncToRemote: (data) => fetch(`${BASE}/rclone/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(async r => { const b = await r.json(); if (!r.ok) throw new Error(b.error); return b }),
+  syncSingleToRemote: (data) => fetch(`${BASE}/rclone/sync-single`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(async r => { const b = await r.json(); if (!r.ok) throw new Error(b.error); return b }),
+
+  // Share links
+  enableShare: (id) => fetch(`${BASE}/presentations/${id}/share`, { method: 'POST' }).then(r => r.json()),
+  disableShare: (id) => fetch(`${BASE}/presentations/${id}/share`, { method: 'DELETE' }).then(r => r.json()),
+  getShareStatus: (id) => fetch(`${BASE}/presentations/${id}/share`).then(r => r.json()),
 }

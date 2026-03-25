@@ -7,7 +7,6 @@ function absoluteSrc(src) {
 }
 
 export function generateRevealHTML(presentation) {
-  const totalSlides = presentation.slides.length
   const showFooter = presentation.showFooter || false
   const showPageNumbers = presentation.showPageNumbers || false
   const pageNumberFormat = presentation.pageNumberFormat || 'c/t'
@@ -17,6 +16,12 @@ export function generateRevealHTML(presentation) {
   const footerColor = presentation.footerColor || 'rgba(255,255,255,0.65)'
   const showPresentGrid = presentation.showPresentGrid || false
   const presentGridSize = presentation.gridSize || 40
+  const footerMode = presentation.footerMode || 'basic'
+  const sequenceSections = presentation.sequenceSections || []
+  const footerInactiveColor = presentation.footerInactiveColor || 'rgba(255,255,255,0.25)'
+  // Compute page numbers: only count slides where showPageNumber !== false
+  const totalNumberedSlides = (presentation.slides || []).filter(s => s.showPageNumber !== false).length
+  let pageCounter = 0
 
   const slidesHtml = presentation.slides.map((slide, slideIndex) => {
     const bgAttrs = getBackgroundAttrs(slide.background)
@@ -29,7 +34,9 @@ export function generateRevealHTML(presentation) {
         const shadowStyle = (el.shadowBlur || el.shadowX || el.shadowY)
           ? `box-shadow:${el.shadowX||0}px ${el.shadowY||0}px ${el.shadowBlur||0}px ${el.shadowColor||'rgba(0,0,0,0.5)'};`
           : ''
-        const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;z-index:${el.zIndex || 1};overflow:hidden;box-sizing:border-box;${shadowStyle}`
+        const borderRadiusStyle = (el.type === 'image' || el.type === 'code') && el.borderRadius ? `border-radius:${el.borderRadius}px;` : ''
+        const rotationStyle = el.rotation ? `transform:rotate(${el.rotation}deg);` : ''
+        const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;z-index:${el.zIndex || 1};overflow:hidden;box-sizing:border-box;${shadowStyle}${borderRadiusStyle}${rotationStyle}`
         const fragClass = el.fragment ? ` class="fragment ${el.fragmentAnimation || 'fade-in'}"` : ''
         const fragIdx = el.fragment && el.fragmentIndex != null ? ` data-fragment-index="${el.fragmentIndex}"` : ''
         if (el.type === 'text') {
@@ -64,12 +71,115 @@ export function generateRevealHTML(presentation) {
           const codeContent = escapeHtml(el.content || '')
           return `<div${fragClass}${fragIdx} style="${style}"><pre style="margin:0;padding:10px 14px;width:100%;height:100%;overflow:hidden;box-sizing:border-box;font-family:'Fira Code','JetBrains Mono','Courier New',monospace;font-size:${el.fontSize || 14}px;line-height:1.5;"><code class="language-${lang}" data-trim>${codeContent}</code></pre></div>`
         }
+        if (el.type === 'markdown') {
+          const md = (el.content || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\\/script><style>*{margin:0;padding:0;box-sizing:border-box}html,body{background:transparent;color:white;font-family:-apple-system,sans-serif;font-size:18px;line-height:1.6;padding:8px 12px;overflow:auto}h1,h2,h3,h4{margin:0 0 .4em}p{margin:0 0 .4em}ul,ol{padding-left:1.5em;margin:0 0 .4em}a{color:#60a5fa}pre{background:rgba(0,0,0,0.3);padding:10px 14px;border-radius:6px;overflow:auto;font-size:13px}code{font-family:'Fira Code',monospace}</style></head><body><div id="out"></div><script>document.getElementById('out').innerHTML=marked.parse(${JSON.stringify(el.content || '')});<\\/script></body></html>`
+          const escaped = srcdoc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+          return `<iframe${fragClass}${fragIdx} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+        }
+        if (el.type === 'chart') {
+          const { chartType = 'bar', chartData = {} } = el
+          const labels = JSON.stringify(chartData.labels || [])
+          const datasets = JSON.stringify((chartData.datasets || []).map(ds => ({
+            label: ds.label || '', data: ds.data || [],
+            backgroundColor: ds.color || '#6366f1', borderColor: ds.color || '#6366f1',
+            borderWidth: chartType === 'line' ? 2 : 0, fill: chartType === 'line' ? false : undefined,
+          })))
+          const scalesOpt = chartType === 'pie' || chartType === 'doughnut' ? '{}' : `{x:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}},y:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}}}`
+          const chartSrc = `<!doctype html><html><head><meta charset="utf-8"><script src="https://cdn.jsdelivr.net/npm/chart.js@4"><\\/script><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:transparent;overflow:hidden}</style></head><body><canvas id="c" style="width:100%;height:100%"></canvas><script>new Chart(document.getElementById('c'),{type:'${chartType}',data:{labels:${labels},datasets:${datasets}},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'rgba(255,255,255,0.7)',font:{size:12}}}},scales:${scalesOpt}}});<\\/script></body></html>`
+          const escaped = chartSrc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+          return `<iframe${fragClass}${fragIdx} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+        }
+        if (el.type === 'callout') {
+          const bg = el.calloutColor || '#ef4444'
+          const tc = el.calloutTextColor || '#ffffff'
+          const fs = el.fontSize || 16
+          return `<div${fragClass}${fragIdx} style="${style}border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;color:${tc};font-size:${fs}px;font-weight:700;font-family:-apple-system,sans-serif;">${el.calloutNumber || 1}</div>`
+        }
+        if (el.type === 'icon') {
+          const color = el.iconColor || '#ffffff'
+          const sw = el.iconStrokeWidth || 2
+          const iconPaths = { Star:'<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>', Heart:'<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>', Check:'<polyline points="20,6 9,17 4,12"/>', X:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>', Zap:'<polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/>', Target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>' }
+          const path = iconPaths[el.iconName] || iconPaths['Star']
+          return `<div${fragClass}${fragIdx} style="${style}display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${path}</svg></div>`
+        }
+        if (el.type === 'latex') {
+          const content = el.content || ''
+          const hasTikz = /\\begin\{tikzpicture\}/.test(content)
+          const tikzScript = hasTikz
+            ? `<link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css"><script src="https://tikzjax.com/v1/tikzjax.js"><\\/script>`
+            : ''
+          let bodyContent
+          if (hasTikz) {
+            bodyContent = `<script type="text/tikz">${content}<\\/script>`
+          } else {
+            bodyContent = `<div id="m"></div><script>try{katex.render(${JSON.stringify(content)},document.getElementById('m'),{displayMode:true,throwOnError:false})}catch(e){document.getElementById('m').textContent=e.message}<\\/script>`
+          }
+          const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"><script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\\/script>${tikzScript}<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:transparent;overflow:hidden;color:white}.katex{font-size:1.4em}svg{max-width:100%;max-height:100%}</style></head><body>${bodyContent}</body></html>`
+          const escaped = srcdoc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+          return `<iframe${fragClass}${fragIdx} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+        }
+        if (el.type === 'video') {
+          const src = absoluteSrc(el.src)
+          const attrs = []
+          if (el.controls !== false) attrs.push('controls')
+          if (el.autoplay) attrs.push('autoplay')
+          if (el.loop) attrs.push('loop')
+          if (el.muted) attrs.push('muted')
+          const posterAttr = el.poster ? ` poster="${absoluteSrc(el.poster)}"` : ''
+          return `<div${fragClass}${fragIdx} style="${style}"><video src="${src}" ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:${el.objectFit||'contain'};display:block;"></video></div>`
+        }
+        if (el.type === 'audio') {
+          const src = absoluteSrc(el.src)
+          const attrs = ['controls']
+          if (el.autoplay) attrs.push('autoplay')
+          if (el.loop) attrs.push('loop')
+          if (el.muted) attrs.push('muted')
+          return `<div${fragClass}${fragIdx} style="${style}display:flex;align-items:center;justify-content:center;"><audio src="${src}" ${attrs.join(' ')} style="width:90%;"></audio></div>`
+        }
+        if (el.type === 'table') {
+          const data = el.data || [['']]
+          const headerBg = el.headerBgColor || 'rgba(99,102,241,0.3)'
+          const cellBg = el.cellBgColor || 'transparent'
+          const borderColor = el.borderColor || 'rgba(255,255,255,0.2)'
+          const borderWidth = el.borderWidth ?? 1
+          const textColor = el.textColor || '#ffffff'
+          const fontSize = el.fontSize || 14
+          const cellPadding = el.cellPadding || 8
+          const rows = data.map((row, ri) => {
+            const cells = (row || []).map((cell, ci) => {
+              const bg = (el.headerRow && ri === 0) ? headerBg : cellBg
+              return `<td style="padding:${cellPadding}px;border:${borderWidth}px solid ${borderColor};background:${bg};color:${textColor};font-size:${fontSize}px;">${escapeHtml(cell || '')}</td>`
+            }).join('')
+            return `<tr>${cells}</tr>`
+          }).join('')
+          return `<div${fragClass}${fragIdx} style="${style}overflow:auto;"><table style="width:100%;height:100%;border-collapse:collapse;">${rows}</table></div>`
+        }
         return ''
       }).join('\n')
 
-    const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
-    const pageLabel = showPageNumbers ? (pageNumberFormat === 'c/t' ? `${slideIndex + 1} / ${totalSlides}` : `${slideIndex + 1}`) : ''
-    const footerHtml = (sectionLabel || pageLabel) ? `      <div class="reveal-footer" style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>` : ''
+    // Page numbering: increment counter only for slides with showPageNumber !== false
+    const slideHasPageNum = slide.showPageNumber !== false
+    if (slideHasPageNum) pageCounter++
+    const pageLabel = showPageNumbers && slideHasPageNum
+      ? (pageNumberFormat === 'c/t' ? `${pageCounter} / ${totalNumberedSlides}` : `${pageCounter}`)
+      : ''
+
+    let footerHtml = ''
+    if (footerMode === 'sequence' && sequenceSections.length > 0 && showFooter) {
+      const activeIdx = slide.activeSection
+      const seqSpans = sequenceSections.map((sec, i) => {
+        const isActive = activeIdx === i
+        const color = isActive ? (footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor
+        const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
+        return `<span style="color:${color};${weight}">${escapeHtml(sec || `Section ${i+1}`)}</span>`
+      }).join('')
+      const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
+      footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
+    } else {
+      const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
+      footerHtml = (sectionLabel || pageLabel) ? `      <div class="reveal-footer" style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>` : ''
+    }
     const gridHtml = showPresentGrid ? `      <div style="position:absolute;inset:0;z-index:950;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,0.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.12) 1px,transparent 1px);background-size:${presentGridSize}px ${presentGridSize}px;"></div>` : ''
 
     return `    <section${bgAttrs} style="padding:0;width:960px;height:540px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`
@@ -124,7 +234,7 @@ export function generateRevealHTML(presentation) {
     }
     #fs-btn:hover { background: rgba(0,0,0,0.75); }
     :fullscreen #fs-btn, :-webkit-full-screen #fs-btn { display: none; }
-  </style>
+  </style>${presentation.customCSS ? `\n  <style>\n${presentation.customCSS}\n  </style>` : ''}
 </head>
 <body>
   <div class="reveal">
@@ -212,9 +322,13 @@ function generatePrintHTML(presentation) {
   const footerFontSize = presentation.footerFontSize || 14
   const footerFontFamily = presentation.footerFontFamily || '-apple-system,sans-serif'
   const footerColor = presentation.footerColor || 'rgba(255,255,255,0.65)'
+  const footerMode = presentation.footerMode || 'basic'
+  const sequenceSections = presentation.sequenceSections || []
+  const footerInactiveColor = presentation.footerInactiveColor || 'rgba(255,255,255,0.25)'
 
   // Expand each slide into one page per fragment step (initial + one per unique index)
   const pages = []
+  let printPageCounter = 0
   presentation.slides.forEach(slide => {
     const fragIndices = [...new Set(
       (slide.elements || []).filter(el => el.fragment).map(el => el.fragmentIndex || 1)
@@ -231,7 +345,9 @@ function generatePrintHTML(presentation) {
       .slice().sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
       .map(el => {
         const isHidden = el.fragment && (el.fragmentIndex || 1) > maxIdx
-        const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;z-index:${el.zIndex || 1};overflow:hidden;box-sizing:border-box;`
+        const borderRadiusStyleP = (el.type === 'image' || el.type === 'code') && el.borderRadius ? `border-radius:${el.borderRadius}px;` : ''
+        const rotationStyleP = el.rotation ? `transform:rotate(${el.rotation}deg);` : ''
+        const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;z-index:${el.zIndex || 1};overflow:hidden;box-sizing:border-box;${borderRadiusStyleP}${rotationStyleP}`
         const vis = isHidden ? 'visibility:hidden;' : ''
         if (el.type === 'text') {
           return `<div style="${style}${vis}padding:8px 12px;color:white;">${el.content || ''}</div>`
@@ -256,15 +372,73 @@ function generatePrintHTML(presentation) {
           const codeContent = escapeHtml(el.content || '')
           return `<div style="${style}${vis}"><pre class="hljs" style="margin:0;padding:10px 14px;width:100%;height:100%;overflow:hidden;box-sizing:border-box;font-family:'Fira Code','JetBrains Mono','Courier New',monospace;font-size:${el.fontSize || 14}px;line-height:1.5;"><code class="language-${lang}">${codeContent}</code></pre></div>`
         }
+        if (el.type === 'markdown') {
+          return `<div style="${style}${vis}padding:8px 12px;color:white;overflow:auto;font-size:18px;line-height:1.6;">${el.content || ''}</div>`
+        }
+        if (el.type === 'chart') {
+          return `<div style="${style}${vis}display:flex;align-items:center;justify-content:center;background:rgba(99,102,241,0.1);color:rgba(255,255,255,0.4);font-family:sans-serif;font-size:16px;">Chart</div>`
+        }
+        if (el.type === 'callout') {
+          const bg = el.calloutColor || '#ef4444'; const tc = el.calloutTextColor || '#ffffff'; const fs = el.fontSize || 16
+          return `<div style="${style}${vis}border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;color:${tc};font-size:${fs}px;font-weight:700;">${el.calloutNumber || 1}</div>`
+        }
+        if (el.type === 'icon') {
+          return `<div style="${style}${vis}display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);font-size:16px;">Icon</div>`
+        }
+        if (el.type === 'latex') {
+          return `<div style="${style}${vis}display:flex;align-items:center;justify-content:center;background:rgba(99,102,241,0.1);border:1px dashed rgba(99,102,241,0.3);color:rgba(255,255,255,0.4);font-family:serif;font-size:16px;">LaTeX</div>`
+        }
+        if (el.type === 'video') {
+          return `<div style="${style}${vis}display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);color:rgba(255,255,255,0.4);font-family:sans-serif;font-size:16px;">&#9654; Video</div>`
+        }
+        if (el.type === 'audio') {
+          return `<div style="${style}${vis}display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);color:rgba(255,255,255,0.4);font-family:sans-serif;font-size:16px;">&#9835; Audio</div>`
+        }
+        if (el.type === 'table') {
+          const data = el.data || [['']]
+          const headerBg = el.headerBgColor || 'rgba(99,102,241,0.3)'
+          const cellBg = el.cellBgColor || 'transparent'
+          const borderColor = el.borderColor || 'rgba(255,255,255,0.2)'
+          const borderWidth = el.borderWidth ?? 1
+          const textColor = el.textColor || '#ffffff'
+          const fontSize = el.fontSize || 14
+          const cellPadding = el.cellPadding || 8
+          const rows = data.map((row, ri) => {
+            const cells = (row || []).map((cell) => {
+              const bg = (el.headerRow && ri === 0) ? headerBg : cellBg
+              return `<td style="padding:${cellPadding}px;border:${borderWidth}px solid ${borderColor};background:${bg};color:${textColor};font-size:${fontSize}px;">${escapeHtml(cell || '')}</td>`
+            }).join('')
+            return `<tr>${cells}</tr>`
+          }).join('')
+          return `<div style="${style}${vis}overflow:auto;"><table style="width:100%;height:100%;border-collapse:collapse;">${rows}</table></div>`
+        }
         return ''
       }).join('\n')
 
-    const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
-    const pageLabel = showPageNumbers
-      ? (pageNumberFormat === 'c/t' ? `${pageIndex + 1} / ${totalPages}` : `${pageIndex + 1}`) : ''
-    const footerHtml = (sectionLabel || pageLabel)
-      ? `<div style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;font-size:${footerFontSize}px;color:${footerColor};font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>`
+    // Per-slide page numbering
+    const slideHasPageNum = slide.showPageNumber !== false
+    if (slideHasPageNum && maxIdx === -Infinity) printPageCounter++ // only increment on initial page of each slide
+    const pageLabel = showPageNumbers && slideHasPageNum
+      ? (pageNumberFormat === 'c/t' ? `${printPageCounter} / ${(presentation.slides || []).filter(s => s.showPageNumber !== false).length}` : `${printPageCounter}`)
       : ''
+
+    let footerHtml = ''
+    if (footerMode === 'sequence' && sequenceSections.length > 0 && showFooter) {
+      const activeIdx = slide.activeSection
+      const seqSpans = sequenceSections.map((sec, i) => {
+        const isActive = activeIdx === i
+        const color = isActive ? footerColor : footerInactiveColor
+        const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
+        return `<span style="color:${color};${weight}">${escapeHtml(sec || `Section ${i+1}`)}</span>`
+      }).join('')
+      const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
+      footerHtml = `<div style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;font-size:${footerFontSize}px;font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
+    } else {
+      const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
+      footerHtml = (sectionLabel || pageLabel)
+        ? `<div style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;font-size:${footerFontSize}px;color:${footerColor};font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>`
+        : ''
+    }
 
     return `<div class="slide-page" style="${bgStyle}font-size:42px;">\n${elementsHtml}\n${footerHtml}\n</div>`
   }).join('\n')
@@ -313,7 +487,7 @@ function generatePrintHTML(presentation) {
     #print-bar button:hover { background: #5254cc; }
     #print-bar .hint { color: rgba(255,255,255,0.5); font-size: 12px; }
     @media print { #print-bar { display: none; } body { margin-top: 0; } }
-  </style>
+  </style>${presentation.customCSS ? `\n  <style>\n${presentation.customCSS}\n  </style>` : ''}
 </head>
 <body>
   <div id="print-bar">

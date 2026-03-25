@@ -292,3 +292,168 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 
 /* Grid snap indicator */
 .grid-active { cursor: crosshair; }
+
+/* ─── Find & Replace Bar ──────────────────────────────── */
+.find-replace-bar {
+  position: absolute;
+  top: 52px;
+  right: 250px;
+  z-index: 9990;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  padding: 8px 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 380px;
+}
+.find-replace-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.find-input {
+  flex: 1;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+  min-width: 0;
+}
+.find-input:focus { border-color: var(--accent); }
+.find-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 30px;
+  text-align: center;
+}
+.find-btn {
+  width: 26px !important;
+  height: 26px;
+  padding: 0 !important;
+  flex-shrink: 0;
+}
+.find-action-btn {
+  font-size: 11px !important;
+  padding: 4px 10px !important;
+  white-space: nowrap;
+}
+
+/* ─── Transition Preview ──────────────────────────────── */
+.transition-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.transition-preview-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.transition-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.transition-preview-content {
+  width: 576px;
+  height: 324px;
+  overflow: hidden;
+}
+
+/* ─── Animation Timeline ──────────────────────────────── */
+.animation-timeline {
+  position: absolute;
+  bottom: 0;
+  left: 200px;
+  right: 240px;
+  z-index: 990;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  max-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+.timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.timeline-body {
+  display: flex;
+  overflow-x: auto;
+  padding: 10px 12px;
+  gap: 8px;
+  flex: 1;
+}
+.timeline-step {
+  min-width: 140px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  flex-shrink: 0;
+}
+.timeline-step-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.timeline-step-elements {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.timeline-element-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  cursor: grab;
+  color: var(--text-primary);
+}
+.timeline-chip-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timeline-anim-select {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  max-width: 80px;
+}
+.timeline-drop-zone {
+  border: 2px dashed var(--border);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
