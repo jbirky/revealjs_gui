@@ -4,6 +4,7 @@ const path = require('path')
 const fs = require('fs-extra')
 const multer = require('multer')
 const { v4: uuidv4 } = require('uuid')
+const { execFileSync } = require('child_process')
 
 const app = express()
 const PORT = process.env.PORT || 3002
@@ -49,19 +50,55 @@ if (!fs.existsSync(GITHUB_CONFIG_FILE)) {
   fs.writeJsonSync(GITHUB_CONFIG_FILE, { token: '', owner: '', repo: '' })
 }
 
-// Multer storage config
+// Multer storage config — destination is per-presentation when req.params.id is present
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  destination: (req, file, cb) => {
+    const dir = req.params.id ? path.join(UPLOADS_DIR, req.params.id) : UPLOADS_DIR
+    fs.ensureDirSync(dir)
+    cb(null, dir)
+  },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname)
     cb(null, `${uuidv4()}${ext}`)
   }
 })
-const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } }) // 100MB limit for video
+const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } }) // 500MB limit for video
 
 app.use(cors())
 app.use(express.json({ limit: '50mb' }))
 app.use('/uploads', express.static(UPLOADS_DIR))
+
+// Transcode a video file to H.264 MP4 if its codec isn't web-compatible.
+// Returns the (possibly new) filename. Deletes the original on success.
+const WEB_VIDEO_CODECS = new Set(['h264', 'vp8', 'vp9', 'av1', 'hevc', 'vp08', 'vp09'])
+function transcodeVideoIfNeeded(filePath) {
+  try {
+    const codec = execFileSync('ffprobe', [
+      '-v', 'error', '-select_streams', 'v:0',
+      '-show_entries', 'stream=codec_name',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath
+    ], { encoding: 'utf8' }).trim().toLowerCase()
+
+    if (!codec || WEB_VIDEO_CODECS.has(codec)) return filePath
+
+    const dir = path.dirname(filePath)
+    const base = path.basename(filePath, path.extname(filePath))
+    const outPath = path.join(dir, `${base}.mp4`)
+    execFileSync('ffmpeg', [
+      '-i', filePath,
+      '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+      '-c:a', 'aac',
+      '-movflags', '+faststart',
+      '-y', outPath
+    ])
+    if (outPath !== filePath) fs.removeSync(filePath)
+    return outPath
+  } catch (e) {
+    console.error('Video transcode error:', e.message)
+    return filePath
+  }
+}
 
 // Helper: read all presentations
 async function readPresentations() {
@@ -115,6 +152,8 @@ function shapeSvgString(el) {
 function generateRevealHTML(presentation) {
   const theme = presentation.theme || 'black'
   const transition = presentation.transition || 'slide'
+  const slideW = presentation.slideWidth || 960
+  const slideH = presentation.slideHeight || 540
   const showFooter = presentation.showFooter || false
   const showPageNumbers = presentation.showPageNumbers || false
   const pageNumberFormat = presentation.pageNumberFormat || 'c/t'
@@ -146,7 +185,10 @@ function generateRevealHTML(presentation) {
         const fragClass = el.fragment ? ` class="fragment ${el.fragmentAnimation || 'fade-in'}"` : ''
         const fragIdx = el.fragment && el.fragmentIndex != null ? ` data-fragment-index="${el.fragmentIndex}"` : ''
         if (el.type === 'text') {
-          return `<div${fragClass}${fragIdx} style="${style} padding:8px 12px; color:white;">${el.content || ''}</div>`
+          const textStyle = el.sizeMode === 'auto'
+            ? `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:auto;z-index:${el.zIndex||1};overflow:visible;box-sizing:border-box;${shadowStyle}${rotationStyle}`
+            : style
+          return `<div${fragClass}${fragIdx} style="${textStyle} padding:8px 12px; color:white;">${el.content || ''}</div>`
         }
         if (el.type === 'image') {
           const imgFilterParts = [
@@ -209,17 +251,18 @@ function generateRevealHTML(presentation) {
         }
         if (el.type === 'latex') {
           const content = el.content || ''
-          const hasTikz = /\\begin\{tikzpicture\}/.test(content)
-          const tikzScript = hasTikz
-            ? `<link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css"><script src="https://tikzjax.com/v1/tikzjax.js"><\/script>`
-            : ''
-          let bodyContent
+          const hasTikz = /\\begin\{tikzpicture\}|\\tikz\s*[{[]/.test(content)
+          const hasTable = /\\begin\{(tabular\*?|table\*?|longtable|tabularx|tabulary)\}/.test(content)
+          let srcdoc
           if (hasTikz) {
-            bodyContent = `<script type="text/tikz">${content}<\/script>`
+            srcdoc = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css"><script src="https://tikzjax.com/v1/tikzjax.js"><\/script><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:transparent;overflow:auto;color:white}svg{max-width:100%;max-height:100%}</style></head><body><script type="text/tikz">${content}<\/script></body></html>`
+          } else if (hasTable) {
+            const wrapped = content.includes('\\begin{document}') ? content
+              : `\\documentclass{article}\n\\usepackage{booktabs}\n\\usepackage{array}\n\\begin{document}\n${content}\n\\end{document}`
+            srcdoc = `<!doctype html><html><head><meta charset="utf-8"><script src="https://cdn.jsdelivr.net/npm/latex.js@0.12.6/dist/latex.js"><\/script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/latex.js@0.12.6/dist/base.css"><style>*{box-sizing:border-box}html,body{margin:0;padding:8px;background:transparent;color:white!important;width:100%;height:100%;overflow:auto;font-family:'Computer Modern',Georgia,serif}table{border-collapse:collapse;color:white}td,th{padding:3px 10px;color:white!important}p,span,div{color:white!important}</style></head><body><div id="out"></div><script>try{var generator=new HtmlGenerator({hyphenate:false});var doc=parse(${JSON.stringify(wrapped)},{generator:generator});document.getElementById('out').appendChild(doc.domFragment())}catch(e){document.getElementById('out').innerHTML='<span style="color:#f87171">Error: '+e.message+'<\/span>'}<\/script></body></html>`
           } else {
-            bodyContent = `<div id="m"></div><script>try{katex.render(${JSON.stringify(content)},document.getElementById('m'),{displayMode:true,throwOnError:false})}catch(e){document.getElementById('m').textContent=e.message}<\/script>`
+            srcdoc = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"><script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\/script><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:transparent;overflow:hidden;color:white}.katex{font-size:1.4em}svg{max-width:100%;max-height:100%}</style></head><body><div id="m"></div><script>try{katex.render(${JSON.stringify(content)},document.getElementById('m'),{displayMode:true,throwOnError:false})}catch(e){document.getElementById('m').textContent=e.message}<\/script></body></html>`
           }
-          const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"><script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\/script>${tikzScript}<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:transparent;overflow:hidden;color:white}.katex{font-size:1.4em}svg{max-width:100%;max-height:100%}</style></head><body>${bodyContent}</body></html>`
           const escaped = srcdoc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
           return `<iframe${fragClass}${fragIdx} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
@@ -230,7 +273,8 @@ function generateRevealHTML(presentation) {
           if (el.loop) attrs.push('loop')
           if (el.muted) attrs.push('muted')
           const posterAttr = el.poster ? ` poster="${el.poster}"` : ''
-          return `<div${fragClass}${fragIdx} style="${style}"><video src="${el.src}" ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:${el.objectFit||'contain'};display:block;"></video></div>`
+          const videoMime = /\.webm$/i.test(el.src) ? 'video/webm' : /\.ogg$/i.test(el.src) ? 'video/ogg' : 'video/mp4'
+          return `<div${fragClass}${fragIdx} style="${style}"><video ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:${el.objectFit||'contain'};display:block;"><source src="${el.src}" type="${videoMime}"></video></div>`
         }
         if (el.type === 'audio') {
           const attrs = ['controls']
@@ -284,7 +328,7 @@ function generateRevealHTML(presentation) {
     }
     const gridHtml = showPresentGrid ? `      <div style="position:absolute;inset:0;z-index:950;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,0.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.12) 1px,transparent 1px);background-size:${presentGridSize}px ${presentGridSize}px;"></div>` : ''
 
-    return `    <section${bgAttrs} style="padding:0;width:960px;height:540px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`
+    return `    <section${bgAttrs} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`
   }).join('\n')
 
   return `<!doctype html>
@@ -350,8 +394,8 @@ ${slidesHtml}
   <script>
     Reveal.initialize({
       hash: true,
-      width: 960,
-      height: 540,
+      width: ${slideW},
+      height: ${slideH},
       margin: 0,
       minScale: 0,
       maxScale: 10,
@@ -663,10 +707,26 @@ app.post('/api/presentations/:id/duplicate', async (req, res) => {
   }
 })
 
-// POST /api/upload
+// POST /api/upload (legacy global upload)
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
-  res.json({ url: `/uploads/${req.file.filename}` })
+  let filename = req.file.filename
+  if (req.file.mimetype.startsWith('video/')) {
+    const finalPath = transcodeVideoIfNeeded(req.file.path)
+    filename = path.basename(finalPath)
+  }
+  res.json({ url: `/uploads/${filename}` })
+})
+
+// POST /api/presentations/:id/upload (per-presentation upload)
+app.post('/api/presentations/:id/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+  let filename = req.file.filename
+  if (req.file.mimetype.startsWith('video/')) {
+    const finalPath = transcodeVideoIfNeeded(req.file.path)
+    filename = path.basename(finalPath)
+  }
+  res.json({ url: `/uploads/${req.params.id}/${filename}` })
 })
 
 // GET /api/presentations/:id/export - download HTML

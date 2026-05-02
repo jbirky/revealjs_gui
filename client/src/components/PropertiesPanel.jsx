@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { api } from '../utils/api'
 
 const CODE_LANGUAGES = [
   { id: 'plaintext', label: 'Plain Text' },
@@ -28,6 +29,20 @@ const CODE_LANGUAGES = [
 ]
 
 export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide, onUpdateElement, onDeleteElement, onBringForward, onSendBackward, onEditHtml, onEditCode, onEditLatex, presentation, onUpdatePresentation, selectedElementIds, onDeleteSelectedElements, isTemplate = false }) {
+  const [videoUploading, setVideoUploading] = useState(false)
+  const videoFileRef = useRef(null)
+
+  async function handleVideoUpload(file) {
+    if (!file || !presentation?.id) return
+    setVideoUploading(true)
+    try {
+      const result = await api.uploadFileToPresentation(presentation.id, file)
+      if (result.url) onUpdateElement({ src: result.url })
+    } finally {
+      setVideoUploading(false)
+    }
+  }
+
   if (!slide) {
     return (
       <div className="properties-panel">
@@ -72,9 +87,34 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
             </div>
             <div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>H</div>
-              <input className="prop-input" type="number" value={Math.round(selectedElement.height)} onChange={e => onUpdateElement({ height: Number(e.target.value) })} />
+              <input className="prop-input" type="number"
+                value={Math.round(selectedElement.height)}
+                onChange={e => onUpdateElement({ height: Number(e.target.value) })}
+                disabled={selectedElement.type === 'text' && selectedElement.sizeMode === 'auto'}
+                style={{ opacity: selectedElement.type === 'text' && selectedElement.sizeMode === 'auto' ? 0.4 : 1 }}
+              />
             </div>
           </div>
+
+          {/* Text box sizing mode */}
+          {selectedElement.type === 'text' && (
+            <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+              {[['fixed', 'Fixed Box'], ['auto', 'Auto Fit']].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => onUpdateElement({ sizeMode: mode })}
+                  style={{
+                    flex: 1, padding: '4px 0', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+                    border: '1px solid var(--border)',
+                    background: (selectedElement.sizeMode || 'fixed') === mode ? 'var(--accent)' : 'var(--bg-hover)',
+                    color: (selectedElement.sizeMode || 'fixed') === mode ? 'white' : 'var(--text-secondary)',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginBottom: 8, userSelect: 'none' }}>
             <input type="checkbox" checked={selectedElement.locked || false}
@@ -301,15 +341,17 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
           {selectedElement?.type === 'shape' && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                {selectedElement.shape !== 'line' && (
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Fill</div>
+                    <input type="color" style={{ width: '100%', height: 32, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer' }}
+                      value={selectedElement.fill || '#6366f1'}
+                      onChange={e => onUpdateElement({ fill: e.target.value })}
+                    />
+                  </div>
+                )}
                 <div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Fill</div>
-                  <input type="color" style={{ width: '100%', height: 32, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer' }}
-                    value={selectedElement.fill || '#6366f1'}
-                    onChange={e => onUpdateElement({ fill: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Stroke</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>{selectedElement.shape === 'line' ? 'Color' : 'Stroke'}</div>
                   <input type="color" style={{ width: '100%', height: 32, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer' }}
                     value={selectedElement.stroke === 'none' || !selectedElement.stroke ? '#ffffff' : selectedElement.stroke}
                     onChange={e => onUpdateElement({ stroke: e.target.value })}
@@ -376,9 +418,19 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
               <input className="prop-input" type="text"
                 value={selectedElement.src || ''}
                 onChange={e => onUpdateElement({ src: e.target.value })}
-                placeholder="Video URL"
-                style={{ marginBottom: 8 }}
+                placeholder="Video URL or upload below"
+                style={{ marginBottom: 6 }}
               />
+              <input ref={videoFileRef} type="file" accept="video/mp4,video/webm,video/ogg,video/*"
+                style={{ display: 'none' }}
+                onChange={e => { if (e.target.files[0]) handleVideoUpload(e.target.files[0]); e.target.value = '' }}
+              />
+              <button className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', fontSize: 11, padding: '5px 8px', marginBottom: 8, opacity: videoUploading ? 0.6 : 1 }}
+                disabled={videoUploading}
+                onClick={() => videoFileRef.current?.click()}
+              >
+                {videoUploading ? 'Uploading…' : '↑ Upload MP4 / Video File'}
+              </button>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Poster Image URL</div>
               <input className="prop-input" type="text"
                 value={selectedElement.poster || ''}
@@ -610,6 +662,16 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
       {/* Slide Section + Footer Style */}
       <div className="prop-section">
         <h3>Slide Footer</h3>
+
+        {/* Hide footer on this slide */}
+        {(presentation?.showFooter || presentation?.showPageNumbers) && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginBottom: 8, userSelect: 'none' }}>
+            <input type="checkbox" checked={slide.hideFooter === true}
+              onChange={e => onUpdateSlide({ hideFooter: e.target.checked })}
+              style={{ accentColor: 'var(--accent)' }} />
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Hide footer on this slide</span>
+          </label>
+        )}
 
         {/* Per-slide page number toggle */}
         {presentation?.showPageNumbers && (

@@ -20,7 +20,8 @@ export function shapeSvgString(el) {
   let inner = ''
   if (shape === 'line') {
     const lw = el.strokeWidth || 3
-    inner = `<line x1="${lw}" y1="${h/2}" x2="${w-lw}" y2="${h/2}" stroke="${fill}" stroke-width="${lw}" fill="none" />`
+    const lineColor = el.stroke && el.stroke !== 'none' ? el.stroke : (el.fill || '#ffffff')
+    inner = `<line x1="${lw}" y1="${h/2}" x2="${w-lw}" y2="${h/2}" stroke="${lineColor}" stroke-width="${lw}" fill="none" />`
   } else {
     let shapeEl = ''
     switch(shape) {

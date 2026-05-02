@@ -18,8 +18,8 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 
-# Install rclone for cloud sync (Proton Drive, etc.)
-RUN apk add --no-cache rclone
+# Install rclone for cloud sync (Proton Drive, etc.) and ffmpeg for video transcoding
+RUN apk add --no-cache rclone ffmpeg
 
 # Copy workspace manifests
 COPY package.json package-lock.json ./

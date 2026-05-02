@@ -7,6 +7,8 @@ function absoluteSrc(src) {
 }
 
 export function generateRevealHTML(presentation) {
+  const slideW = presentation.slideWidth || 960
+  const slideH = presentation.slideHeight || 540
   const showFooter = presentation.showFooter || false
   const showPageNumbers = presentation.showPageNumbers || false
   const pageNumberFormat = presentation.pageNumberFormat || 'c/t'
@@ -105,17 +107,18 @@ export function generateRevealHTML(presentation) {
         }
         if (el.type === 'latex') {
           const content = el.content || ''
-          const hasTikz = /\\begin\{tikzpicture\}/.test(content)
-          const tikzScript = hasTikz
-            ? `<link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css"><script src="https://tikzjax.com/v1/tikzjax.js"><\\/script>`
-            : ''
-          let bodyContent
+          const hasTikz = /\\begin\{tikzpicture\}|\\tikz\s*[{[]/.test(content)
+          const hasTable = /\\begin\{(tabular\*?|table\*?|longtable|tabularx|tabulary)\}/.test(content)
+          let srcdoc
           if (hasTikz) {
-            bodyContent = `<script type="text/tikz">${content}<\\/script>`
+            srcdoc = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css"><script src="https://tikzjax.com/v1/tikzjax.js"><\\/script><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:transparent;overflow:auto;color:white}svg{max-width:100%;max-height:100%}</style></head><body><script type="text/tikz">${content}<\\/script></body></html>`
+          } else if (hasTable) {
+            const wrapped = content.includes('\\begin{document}') ? content
+              : `\\documentclass{article}\n\\usepackage{booktabs}\n\\usepackage{array}\n\\begin{document}\n${content}\n\\end{document}`
+            srcdoc = `<!doctype html><html><head><meta charset="utf-8"><script src="https://cdn.jsdelivr.net/npm/latex.js@0.12.6/dist/latex.js"><\\/script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/latex.js@0.12.6/dist/base.css"><style>*{box-sizing:border-box}html,body{margin:0;padding:8px;background:transparent;color:white!important;width:100%;height:100%;overflow:auto;font-family:'Computer Modern',Georgia,serif}table{border-collapse:collapse;color:white}td,th{padding:3px 10px;color:white!important}p,span,div{color:white!important}</style></head><body><div id="out"></div><script>try{var generator=new HtmlGenerator({hyphenate:false});var doc=parse(${JSON.stringify(wrapped)},{generator:generator});document.getElementById('out').appendChild(doc.domFragment())}catch(e){document.getElementById('out').innerHTML='<span style="color:#f87171">Error: '+e.message+'<\\/span>'}<\\/script></body></html>`
           } else {
-            bodyContent = `<div id="m"></div><script>try{katex.render(${JSON.stringify(content)},document.getElementById('m'),{displayMode:true,throwOnError:false})}catch(e){document.getElementById('m').textContent=e.message}<\\/script>`
+            srcdoc = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"><script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\\/script><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:transparent;overflow:hidden;color:white}.katex{font-size:1.4em}svg{max-width:100%;max-height:100%}</style></head><body><div id="m"></div><script>try{katex.render(${JSON.stringify(content)},document.getElementById('m'),{displayMode:true,throwOnError:false})}catch(e){document.getElementById('m').textContent=e.message}<\\/script></body></html>`
           }
-          const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"><script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\\/script>${tikzScript}<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:transparent;overflow:hidden;color:white}.katex{font-size:1.4em}svg{max-width:100%;max-height:100%}</style></head><body>${bodyContent}</body></html>`
           const escaped = srcdoc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
           return `<iframe${fragClass}${fragIdx} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
@@ -166,23 +169,25 @@ export function generateRevealHTML(presentation) {
       : ''
 
     let footerHtml = ''
-    if (footerMode === 'sequence' && sequenceSections.length > 0 && showFooter) {
-      const activeIdx = slide.activeSection
-      const seqSpans = sequenceSections.map((sec, i) => {
-        const isActive = activeIdx === i
-        const color = isActive ? (footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor
-        const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
-        return `<span style="color:${color};${weight}">${escapeHtml(sec || `Section ${i+1}`)}</span>`
-      }).join('')
-      const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
-      footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
-    } else {
-      const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
-      footerHtml = (sectionLabel || pageLabel) ? `      <div class="reveal-footer" style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>` : ''
+    if (!slide.hideFooter) {
+      if (footerMode === 'sequence' && sequenceSections.length > 0 && showFooter) {
+        const activeIdx = slide.activeSection
+        const seqSpans = sequenceSections.map((sec, i) => {
+          const isActive = activeIdx === i
+          const color = isActive ? (footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor
+          const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
+          return `<span style="color:${color};${weight}">${escapeHtml(sec || `Section ${i+1}`)}</span>`
+        }).join('')
+        const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
+        footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
+      } else {
+        const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
+        footerHtml = (sectionLabel || pageLabel) ? `      <div class="reveal-footer" style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>` : ''
+      }
     }
     const gridHtml = showPresentGrid ? `      <div style="position:absolute;inset:0;z-index:950;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,0.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.12) 1px,transparent 1px);background-size:${presentGridSize}px ${presentGridSize}px;"></div>` : ''
 
-    return `    <section${bgAttrs} style="padding:0;width:960px;height:540px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`
+    return `    <section${bgAttrs} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`
   }).join('\n')
 
   return `<!doctype html>
@@ -250,8 +255,8 @@ ${slidesHtml}
   <script>
     Reveal.initialize({
       hash: true,
-      width: 960,
-      height: 540,
+      width: ${slideW},
+      height: ${slideH},
       margin: 0,
       minScale: 0,
       maxScale: 10,
@@ -315,6 +320,8 @@ function getBgPrintStyle(bg) {
 }
 
 function generatePrintHTML(presentation) {
+  const slideW = presentation.slideWidth || 960
+  const slideH = presentation.slideHeight || 540
   const showFooter = presentation.showFooter || false
   const showPageNumbers = presentation.showPageNumbers || false
   const pageNumberFormat = presentation.pageNumberFormat || 'c/t'
@@ -423,21 +430,23 @@ function generatePrintHTML(presentation) {
       : ''
 
     let footerHtml = ''
-    if (footerMode === 'sequence' && sequenceSections.length > 0 && showFooter) {
-      const activeIdx = slide.activeSection
-      const seqSpans = sequenceSections.map((sec, i) => {
-        const isActive = activeIdx === i
-        const color = isActive ? footerColor : footerInactiveColor
-        const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
-        return `<span style="color:${color};${weight}">${escapeHtml(sec || `Section ${i+1}`)}</span>`
-      }).join('')
-      const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
-      footerHtml = `<div style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;font-size:${footerFontSize}px;font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
-    } else {
-      const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
-      footerHtml = (sectionLabel || pageLabel)
-        ? `<div style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;font-size:${footerFontSize}px;color:${footerColor};font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>`
-        : ''
+    if (!slide.hideFooter) {
+      if (footerMode === 'sequence' && sequenceSections.length > 0 && showFooter) {
+        const activeIdx = slide.activeSection
+        const seqSpans = sequenceSections.map((sec, i) => {
+          const isActive = activeIdx === i
+          const color = isActive ? footerColor : footerInactiveColor
+          const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
+          return `<span style="color:${color};${weight}">${escapeHtml(sec || `Section ${i+1}`)}</span>`
+        }).join('')
+        const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
+        footerHtml = `<div style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;font-size:${footerFontSize}px;font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
+      } else {
+        const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
+        footerHtml = (sectionLabel || pageLabel)
+          ? `<div style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;font-size:${footerFontSize}px;color:${footerColor};font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>`
+          : ''
+      }
     }
 
     return `<div class="slide-page" style="${bgStyle}font-size:42px;">\n${elementsHtml}\n${footerHtml}\n</div>`
@@ -457,11 +466,11 @@ function generatePrintHTML(presentation) {
     @font-face { font-family: 'Latin Modern Roman'; font-style: normal; font-weight: 400; src: url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-regular.woff2') format('woff2'); }
     @font-face { font-family: 'Latin Modern Roman'; font-style: normal; font-weight: 700; src: url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-bold.woff2') format('woff2'); }
     @font-face { font-family: 'Latin Modern Roman'; font-style: italic; font-weight: 400; src: url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-italic.woff2') format('woff2'); }
-    @page { size: 960px 540px; margin: 0; }
+    @page { size: ${slideW}px ${slideH}px; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-    html, body { width: 960px; background: #000; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    html, body { width: ${slideW}px; background: #000; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     .slide-page {
-      width: 960px; height: 540px; position: relative; overflow: hidden;
+      width: ${slideW}px; height: ${slideH}px; position: relative; overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       break-after: page; page-break-after: always;
       print-color-adjust: exact; -webkit-print-color-adjust: exact;

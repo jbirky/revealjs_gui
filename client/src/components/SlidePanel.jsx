@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Plus, Copy, ArrowUp, ArrowDown, Trash2 } from 'lucide-react'
 
 function getBgStyle(bg) {
@@ -9,9 +9,26 @@ function getBgStyle(bg) {
   return { backgroundColor: '#1e1e2e' }
 }
 
-export default function SlidePanel({ slides, currentIndex, onSelect, onAdd, onDelete, onDuplicate, onMove }) {
+export default function SlidePanel({ slides, currentIndex, onSelect, onAdd, onDelete, onDuplicate, onMove, slideW = 960, slideH = 540 }) {
   const [dragOverIndex, setDragOverIndex] = useState(null)
   const dragIndexRef = useRef(null)
+  const listRef = useRef(null)
+  const itemRefs = useRef([])
+
+  // Scroll active slide into view when currentIndex changes via keyboard
+  useEffect(() => {
+    itemRefs.current[currentIndex]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [currentIndex])
+
+  function handleKeyDown(e) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (currentIndex < slides.length - 1) onSelect(currentIndex + 1)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (currentIndex > 0) onSelect(currentIndex - 1)
+    }
+  }
 
   return (
     <div className="slide-panel">
@@ -20,11 +37,18 @@ export default function SlidePanel({ slides, currentIndex, onSelect, onAdd, onDe
         <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{slides.length}</span>
       </div>
 
-      <div className="slide-list">
+      <div
+        className="slide-list"
+        ref={listRef}
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        style={{ outline: 'none' }}
+      >
         {slides.map((slide, index) => {
           return (
             <div
               key={slide.id || index}
+              ref={el => { itemRefs.current[index] = el }}
               className={`slide-item ${index === currentIndex ? 'active' : ''}`}
               style={dragOverIndex === index ? { outline: '2px solid var(--accent)', outlineOffset: '-2px' } : undefined}
               draggable
@@ -39,7 +63,7 @@ export default function SlidePanel({ slides, currentIndex, onSelect, onAdd, onDe
                 dragIndexRef.current = null
               }}
               onDragEnd={() => { setDragOverIndex(null); dragIndexRef.current = null }}
-              onClick={() => onSelect(index)}
+              onClick={() => { onSelect(index); listRef.current?.focus() }}
             >
               <span className="slide-number">{index + 1}</span>
 
@@ -48,14 +72,14 @@ export default function SlidePanel({ slides, currentIndex, onSelect, onAdd, onDe
                   § {slide.section}
                 </div>
               )}
-              <div className="slide-thumbnail" style={{ ...getBgStyle(slide.background), position: 'relative', overflow: 'hidden' }}>
+              <div className="slide-thumbnail" style={{ ...getBgStyle(slide.background), position: 'relative', overflow: 'hidden', aspectRatio: `${slideW} / ${slideH}` }}>
                 {(slide.elements || []).map(el => (
                   <div key={el.id} style={{
                     position: 'absolute',
-                    left: `${(el.x / 960) * 100}%`,
-                    top: `${(el.y / 540) * 100}%`,
-                    width: `${(el.width / 960) * 100}%`,
-                    height: `${(el.height / 540) * 100}%`,
+                    left: `${(el.x / slideW) * 100}%`,
+                    top: `${(el.y / slideH) * 100}%`,
+                    width: `${(el.width / slideW) * 100}%`,
+                    height: `${(el.height / slideH) * 100}%`,
                     overflow: 'hidden',
                     fontSize: '4px',
                     lineHeight: 1.3,

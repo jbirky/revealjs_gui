@@ -3,6 +3,7 @@ import { EditorContent } from '@tiptap/react'
 import katex from 'katex'
 import hljs from 'highlight.js'
 import { calculateGuides } from '../utils/smartGuides'
+import { generateLatexIframeHtml } from '../utils/latexRenderer'
 
 function highlightCode(code, language) {
   try {
@@ -37,8 +38,6 @@ function snapWithRef(rawX, rawY, w, h, ref, snapFn) {
   }
 }
 
-const SLIDE_W = 960
-const SLIDE_H = 540
 const MIN_SIZE = 40
 
 const HANDLE_STYLES = {
@@ -141,7 +140,9 @@ function getBgStyle(bg) {
   return { backgroundColor: '#1e1e2e' }
 }
 
-export default function SlideCanvas({ editor, slide, selectedElementIds, editingElementId, showGrid, gridSize = 40, showFooter, showPageNumbers, pageNumberFormat, pageNumber, totalSlides, sectionName, footerFontSize = 14, footerFontFamily = '-apple-system,sans-serif', footerColor = 'rgba(255,255,255,0.65)', footerInactiveColor = 'rgba(255,255,255,0.25)', smartGuidesEnabled = true, footerMode = 'basic', sequenceSections = [], activeSection = null, showRulers = false, persistentGuides = [], onAddGuide, onRemoveGuide, onToggleSelectElement, onStartEdit, onStopEdit, onUpdateElement, onUpdateElements, onDeleteElement, onDeleteSelectedElements, onAddImage, onOpenHtmlEditor, onOpenCodeEditor, onOpenLatexEditor }) {
+export default function SlideCanvas({ editor, slide, selectedElementIds, editingElementId, showGrid, gridSize = 40, showFooter, showPageNumbers, pageNumberFormat, pageNumber, totalSlides, sectionName, footerFontSize = 14, footerFontFamily = '-apple-system,sans-serif', footerColor = 'rgba(255,255,255,0.65)', footerInactiveColor = 'rgba(255,255,255,0.25)', smartGuidesEnabled = true, footerMode = 'basic', sequenceSections = [], activeSection = null, showRulers = false, persistentGuides = [], onAddGuide, onRemoveGuide, onToggleSelectElement, onStartEdit, onStopEdit, onUpdateElement, onUpdateElements, onDeleteElement, onDeleteSelectedElements, onAddImage, onOpenHtmlEditor, onOpenCodeEditor, onOpenLatexEditor, slideW = 960, slideH = 540 }) {
+  const SLIDE_W = slideW
+  const SLIDE_H = slideH
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
   const [scale, setScale] = useState(1)
@@ -566,6 +567,7 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
               setContextMenu({ elementId: element.id, elementType: element.type, x: e.clientX, y: e.clientY })
             }}
             onStopEdit={onStopEdit}
+            onAutoResize={(id, h) => onUpdateElement?.(id, { height: h })}
             onCropHandleDown={(handle, clientX, clientY) => {
               const el = slide?.elements?.find(el => el.id === element.id)
               if (!el) return
@@ -583,7 +585,7 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
         ))}
 
         {/* Footer overlay */}
-        {(showFooter || showPageNumbers) && (
+        {(showFooter || showPageNumbers) && !slide?.hideFooter && (
           footerMode === 'sequence' && sequenceSections.length > 0 ? (
             <div style={{
               position: 'absolute', bottom: 6, left: 16, right: 16, zIndex: 900,
@@ -690,8 +692,11 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
   )
 }
 
-function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, isDragging, editor, onPointerDown, onClick, onDoubleClick, onContextMenu, onStopEdit, onCropHandleDown, onCommitCrop }) {
+function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, isDragging, editor, onPointerDown, onClick, onDoubleClick, onContextMenu, onStopEdit, onCropHandleDown, onCommitCrop, onAutoResize }) {
   const contentRef = useRef(null)
+  const outerRef = useRef(null)
+  const lastAutoHeightRef = useRef(null)
+  const isAutoFit = element.type === 'text' && element.sizeMode === 'auto'
 
   // Render KaTeX math in preview (when not editing)
   useEffect(() => {
@@ -708,17 +713,32 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
     })
   }, [element.content, isEditing])
 
+  // Sync auto-fit height back to element data so drag, export, etc. stay consistent
+  useEffect(() => {
+    if (!isAutoFit || !outerRef.current) return
+    const observer = new ResizeObserver(() => {
+      const h = Math.ceil(outerRef.current.getBoundingClientRect().height)
+      if (h > 0 && h !== lastAutoHeightRef.current) {
+        lastAutoHeightRef.current = h
+        onAutoResize?.(element.id, h)
+      }
+    })
+    observer.observe(outerRef.current)
+    return () => observer.disconnect()
+  }, [isAutoFit, element.id, onAutoResize])
+
   return (
     <div
+      ref={outerRef}
       style={{
         position: 'absolute',
         left: element.x, top: element.y,
-        width: element.width, height: element.height,
+        width: element.width, height: isAutoFit ? 'auto' : element.height,
         zIndex: element.zIndex || 1,
         outline: element.locked ? '2px solid #f59e0b' : (isSelected || isEditing) && !isCropping ? '2px solid #6366f1' : isCropping ? '2px solid #f59e0b' : 'none',
         cursor: isCropping ? 'crosshair' : isEditing ? 'text' : isDragging ? 'grabbing' : element.locked ? 'not-allowed' : 'grab',
         userSelect: isEditing ? 'text' : 'none',
-        overflow: 'hidden',
+        overflow: isAutoFit ? 'visible' : 'hidden',
         boxSizing: 'border-box',
         borderRadius: (element.type === 'image' || element.type === 'code') && element.borderRadius ? element.borderRadius : undefined,
         transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
@@ -735,12 +755,12 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
         <div
           ref={contentRef}
           className="slide-text-content"
-          style={{ width: '100%', height: '100%', overflow: 'hidden', color: 'white', padding: '8px 12px', boxSizing: 'border-box' }}
+          style={{ width: '100%', height: isAutoFit ? 'auto' : '100%', overflow: isAutoFit ? 'visible' : 'hidden', color: 'white', padding: '8px 12px', boxSizing: 'border-box' }}
           dangerouslySetInnerHTML={{ __html: element.content || '' }}
         />
       )}
       {element.type === 'text' && isEditing && (
-        <EditorContent editor={editor} style={{ width: '100%', height: '100%', color: 'white' }} />
+        <EditorContent editor={editor} style={{ width: '100%', height: isAutoFit ? 'auto' : '100%', minHeight: isAutoFit ? 40 : undefined, color: 'white' }} />
       )}
       {element.type === 'image' && (() => {
         const imgFilter = [
@@ -787,6 +807,7 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
       )}
       {element.type === 'html' && (
         <iframe
+          key={`${element.id}-${element.width}-${element.height}`}
           srcDoc={element.content || ''}
           style={{ width: '100%', height: '100%', border: 'none', display: 'block', pointerEvents: isSelected ? 'auto' : 'none' }}
           sandbox="allow-scripts"
@@ -811,13 +832,14 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
       )}
       {element.type === 'video' && (
         <video
-          src={element.src}
           controls={element.controls !== false}
           muted={element.muted || false}
           loop={element.loop || false}
           poster={element.poster || undefined}
           style={{ width: '100%', height: '100%', objectFit: element.objectFit || 'contain', display: 'block', pointerEvents: isSelected ? 'auto' : 'none' }}
-        />
+        >
+          <source src={element.src} type={/\.webm$/i.test(element.src) ? 'video/webm' : /\.ogg$/i.test(element.src) ? 'video/ogg' : 'video/mp4'} />
+        </video>
       )}
       {element.type === 'audio' && (
         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: 4 }}>
@@ -869,18 +891,20 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
         </div>
       )}
 
-      {/* Resize handles */}
-      {isSelected && !isEditing && !isCropping && !element.locked && Object.entries(HANDLE_STYLES).map(([handle, hStyle]) => (
-        <div
-          key={handle}
-          style={{
-            position: 'absolute', width: 10, height: 10,
-            background: '#6366f1', border: '2px solid white', borderRadius: 2, zIndex: 100,
-            ...hStyle
-          }}
-          onMouseDown={(e) => { e.stopPropagation(); onPointerDown(e, 'resize', handle) }}
-        />
-      ))}
+      {/* Resize handles — auto-fit text only exposes width handles */}
+      {isSelected && !isEditing && !isCropping && !element.locked && element.type !== 'html' && Object.entries(HANDLE_STYLES)
+        .filter(([handle]) => !isAutoFit || handle === 'w' || handle === 'e')
+        .map(([handle, hStyle]) => (
+          <div
+            key={handle}
+            style={{
+              position: 'absolute', width: 10, height: 10,
+              background: '#6366f1', border: '2px solid white', borderRadius: 2, zIndex: 100,
+              ...hStyle
+            }}
+            onMouseDown={(e) => { e.stopPropagation(); onPointerDown(e, 'resize', handle) }}
+          />
+        ))}
 
       {/* Rotation handle */}
       {isSelected && !isEditing && !isCropping && !element.locked && (
@@ -1132,44 +1156,6 @@ function IconRenderer({ element }) {
   )
 }
 
-function generateLatexIframeHtml(content) {
-  // Detect if content has tikzpicture
-  const hasTikz = /\\begin\{tikzpicture\}/.test(content)
-  const tikzScript = hasTikz
-    ? `<link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css">
-       <script src="https://tikzjax.com/v1/tikzjax.js"><\/script>`
-    : ''
-
-  // Wrap content: if it has tikzpicture, use <script type="text/tikz">, otherwise render as KaTeX display math
-  let bodyContent
-  if (hasTikz) {
-    bodyContent = `<script type="text/tikz">${content}<\/script>`
-  } else {
-    // Treat as display math
-    const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    bodyContent = `<div id="math"></div>
-    <script>
-      try {
-        katex.render(${JSON.stringify(content)}, document.getElementById('math'), { displayMode: true, throwOnError: false });
-      } catch(e) {
-        document.getElementById('math').textContent = e.message;
-      }
-    <\/script>`
-  }
-
-  return `<!doctype html><html><head>
-<meta charset="utf-8">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\/script>
-${tikzScript}
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: transparent; overflow: hidden; color: white; }
-  .katex { font-size: 1.4em; }
-  svg { max-width: 100%; max-height: 100%; }
-</style>
-</head><body>${bodyContent}</body></html>`
-}
 
 function LatexRenderer({ element, isSelected }) {
   const html = generateLatexIframeHtml(element.content || '')
@@ -1235,7 +1221,8 @@ function ShapeRenderer({ element }) {
   const renderShape = () => {
     if (shape === 'line') {
       const lw = element.strokeWidth || 3
-      return <line x1={lw} y1={h/2} x2={w-lw} y2={h/2} stroke={fill} strokeWidth={lw} fill="none" />
+      const lineColor = element.stroke && element.stroke !== 'none' ? element.stroke : (element.fill || '#ffffff')
+      return <line x1={lw} y1={h/2} x2={w-lw} y2={h/2} stroke={lineColor} strokeWidth={lw} fill="none" />
     }
     const gProps = { fill, stroke, strokeWidth: sw }
     switch(shape) {

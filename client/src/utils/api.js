@@ -20,6 +20,11 @@ export const api = {
     fd.append('file', file)
     return fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json())
   },
+  uploadFileToPresentation: (presentationId, file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return fetch(`/api/presentations/${presentationId}/upload`, { method: 'POST', body: fd }).then(r => r.json())
+  },
   getGithubConfig: () => fetch(`${BASE}/github/config`).then(r => r.json()),
   saveGithubConfig: (data) => fetch(`${BASE}/github/config`, {
     method: 'POST',

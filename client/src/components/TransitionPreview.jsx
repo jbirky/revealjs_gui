@@ -3,7 +3,9 @@ import { X, Play, RotateCcw } from 'lucide-react'
 
 const TRANSITIONS = ['none', 'fade', 'slide', 'convex', 'concave', 'zoom']
 
-export default function TransitionPreview({ presentation, fromIndex, onClose }) {
+export default function TransitionPreview({ presentation, fromIndex, onClose, slideW: slideWProp, slideH: slideHProp }) {
+  const slideW = slideWProp || presentation.slideWidth || 960
+  const slideH = slideHProp || presentation.slideHeight || 540
   const [transition, setTransition] = useState(presentation.transition || 'slide')
   const [key, setKey] = useState(0)
   const iframeRef = useRef(null)
@@ -49,14 +51,14 @@ export default function TransitionPreview({ presentation, fromIndex, onClose }) 
 <body>
 <div class="reveal">
 <div class="slides">
-  <section${getBgAttrs(slide1.background)} style="padding:0;width:960px;height:540px;overflow:hidden;font-size:42px;">${renderElements(slide1.elements)}</section>
-  <section${getBgAttrs(slide2.background)} style="padding:0;width:960px;height:540px;overflow:hidden;font-size:42px;">${renderElements(slide2.elements)}</section>
+  <section${getBgAttrs(slide1.background)} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">${renderElements(slide1.elements)}</section>
+  <section${getBgAttrs(slide2.background)} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">${renderElements(slide2.elements)}</section>
 </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"><\/script>
 <script>
 Reveal.initialize({
-  hash:false,width:960,height:540,margin:0,minScale:0,maxScale:10,center:false,
+  hash:false,width:${slideW},height:${slideH},margin:0,minScale:0,maxScale:10,center:false,
   transition:'${transition}',controls:false,progress:false,
   keyboard:true,overview:false
 });
@@ -88,7 +90,7 @@ setTimeout(()=>Reveal.next(),800);
             key={key}
             ref={iframeRef}
             srcDoc={html}
-            style={{ width: 960, height: 540, border: 'none', transform: 'scale(0.6)', transformOrigin: 'top left' }}
+            style={{ width: slideW, height: slideH, border: 'none', transform: 'scale(0.6)', transformOrigin: 'top left' }}
             title="Transition Preview"
           />
         </div>

@@ -23,6 +23,7 @@ import {
   Ruler,
   Group,
   Ungroup,
+  FileText,
 } from 'lucide-react'
 import { SHAPES } from '../utils/shapeUtils'
 
@@ -49,7 +50,7 @@ const GRADIENT_PRESETS_BG = [
   'linear-gradient(135deg, #2c3e50, #3498db)'
 ]
 
-export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddImage, onAddImageUpload, onAddShape, onAddHtml, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddAudio, onAddTable, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers }) {
+export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddImage, onAddImageUpload, onAddShape, onAddHtml, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers }) {
   const [showShapeMenu, setShowShapeMenu] = useState(false)
   const [showTableMenu, setShowTableMenu] = useState(false)
   const [showColorPalette, setShowColorPalette] = useState(false)
@@ -59,6 +60,58 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
   const [iconSearch, setIconSearch] = useState('')
   const [uploading, setUploading] = useState(false)
   const bgFileRef = useRef(null)
+  const pdfInputRef = useRef(null)
+  const [pdfModal, setPdfModal] = useState(null) // { pages: [{canvas, num}], selected: Set }
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  async function handlePdfUpload(file) {
+    if (!file) return
+    setPdfLoading(true)
+    try {
+      // Load PDF.js from CDN if not already loaded
+      if (!window.pdfjsLib) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+          s.onload = resolve
+          s.onerror = reject
+          document.head.appendChild(s)
+        })
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+      }
+      const arrayBuffer = await file.arrayBuffer()
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      const pages = []
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const viewport = page.getViewport({ scale: 2 }) // 2x for quality
+        const canvas = document.createElement('canvas')
+        canvas.width = viewport.width
+        canvas.height = viewport.height
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+        pages.push({ canvas, num: i })
+      }
+      setPdfModal({ pages, selected: new Set([1]) })
+    } catch (e) {
+      alert('Failed to load PDF: ' + e.message)
+    } finally {
+      setPdfLoading(false)
+      if (pdfInputRef.current) pdfInputRef.current.value = ''
+    }
+  }
+
+  async function insertPdfPages() {
+    if (!pdfModal || !onAddImageUpload) return
+    const { pages, selected } = pdfModal
+    setPdfModal(null)
+    for (const { canvas, num } of pages) {
+      if (!selected.has(num)) continue
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'))
+      const f = new File([blob], `pdf-page-${num}.png`, { type: 'image/png' })
+      await onAddImageUpload(f)
+    }
+  }
 
   useEffect(() => {
     if (!showColorPalette) return
@@ -127,6 +180,10 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
         <Upload size={14} /> Upload
         <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { onAddImageUpload(f); e.target.value = '' } }} />
       </label>
+      <label className="btn-icon" title="Import PDF pages as images" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: pdfLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', opacity: pdfLoading ? 0.6 : 1 }}>
+        <FileText size={14} /> {pdfLoading ? 'Loading…' : 'PDF'}
+        <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handlePdfUpload(f) }} disabled={pdfLoading} />
+      </label>
 
       <button className="btn-icon" title="Insert HTML / D3 embed" onClick={onAddHtml} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
         <FileCode size={14} /> Embed
@@ -193,20 +250,21 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
         )}
       </div>
 
-      <button className="btn-icon" title="Add Video (URL)" onClick={() => { const url = window.prompt('Video URL:'); if (url) onAddVideo?.(url) }} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+      <label className="btn-icon" title="Upload Video (MP4)" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
         <Video size={14} /> Video
-      </button>
-      <label className="btn-icon" title="Upload Video" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-        <Music size={14} /> Audio
-        <input type="file" accept="audio/*,video/*" style={{ display: 'none' }} onChange={async e => {
+        <input type="file" accept="video/mp4,video/webm,video/ogg,video/*" style={{ display: 'none' }} onChange={async e => {
           const f = e.target.files?.[0]; if (!f) return; e.target.value = ''
-          // Upload file then add as element
+          if (onAddVideoUpload) onAddVideoUpload(f)
+          else { const fd = new FormData(); fd.append('file', f); const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) onAddVideo?.(res.url) }
+        }} />
+      </label>
+      <label className="btn-icon" title="Upload Audio" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+        <Music size={14} /> Audio
+        <input type="file" accept="audio/*" style={{ display: 'none' }} onChange={async e => {
+          const f = e.target.files?.[0]; if (!f) return; e.target.value = ''
           const fd = new FormData(); fd.append('file', f)
           const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json())
-          if (res.url) {
-            if (f.type.startsWith('video/')) onAddVideo?.(res.url)
-            else onAddAudio?.(res.url)
-          }
+          if (res.url) onAddAudio?.(res.url)
         }} />
       </label>
       <button className="btn-icon" title="Add Table" onClick={() => {
@@ -478,6 +536,7 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
               <option value="'Open Sans', sans-serif">Open Sans</option>
               <option value="'Source Sans Pro', sans-serif">Source Sans Pro</option>
               <option value="'Computer Modern Sans', sans-serif">Computer Modern Sans</option>
+              <option value="'Humanist 777 BT', 'Gill Sans', 'Gill Sans MT', Calibri, sans-serif">Humanist 777</option>
             </optgroup>
             <optgroup label="Serif">
               <option value="Georgia, serif">Georgia</option>
@@ -895,6 +954,52 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
             <RemoveFormatting size={15} />
           </button>
         </>
+      )}
+
+      {/* PDF page picker modal */}
+      {pdfModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onKeyDown={e => { if (e.key === 'Escape') setPdfModal(null) }}
+        >
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, width: '80vw', maxWidth: 960, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>Select PDF Pages to Insert</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{pdfModal.pages.length} page{pdfModal.pages.length !== 1 ? 's' : ''} — click to select</span>
+            </div>
+            <div style={{ overflowY: 'auto', padding: 16, display: 'flex', flexWrap: 'wrap', gap: 12, flex: 1 }}>
+              {pdfModal.pages.map(({ canvas, num }) => {
+                const isSelected = pdfModal.selected.has(num)
+                return (
+                  <div
+                    key={num}
+                    onClick={() => setPdfModal(prev => {
+                      const s = new Set(prev.selected)
+                      s.has(num) ? s.delete(num) : s.add(num)
+                      return { ...prev, selected: s }
+                    })}
+                    style={{ cursor: 'pointer', border: `2px solid ${isSelected ? '#6366f1' : 'var(--border)'}`, borderRadius: 6, overflow: 'hidden', position: 'relative', flexShrink: 0 }}
+                  >
+                    <img src={canvas.toDataURL()} alt={`Page ${num}`} style={{ display: 'block', width: 160, height: 'auto' }} />
+                    <div style={{ position: 'absolute', bottom: 4, left: 0, right: 0, textAlign: 'center', fontSize: 10, color: 'rgba(255,255,255,0.7)', pointerEvents: 'none' }}>
+                      {num}
+                    </div>
+                    {isSelected && (
+                      <div style={{ position: 'absolute', top: 4, right: 4, width: 18, height: 18, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'white', fontWeight: 700 }}>✓</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, justifyContent: 'flex-end', flexShrink: 0 }}>
+              <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={() => setPdfModal(null)}>Cancel</button>
+              <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={() => setPdfModal(prev => ({ ...prev, selected: new Set(prev.pages.map(p => p.num)) }))}>Select All</button>
+              <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={insertPdfPages} disabled={pdfModal.selected.size === 0}>
+                Insert {pdfModal.selected.size > 0 ? `${pdfModal.selected.size} Page${pdfModal.selected.size !== 1 ? 's' : ''}` : ''}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

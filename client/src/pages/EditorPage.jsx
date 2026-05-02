@@ -15,6 +15,7 @@ import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
 import { ChevronLeft, Play, Download, MessageSquare, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup } from 'lucide-react'
 import { api } from '../utils/api'
+import { generateLatexIframeHtml } from '../utils/latexRenderer'
 import { downloadHTML, presentInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
 import { exportToPptx } from '../utils/exportPptx'
 import { generateOfflineHTML } from '../utils/offlineExport'
@@ -235,6 +236,9 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
 
   const currentSlide = presentation?.slides[currentSlideIndex]
 
+  const slideW = presentation?.slideWidth || 960
+  const slideH = presentation?.slideHeight || 540
+
   // TipTap editor
   const editor = useEditor({
     extensions: [
@@ -391,7 +395,7 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
       id: crypto.randomUUID(),
       type: 'text',
       x: 80, y: 160, width: 600, height: 180, zIndex: 1,
-      content: '<p>New text</p>'
+      content: '<p><span style="font-size: 32px; color: #94a3b8">New text</span></p>'
     }
     setPresentation(prev => {
       if (!prev) return prev
@@ -450,7 +454,7 @@ svg.selectAll('circle').data(data).join('circle')
     const newEl = {
       id: crypto.randomUUID(),
       type: 'html',
-      x: 80, y: 80, width: 500, height: 380, zIndex: 2,
+      x: 0, y: 0, width: slideW, height: slideH, zIndex: 2,
       content: DEFAULT_HTML
     }
     setPresentation(prev => {
@@ -625,8 +629,8 @@ svg.selectAll('circle').data(data).join('circle')
       id: crypto.randomUUID(),
       type: 'shape',
       shape,
-      x: (960 - dim.width) / 2,
-      y: (540 - dim.height) / 2,
+      x: (slideW - dim.width) / 2,
+      y: (slideH - dim.height) / 2,
       width: dim.width,
       height: dim.height,
       zIndex: (currentSlide?.elements?.length || 0) + 1,
@@ -761,6 +765,10 @@ svg.selectAll('circle').data(data).join('circle')
   // Cut / copy / paste / duplicate keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (editingElementId) { stopEditingElement(); setSelectedElementIds([]); e.preventDefault(); return }
+        if (selectedElementIds.length > 0) { setSelectedElementIds([]); e.preventDefault(); return }
+      }
       if (editingElementId) return
       const tag = document.activeElement?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
@@ -785,8 +793,8 @@ svg.selectAll('circle').data(data).join('circle')
         const newEl = {
           ...clipboard,
           id: crypto.randomUUID(),
-          x: Math.min((clipboard.x || 0) + 20, 960 - (clipboard.width || 100)),
-          y: Math.min((clipboard.y || 0) + 20, 540 - (clipboard.height || 100))
+          x: Math.min((clipboard.x || 0) + 20, slideW - (clipboard.width || 100)),
+          y: Math.min((clipboard.y || 0) + 20, slideH - (clipboard.height || 100))
         }
         setPresentation(prev => ({
           ...prev,
@@ -800,8 +808,8 @@ svg.selectAll('circle').data(data).join('circle')
         const newEl = {
           ...element,
           id: crypto.randomUUID(),
-          x: Math.min((element.x || 0) + 20, 960 - (element.width || 100)),
-          y: Math.min((element.y || 0) + 20, 540 - (element.height || 100))
+          x: Math.min((element.x || 0) + 20, slideW - (element.width || 100)),
+          y: Math.min((element.y || 0) + 20, slideH - (element.height || 100))
         }
         setPresentation(prev => ({
           ...prev,
@@ -837,7 +845,7 @@ svg.selectAll('circle').data(data).join('circle')
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [selectedElementId, editingElementId, clipboard, presentation, currentSlideIndex, deleteElement])
+  }, [selectedElementId, selectedElementIds, editingElementId, clipboard, presentation, currentSlideIndex, deleteElement, stopEditingElement])
 
   // Inject hljs theme CSS into the document head for the editor preview
   useEffect(() => {
@@ -1097,6 +1105,54 @@ svg.selectAll('circle').data(data).join('circle')
               style={{ accentColor: 'var(--accent)' }} />
             Grid
           </label>
+
+          {/* Slide Size */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <select
+              className="select-sm"
+              value={(() => {
+                const w = presentation.slideWidth || 960
+                const h = presentation.slideHeight || 540
+                if (w === 960 && h === 540) return '960x540'
+                if (w === 1280 && h === 720) return '1280x720'
+                if (w === 960 && h === 600) return '960x600'
+                if (w === 960 && h === 720) return '960x720'
+                if (w === 540 && h === 960) return '540x960'
+                return 'custom'
+              })()}
+              onChange={e => {
+                const presets = { '960x540': [960,540], '1280x720': [1280,720], '960x600': [960,600], '960x720': [960,720], '540x960': [540,960] }
+                if (presets[e.target.value]) {
+                  const [w, h] = presets[e.target.value]
+                  setPresentation(prev => ({ ...prev, slideWidth: w, slideHeight: h }))
+                }
+              }}
+              title="Slide size"
+              style={{ minWidth: 90 }}
+            >
+              <option value="960x540">16:9</option>
+              <option value="1280x720">16:9 HD</option>
+              <option value="960x600">16:10</option>
+              <option value="960x720">4:3</option>
+              <option value="540x960">9:16</option>
+              <option value="custom">Custom</option>
+            </select>
+            {(presentation.slideWidth || presentation.slideHeight) && !(
+              [[960,540],[1280,720],[960,600],[960,720],[540,960]].some(([w,h]) => (presentation.slideWidth||960)===w && (presentation.slideHeight||540)===h)
+            ) && (
+              <>
+                <input type="number" className="prop-input" style={{ width: 52, fontSize: 11, padding: '2px 4px' }}
+                  value={presentation.slideWidth || 960}
+                  onChange={e => setPresentation(prev => ({ ...prev, slideWidth: Number(e.target.value) || 960 }))}
+                  min={200} max={3840} />
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>×</span>
+                <input type="number" className="prop-input" style={{ width: 52, fontSize: 11, padding: '2px 4px' }}
+                  value={presentation.slideHeight || 540}
+                  onChange={e => setPresentation(prev => ({ ...prev, slideHeight: Number(e.target.value) || 540 }))}
+                  min={200} max={3840} />
+              </>
+            )}
+          </div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#a0a0b0', cursor: 'pointer', userSelect: 'none' }}>
             <input type="checkbox" checked={presentation.showFooter || false}
@@ -1588,6 +1644,8 @@ svg.selectAll('circle').data(data).join('circle')
           onDelete={deleteSlide}
           onDuplicate={duplicateSlide}
           onMove={moveSlide}
+          slideW={slideW}
+          slideH={slideH}
         />
 
         <div className="editor-main">
@@ -1617,6 +1675,10 @@ svg.selectAll('circle').data(data).join('circle')
             onAddCallout={addCalloutElement}
             onAddIcon={addIconElement}
             onAddVideo={addVideoElement}
+            onAddVideoUpload={async (file) => {
+              const result = await api.uploadFileToPresentation(presentation.id, file)
+              if (result.url) addVideoElement(result.url)
+            }}
             onAddAudio={addAudioElement}
             onAddTable={addTableElement}
             selectedCount={selectedElementIds.length}
@@ -1679,6 +1741,8 @@ svg.selectAll('circle').data(data).join('circle')
                 const result = await api.uploadFile(file)
                 if (result.url) addImageElement(result.url, dropX, dropY)
               }}
+              slideW={slideW}
+              slideH={slideH}
             />
           </div>
         </div>
@@ -1816,7 +1880,7 @@ svg.selectAll('circle').data(data).join('circle')
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, width: '78vw', maxWidth: 960, height: '78vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, gap: 12 }}>
               <span style={{ fontWeight: 600, fontSize: 14 }}>LaTeX / TikZ</span>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Supports KaTeX math and TikZ diagrams (via TikZJax)</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Supports KaTeX math, LaTeX tables (LaTeX.js), and TikZ diagrams (TikZJax)</span>
               <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
                 <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={() => setLatexEditorState(null)}>Cancel</button>
                 <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={commitLatexEdit}>Apply</button>
@@ -1843,20 +1907,7 @@ svg.selectAll('circle').data(data).join('circle')
               <div style={{ flex: 1, background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 16 }}>
                 <iframe
                   key={latexEditorState.content}
-                  srcDoc={(() => {
-                    const content = latexEditorState.content || ''
-                    const hasTikz = /\\begin\{tikzpicture\}/.test(content)
-                    const tikzScript = hasTikz
-                      ? `<link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css"><script src="https://tikzjax.com/v1/tikzjax.js"><\/script>`
-                      : ''
-                    let bodyContent
-                    if (hasTikz) {
-                      bodyContent = `<script type="text/tikz">${content}<\/script>`
-                    } else {
-                      bodyContent = `<div id="math"></div><script>try{katex.render(${JSON.stringify(content)},document.getElementById('math'),{displayMode:true,throwOnError:false})}catch(e){document.getElementById('math').textContent=e.message}<\/script>`
-                    }
-                    return `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"><script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\/script>${tikzScript}<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:transparent;overflow:hidden;color:white}.katex{font-size:1.6em}svg{max-width:100%;max-height:100%}</style></head><body>${bodyContent}</body></html>`
-                  })()}
+                  srcDoc={generateLatexIframeHtml(latexEditorState.content || '')}
                   style={{ width: '100%', height: '100%', border: 'none', background: 'transparent' }}
                   sandbox="allow-scripts"
                   title="LaTeX Preview"
@@ -1894,6 +1945,8 @@ svg.selectAll('circle').data(data).join('circle')
           presentation={presentation}
           fromIndex={currentSlideIndex}
           onClose={() => setShowTransitionPreview(false)}
+          slideW={slideW}
+          slideH={slideH}
         />
       )}
 
