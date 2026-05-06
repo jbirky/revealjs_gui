@@ -4,6 +4,7 @@ export default defineConfig({
   title: 'Slides Editor',
   description: 'A self-hostable WYSIWYG presentation editor powered by reveal.js',
   base: '/revealjs_gui/',
+  ignoreDeadLinks: true,
 
   themeConfig: {
     nav: [
