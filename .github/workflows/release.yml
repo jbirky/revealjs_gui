@@ -16,8 +16,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-      - run: npm ci
+      - run: npm install
       - run: npm run build
       - run: node scripts/prepare-electron.js
       - name: Build Linux packages
@@ -38,15 +37,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-      - run: npm ci
+      - run: npm install
       - run: npm run build
       - run: node scripts/prepare-electron.js
       - name: Build macOS packages
         run: npx electron-builder --mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code signing is skipped if CSC_LINK is not set
           CSC_IDENTITY_AUTO_DISCOVERY: false
       - uses: softprops/action-gh-release@v2
         with:
@@ -62,8 +59,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-      - run: npm ci
+      - run: npm install
       - run: npm run build
       - run: node scripts/prepare-electron.js
       - name: Build Windows packages
