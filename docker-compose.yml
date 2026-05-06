@@ -2,7 +2,7 @@ services:
   revealjs-editor:
     build: .
     ports:
-      - "3002:3002"
+      - "127.0.0.1:3002:3002"
     volumes:
       - revealjs-data:/app/server/data
       - revealjs-uploads:/app/server/uploads

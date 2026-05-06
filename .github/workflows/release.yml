@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/prepare-electron.js
+      - name: Build Linux packages
+        run: npx electron-builder --linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-electron/*.AppImage
+            dist-electron/*.deb
+          generate_release_notes: true
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/prepare-electron.js
+      - name: Build macOS packages
+        run: npx electron-builder --mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Code signing is skipped if CSC_LINK is not set
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+          generate_release_notes: false
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/prepare-electron.js
+      - name: Build Windows packages
+        run: npx electron-builder --win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-electron/*.exe
+          generate_release_notes: false

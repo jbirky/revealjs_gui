@@ -3,12 +3,13 @@ process.env.ELECTRON_DISABLE_SANDBOX = '1'
 
 const { app, BrowserWindow, shell, dialog } = require('electron')
 const path = require('path')
+const net = require('net')
 
 app.commandLine.appendSwitch('no-sandbox')
 
-const PORT = 3002
 let mainWindow
 let serverInstance
+let activePort
 
 function getResourcePath(...parts) {
   if (app.isPackaged) {
@@ -17,22 +18,43 @@ function getResourcePath(...parts) {
   return path.join(__dirname, '..', ...parts)
 }
 
+function findFreePort(preferred) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.unref()
+    server.on('error', () => {
+      // preferred is taken; let OS assign any free port
+      const fallback = net.createServer()
+      fallback.unref()
+      fallback.listen(0, '127.0.0.1', () => {
+        const port = fallback.address().port
+        fallback.close(() => resolve(port))
+      })
+      fallback.on('error', reject)
+    })
+    server.listen(preferred, '127.0.0.1', () => {
+      server.close(() => resolve(preferred))
+    })
+  })
+}
+
 async function startBackend() {
   const userData = app.getPath('userData')
   const dataDir = path.join(userData, 'data')
   const uploadsDir = path.join(userData, 'uploads')
 
-  // Set env vars before requiring the server
+  activePort = await findFreePort(3002)
+
   process.env.SLIDES_DATA_DIR = dataDir
   process.env.SLIDES_UPLOADS_DIR = uploadsDir
   process.env.NODE_ENV = 'production'
-  process.env.PORT = String(PORT)
+  process.env.PORT = String(activePort)
 
   const serverPath = getResourcePath('server', 'index.js')
   const { startServer } = require(serverPath)
-  serverInstance = await startServer(PORT)
+  serverInstance = await startServer(activePort)
 
-  console.log(`Backend started on port ${PORT}`)
+  console.log(`Backend started on port ${activePort}`)
   console.log(`Data: ${dataDir}`)
 }
 
@@ -49,14 +71,10 @@ function createWindow() {
     },
   })
 
-  mainWindow.loadURL(`http://localhost:${PORT}`)
+  mainWindow.loadURL(`http://localhost:${activePort}`)
 
-  // Remove default menu bar (optional — keeps it clean)
-  // mainWindow.setMenuBarVisibility(false)
-
-  // Open external links in the default browser, allow new windows for present mode
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('blob:') || url.startsWith(`http://localhost:${PORT}`)) {
+    if (url.startsWith('blob:') || url.startsWith(`http://localhost:${activePort}`)) {
       return { action: 'allow' }
     }
     if (url.startsWith('http')) {

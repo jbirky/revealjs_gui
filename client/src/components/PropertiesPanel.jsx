@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import katex from 'katex'
 import { api } from '../utils/api'
 
 const CODE_LANGUAGES = [
@@ -28,7 +29,7 @@ const CODE_LANGUAGES = [
   { id: 'latex', label: 'LaTeX' },
 ]
 
-export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide, onUpdateElement, onDeleteElement, onBringForward, onSendBackward, onEditHtml, onEditCode, onEditLatex, presentation, onUpdatePresentation, selectedElementIds, onDeleteSelectedElements, isTemplate = false }) {
+export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide, onUpdateElement, onDeleteElement, onBringForward, onSendBackward, onEditHtml, onEditCode, onEditLatex, presentation, onUpdatePresentation, selectedElementIds, onDeleteSelectedElements, isTemplate = false, activeMathNode, onUpdateMathNode, onCloseMathNode }) {
   const [videoUploading, setVideoUploading] = useState(false)
   const videoFileRef = useRef(null)
 
@@ -53,8 +54,98 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
     )
   }
 
+  // Render KaTeX preview HTML safely
+  const mathPreviewHtml = activeMathNode ? (() => {
+    try {
+      return katex.renderToString(activeMathNode.latex || '', {
+        displayMode: activeMathNode.display || false,
+        throwOnError: false,
+      })
+    } catch (e) {
+      return `<span style="color:#f87171;font-size:11px">${e.message}</span>`
+    }
+  })() : ''
+
   return (
     <div className="properties-panel">
+
+      {/* ── Inline Math Node Editor ────────────────────────────────────────── */}
+      {activeMathNode && (
+        <div className="prop-section" style={{ borderBottom: '2px solid var(--accent)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <h3 style={{ margin: 0 }}>Inline Math</h3>
+            <button
+              onClick={onCloseMathNode}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 4px', fontSize: 14, lineHeight: 1 }}
+              title="Close math editor"
+            >✕</button>
+          </div>
+
+          {/* Live KaTeX preview */}
+          <div
+            style={{ background: '#0a0a14', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 12px', marginBottom: 10, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', overflow: 'auto', fontSize: 16 }}
+            dangerouslySetInnerHTML={{ __html: mathPreviewHtml }}
+          />
+
+          {/* LaTeX source */}
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>LaTeX source</div>
+          <textarea
+            value={activeMathNode.latex || ''}
+            onChange={e => onUpdateMathNode({ latex: e.target.value })}
+            style={{ width: '100%', minHeight: 80, background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '6px 8px', borderRadius: 4, fontSize: 12, fontFamily: "'Fira Code', 'JetBrains Mono', monospace", resize: 'vertical', boxSizing: 'border-box', marginBottom: 8, lineHeight: 1.5 }}
+            spellCheck={false}
+            placeholder="\frac{a}{b}"
+            autoFocus
+          />
+
+          {/* Display mode toggle */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={activeMathNode.display || false}
+              onChange={e => onUpdateMathNode({ display: e.target.checked })}
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Display mode (centered block)</span>
+          </label>
+
+          {/* Font size + color */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Font size (px)</div>
+              <input
+                className="prop-input"
+                type="number"
+                placeholder="–"
+                min={6}
+                max={200}
+                value={activeMathNode.fontSize ? parseInt(activeMathNode.fontSize, 10) || '' : ''}
+                onChange={e => onUpdateMathNode({ fontSize: e.target.value ? `${e.target.value}px` : null })}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Color</div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <input
+                  type="color"
+                  value={/^#[0-9a-f]{6}$/i.test(activeMathNode.color || '') ? activeMathNode.color : '#ffffff'}
+                  onChange={e => onUpdateMathNode({ color: e.target.value })}
+                  style={{ width: 30, height: 28, borderRadius: 4, border: '1px solid var(--border)', cursor: 'pointer', padding: 1, flexShrink: 0, background: 'none' }}
+                />
+                <input
+                  className="prop-input"
+                  type="text"
+                  placeholder="inherit"
+                  value={activeMathNode.color || ''}
+                  onChange={e => onUpdateMathNode({ color: e.target.value || null })}
+                  style={{ fontSize: 11 }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Element Section */}
       {selectedElement && (
         <div className="prop-section">
@@ -344,18 +435,46 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 {selectedElement.shape !== 'line' && (
                   <div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Fill</div>
-                    <input type="color" style={{ width: '100%', height: 32, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer' }}
-                      value={selectedElement.fill || '#6366f1'}
-                      onChange={e => onUpdateElement({ fill: e.target.value })}
-                    />
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <input type="color"
+                        style={{ flex: 1, height: 28, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: selectedElement.fill === 'none' ? 'not-allowed' : 'pointer', opacity: selectedElement.fill === 'none' ? 0.35 : 1 }}
+                        value={selectedElement.fill === 'none' || !selectedElement.fill ? '#6366f1' : selectedElement.fill}
+                        disabled={selectedElement.fill === 'none'}
+                        onChange={e => onUpdateElement({ fill: e.target.value })}
+                      />
+                      <button
+                        title="Transparent fill"
+                        onClick={() => onUpdateElement({ fill: selectedElement.fill === 'none' ? '#6366f1' : 'none' })}
+                        style={{
+                          width: 28, height: 28, flexShrink: 0, borderRadius: 4, cursor: 'pointer',
+                          border: selectedElement.fill === 'none' ? '2px solid var(--accent)' : '1px solid var(--border)',
+                          backgroundImage: 'linear-gradient(45deg,#666 25%,transparent 25%),linear-gradient(-45deg,#666 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#666 75%),linear-gradient(-45deg,transparent 75%,#666 75%)',
+                          backgroundSize: '6px 6px', backgroundPosition: '0 0,0 3px,3px -3px,-3px 0', backgroundColor: '#fff',
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>{selectedElement.shape === 'line' ? 'Color' : 'Stroke'}</div>
-                  <input type="color" style={{ width: '100%', height: 32, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: 'pointer' }}
-                    value={selectedElement.stroke === 'none' || !selectedElement.stroke ? '#ffffff' : selectedElement.stroke}
-                    onChange={e => onUpdateElement({ stroke: e.target.value })}
-                  />
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <input type="color"
+                      style={{ flex: 1, height: 28, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-card)', cursor: selectedElement.stroke === 'none' ? 'not-allowed' : 'pointer', opacity: selectedElement.stroke === 'none' ? 0.35 : 1 }}
+                      value={selectedElement.stroke === 'none' || !selectedElement.stroke ? '#ffffff' : selectedElement.stroke}
+                      disabled={selectedElement.stroke === 'none'}
+                      onChange={e => onUpdateElement({ stroke: e.target.value })}
+                    />
+                    <button
+                      title="Transparent stroke"
+                      onClick={() => onUpdateElement({ stroke: selectedElement.stroke === 'none' ? '#ffffff' : 'none' })}
+                      style={{
+                        width: 28, height: 28, flexShrink: 0, borderRadius: 4, cursor: 'pointer',
+                        border: selectedElement.stroke === 'none' ? '2px solid var(--accent)' : '1px solid var(--border)',
+                        backgroundImage: 'linear-gradient(45deg,#666 25%,transparent 25%),linear-gradient(-45deg,#666 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#666 75%),linear-gradient(-45deg,transparent 75%,#666 75%)',
+                        backgroundSize: '6px 6px', backgroundPosition: '0 0,0 3px,3px -3px,-3px 0', backgroundColor: '#fff',
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
               <div style={{ marginBottom: 10 }}>
@@ -619,6 +738,33 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
             )}
           </div>
 
+          {/* Drawing element options */}
+          {selectedElement.type === 'drawing' && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Drawing</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)' }}>
+                  <input type="checkbox"
+                    checked={selectedElement.smooth !== false}
+                    onChange={e => onUpdateElement({ smooth: e.target.checked })}
+                    style={{ accentColor: 'var(--accent)' }}
+                  />
+                  Auto-smooth
+                </label>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {(selectedElement.paths || []).length} stroke{(selectedElement.paths || []).length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ width: '100%', justifyContent: 'center', fontSize: 11, padding: '4px 8px', color: '#f87171', borderColor: 'rgba(248,113,113,0.4)' }}
+                onClick={() => onUpdateElement({ paths: [] })}
+              >
+                Clear all strokes
+              </button>
+            </div>
+          )}
+
           {/* Drop Shadow */}
           {selectedElement.type !== 'html' && selectedElement.type !== 'code' && (
             <div style={{ marginBottom: 10 }}>
@@ -714,20 +860,23 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 >
                   None
                 </button>
-                {(presentation.sequenceSections || []).map((sec, i) => (
-                  <button
-                    key={i}
-                    style={{
-                      padding: '4px 8px', fontSize: 11, textAlign: 'left', cursor: 'pointer',
-                      background: slide.activeSection === i ? 'var(--accent)' : 'var(--bg-hover)',
-                      border: '1px solid var(--border)', borderRadius: 4,
-                      color: slide.activeSection === i ? 'white' : 'var(--text-secondary)',
-                    }}
-                    onClick={() => onUpdateSlide({ activeSection: i })}
-                  >
-                    {sec || `Section ${i + 1}`}
-                  </button>
-                ))}
+                {(presentation.sequenceSections || []).map((sec, i) => {
+                  const secLabel = typeof sec === 'string' ? sec : (sec?.label || '')
+                  return (
+                    <button
+                      key={i}
+                      style={{
+                        padding: '4px 8px', fontSize: 11, textAlign: 'left', cursor: 'pointer',
+                        background: slide.activeSection === i ? 'var(--accent)' : 'var(--bg-hover)',
+                        border: '1px solid var(--border)', borderRadius: 4,
+                        color: slide.activeSection === i ? 'white' : 'var(--text-secondary)',
+                      }}
+                      onClick={() => onUpdateSlide({ activeSection: i })}
+                    >
+                      {secLabel || `Section ${i + 1}`}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -755,37 +904,48 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
             {presentation.footerMode === 'sequence' && (
               <div style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>Section Titles</div>
-                {(presentation.sequenceSections || []).map((sec, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 3 }}>
-                    <input
-                      className="prop-input"
-                      type="text"
-                      value={sec}
-                      onChange={e => {
-                        const sections = [...(presentation.sequenceSections || [])]
-                        sections[i] = e.target.value
-                        onUpdatePresentation({ sequenceSections: sections })
-                      }}
-                      placeholder={`Section ${i + 1}`}
-                      style={{ flex: 1, fontSize: 11, padding: '3px 6px' }}
-                    />
-                    <button
-                      className="btn-icon"
-                      style={{ width: 22, height: 22, fontSize: 12, flexShrink: 0 }}
-                      title="Remove section"
-                      onClick={() => {
-                        const sections = [...(presentation.sequenceSections || [])]
-                        sections.splice(i, 1)
-                        onUpdatePresentation({ sequenceSections: sections })
-                      }}
-                    >×</button>
-                  </div>
-                ))}
+                {(presentation.sequenceSections || []).map((sec, i) => {
+                  const secLabel = typeof sec === 'string' ? sec : (sec?.label || '')
+                  const secColor = typeof sec === 'object' && sec?.color ? sec.color : ''
+                  const updateSec = patch => {
+                    const sections = [...(presentation.sequenceSections || [])]
+                    sections[i] = { label: secLabel, color: secColor, ...patch }
+                    onUpdatePresentation({ sequenceSections: sections })
+                  }
+                  return (
+                    <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 3, alignItems: 'center' }}>
+                      <input
+                        className="prop-input"
+                        type="text"
+                        value={secLabel}
+                        onChange={e => updateSec({ label: e.target.value })}
+                        placeholder={`Section ${i + 1}`}
+                        style={{ flex: 1, fontSize: 11, padding: '3px 6px' }}
+                      />
+                      <input type="color"
+                        title="Active color for this section (overrides default)"
+                        value={secColor || (presentation.footerColor || '#a8b4c8')}
+                        onChange={e => updateSec({ color: e.target.value })}
+                        style={{ width: 22, height: 22, padding: 1, background: 'var(--bg-card)', border: secColor ? '2px solid var(--accent)' : '1px solid var(--border)', borderRadius: 3, cursor: 'pointer', flexShrink: 0 }}
+                      />
+                      <button
+                        className="btn-icon"
+                        style={{ width: 22, height: 22, fontSize: 12, flexShrink: 0 }}
+                        title="Remove section"
+                        onClick={() => {
+                          const sections = [...(presentation.sequenceSections || [])]
+                          sections.splice(i, 1)
+                          onUpdatePresentation({ sequenceSections: sections })
+                        }}
+                      >×</button>
+                    </div>
+                  )
+                })}
                 <button
                   className="btn btn-secondary"
                   style={{ width: '100%', justifyContent: 'center', fontSize: 11, padding: '3px 8px', marginTop: 2 }}
                   onClick={() => {
-                    const sections = [...(presentation.sequenceSections || []), '']
+                    const sections = [...(presentation.sequenceSections || []), { label: '', color: '' }]
                     onUpdatePresentation({ sequenceSections: sections })
                   }}
                 >+ Add Section</button>

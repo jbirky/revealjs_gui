@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useEditor } from '@tiptap/react'
+import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import TextAlign from '@tiptap/extension-text-align'
@@ -18,6 +18,7 @@ import { api } from '../utils/api'
 import { generateLatexIframeHtml } from '../utils/latexRenderer'
 import { downloadHTML, presentInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
 import { exportToPptx } from '../utils/exportPptx'
+import { simplifyPoints } from '../utils/drawingUtils'
 import { generateOfflineHTML } from '../utils/offlineExport'
 import Toolbar from '../components/Toolbar'
 import SlidePanel from '../components/SlidePanel'
@@ -29,6 +30,8 @@ import AnimationTimeline from '../components/AnimationTimeline'
 import { MathNode } from '../extensions/MathExtension'
 import { FontSize } from '../extensions/FontSize'
 import { FontFamily } from '../extensions/FontFamily'
+import { FontWeight } from '../extensions/FontWeight'
+import { LineHeight } from '../extensions/LineHeight'
 import monokaiCSS from '../../../node_modules/highlight.js/styles/monokai.min.css?raw'
 import githubDarkCSS from '../../../node_modules/highlight.js/styles/github-dark.min.css?raw'
 import atomOneDarkCSS from '../../../node_modules/highlight.js/styles/atom-one-dark.min.css?raw'
@@ -143,6 +146,7 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [showTransitionPreview, setShowTransitionPreview] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [shareStatus, setShareStatus] = useState({ shared: false, token: null })
+  const [showExportMenu, setShowExportMenu] = useState(false)
   const [showTimeline, setShowTimeline] = useState(false)
   const [smartGuidesEnabled, setSmartGuidesEnabled] = useState(true)
   const [showMasterPanel, setShowMasterPanel] = useState(false)
@@ -157,6 +161,11 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [showRulers, setShowRulers] = useState(false)
   const [guides, setGuides] = useState([]) // persistent guide lines: [{ axis: 'x'|'y', position: number }]
+  const [drawTool, setDrawTool] = useState(null) // null = off, { color, strokeWidth, opacity, smooth } = drawing mode
+  const [manimEditorState, setManimEditorState] = useState(null) // { elementId, content, sceneName, quality, rendered, rendering, error }
+  const [pendingAddColumn, setPendingAddColumn] = useState(null) // colNum to add slide to when template modal confirms
+  const [activeMathNode, setActiveMathNode] = useState(null) // { latex, display, fontSize, color } when inline math node is clicked
+  const mathNodeUpdateRef = useRef(null) // holds the TipTap updateAttributes fn for the active math node
 
   // Track if we're programmatically setting editor content (to avoid loops)
   const settingContent = useRef(false)
@@ -173,6 +182,29 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   useEffect(() => {
     editingElementIdRef.current = editingElementId
   }, [editingElementId])
+
+  // Clear active math node when the text element stops being edited
+  useEffect(() => {
+    if (!editingElementId) {
+      setActiveMathNode(null)
+      mathNodeUpdateRef.current = null
+    }
+  }, [editingElementId])
+
+  // Listen for clicks on inline math nodes (fired by MathExtension node view)
+  useEffect(() => {
+    const handler = (e) => {
+      setActiveMathNode({
+        latex:    e.detail.latex,
+        display:  e.detail.display,
+        fontSize: e.detail.fontSize,
+        color:    e.detail.color,
+      })
+      mathNodeUpdateRef.current = e.detail.update
+    }
+    document.addEventListener('math-node-edit', handler)
+    return () => document.removeEventListener('math-node-edit', handler)
+  }, [])
 
   useEffect(() => {
     currentSlideIndexRef.current = currentSlideIndex
@@ -253,6 +285,8 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
       MathNode,
       FontFamily,
       FontSize,
+      FontWeight,
+      LineHeight,
       Highlight.configure({ multicolor: true }),
       Table.configure({ resizable: false }),
       TableRow,
@@ -655,6 +689,121 @@ svg.selectAll('circle').data(data).join('circle')
     setSelectedElementIds([newEl.id])
   }, [currentSlide])
 
+  const addDrawingStroke = useCallback((stroke) => {
+    const pts = simplifyPoints(stroke.points, 1.5)
+    if (pts.length < 2) return
+    const newPath = { points: pts, color: stroke.color, strokeWidth: stroke.strokeWidth, opacity: stroke.opacity }
+    setPresentation(prev => {
+      if (!prev) return prev
+      const slides = prev.slides.map((s, i) => {
+        if (i !== currentSlideIndexRef.current) return s
+        const elements = s.elements || []
+        const existing = [...elements].reverse().find(el => el.type === 'drawing')
+        if (existing) {
+          return {
+            ...s,
+            elements: elements.map(el =>
+              el.id === existing.id
+                ? { ...el, paths: [...(el.paths || []), newPath], smooth: stroke.smooth }
+                : el
+            )
+          }
+        }
+        const maxZ = elements.reduce((m, el) => Math.max(m, el.zIndex || 0), 0)
+        return {
+          ...s,
+          elements: [...elements, {
+            id: crypto.randomUUID(),
+            type: 'drawing',
+            x: 0, y: 0,
+            width: slideW, height: slideH,
+            zIndex: maxZ + 1,
+            paths: [newPath],
+            smooth: stroke.smooth,
+          }]
+        }
+      })
+      return { ...prev, slides }
+    })
+  }, [slideW, slideH])
+
+  const DEFAULT_MANIM = `from manim import *
+
+class MyScene(Scene):
+    def construct(self):
+        circle = Circle(radius=2, color=BLUE)
+        square = Square(side_length=2, color=RED)
+
+        title = Text("Manim Animation", font_size=36).to_edge(UP)
+        self.play(Write(title))
+        self.play(Create(circle))
+        self.wait(0.5)
+        self.play(Transform(circle, square))
+        self.wait(1)
+`
+
+  const addManimElement = useCallback(() => {
+    const newEl = {
+      id: crypto.randomUUID(),
+      type: 'manim',
+      x: 160, y: 90, width: 640, height: 360, zIndex: 2,
+      content: DEFAULT_MANIM,
+      sceneName: 'MyScene',
+      quality: 'l',
+      rendered: null,
+      loop: true,
+      autoplay: true,
+      muted: true,
+      controls: false,
+    }
+    setPresentation(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        slides: prev.slides.map((s, i) =>
+          i === currentSlideIndexRef.current ? { ...s, elements: [...(s.elements || []), newEl] } : s
+        )
+      }
+    })
+    setSelectedElementIds([newEl.id])
+    setManimEditorState({ elementId: newEl.id, content: newEl.content, sceneName: newEl.sceneName, quality: newEl.quality, rendered: null, rendering: false, error: null })
+  }, [DEFAULT_MANIM])
+
+  const openManimEditor = useCallback((elementId) => {
+    const slide = presentation?.slides[currentSlideIndexRef.current]
+    const element = slide?.elements?.find(el => el.id === elementId)
+    if (!element || element.type !== 'manim') return
+    setManimEditorState({ elementId, content: element.content || DEFAULT_MANIM, sceneName: element.sceneName || 'MyScene', quality: element.quality || 'l', rendered: element.rendered || null, rendering: false, error: null })
+  }, [presentation, DEFAULT_MANIM])
+
+  const commitManimEdit = useCallback(() => {
+    if (!manimEditorState) return
+    updateElement(manimEditorState.elementId, {
+      content: manimEditorState.content,
+      sceneName: manimEditorState.sceneName,
+      quality: manimEditorState.quality,
+      rendered: manimEditorState.rendered,
+    })
+    setManimEditorState(null)
+  }, [manimEditorState, updateElement])
+
+  const renderManim = useCallback(async () => {
+    if (!manimEditorState) return
+    setManimEditorState(s => ({ ...s, rendering: true, error: null }))
+    try {
+      const res = await fetch('/api/render-manim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: manimEditorState.content, sceneName: manimEditorState.sceneName, quality: manimEditorState.quality }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Render failed')
+      setManimEditorState(s => ({ ...s, rendered: data.url, rendering: false, error: null }))
+    } catch (err) {
+      setManimEditorState(s => ({ ...s, rendering: false, error: err.message }))
+    }
+  }, [manimEditorState])
+
   const addVideoElement = useCallback((src) => {
     const newEl = {
       id: crypto.randomUUID(),
@@ -762,10 +911,41 @@ svg.selectAll('circle').data(data).join('circle')
     })
   }, [currentSlide, updateElement])
 
+  const doUndo = useCallback(() => {
+    const hist = historyRef.current
+    if (hist.length < 2) return
+    applyingUndoRef.current = true
+    redoStackRef.current = [...redoStackRef.current.slice(-19), hist[hist.length - 1]]
+    const newHist = hist.slice(0, -1)
+    historyRef.current = newHist
+    const prevState = newHist[newHist.length - 1]
+    setPresentation(prevState)
+    setCurrentSlideIndex(ci => Math.min(ci, prevState.slides.length - 1))
+  }, [])
+
+  const updateMathNode = useCallback((attrs) => {
+    setActiveMathNode(prev => prev ? { ...prev, ...attrs } : null)
+    if (mathNodeUpdateRef.current) mathNodeUpdateRef.current(attrs)
+  }, [])
+
+  const doRedo = useCallback(() => {
+    const stack = redoStackRef.current
+    if (!stack.length) return
+    applyingUndoRef.current = true
+    const redoState = stack[stack.length - 1]
+    redoStackRef.current = stack.slice(0, -1)
+    setPresentation(prev => {
+      if (prev) historyRef.current = [...historyRef.current.slice(-49), JSON.parse(JSON.stringify(prev))]
+      return redoState
+    })
+    setCurrentSlideIndex(ci => Math.min(ci, redoState.slides.length - 1))
+  }, [])
+
   // Cut / copy / paste / duplicate keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e) => {
       if (e.key === 'Escape') {
+        if (drawTool) { setDrawTool(null); e.preventDefault(); return }
         if (editingElementId) { stopEditingElement(); setSelectedElementIds([]); e.preventDefault(); return }
         if (selectedElementIds.length > 0) { setSelectedElementIds([]); e.preventDefault(); return }
       }
@@ -820,32 +1000,14 @@ svg.selectAll('circle').data(data).join('circle')
         setSelectedElementIds([newEl.id])
         e.preventDefault()
       } else if (e.key === 'z' && !e.shiftKey) {
-        const hist = historyRef.current
-        if (hist.length < 2) return
-        applyingUndoRef.current = true
-        // Save current to redo stack before undoing
-        redoStackRef.current = [...redoStackRef.current.slice(-19), hist[hist.length - 1]]
-        const newHist = hist.slice(0, -1)
-        historyRef.current = newHist
-        const prevState = newHist[newHist.length - 1]
-        setPresentation(prevState)
-        setCurrentSlideIndex(ci => Math.min(ci, prevState.slides.length - 1))
-        e.preventDefault()
+        doUndo(); e.preventDefault()
       } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
-        const stack = redoStackRef.current
-        if (!stack.length) return
-        applyingUndoRef.current = true
-        const redoState = stack[stack.length - 1]
-        redoStackRef.current = stack.slice(0, -1)
-        if (presentation) historyRef.current = [...historyRef.current.slice(-49), JSON.parse(JSON.stringify(presentation))]
-        setPresentation(redoState)
-        setCurrentSlideIndex(ci => Math.min(ci, redoState.slides.length - 1))
-        e.preventDefault()
+        doRedo(); e.preventDefault()
       }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [selectedElementId, selectedElementIds, editingElementId, clipboard, presentation, currentSlideIndex, deleteElement, stopEditingElement])
+  }, [selectedElementId, selectedElementIds, editingElementId, clipboard, presentation, currentSlideIndex, deleteElement, stopEditingElement, doUndo, doRedo, drawTool])
 
   // Inject hljs theme CSS into the document head for the editor preview
   useEffect(() => {
@@ -983,14 +1145,130 @@ svg.selectAll('circle').data(data).join('circle')
     })
   }, [])
 
-  const addSlide = (templateKey = null) => {
+  // Helper: build a map of colNum → flat indices within that column
+  const getColumnsMap = (slides) => {
+    const colMap = {}
+    slides.forEach((s, i) => {
+      const c = s.column ?? 0
+      if (!colMap[c]) colMap[c] = []
+      colMap[c].push(i)
+    })
+    return colMap
+  }
+
+  const addSlide = (templateKey = null, targetColNum = null) => {
+    const is2D = presentation.slides.some(s => s.column !== undefined)
+    // Determine which column to add to
+    const colNum = targetColNum !== null
+      ? targetColNum
+      : is2D
+        ? (presentation.slides[currentSlideIndex]?.column ?? 0)
+        : null // 1D mode: append at end
+
     const template = templateKey && SLIDE_TEMPLATES[templateKey] ? SLIDE_TEMPLATES[templateKey] : null
     const baseElements = template
       ? template.elements.map(el => ({ ...el, id: crypto.randomUUID() }))
       : [{ id: crypto.randomUUID(), type: 'text', x: 80, y: 160, width: 800, height: 220, zIndex: 1, content: '<h2 style="text-align: center">New Slide</h2><p style="text-align: center">Double-click to edit</p>' }]
-    const newSlide = { id: crypto.randomUUID(), elements: baseElements, notes: '', background: { type: 'color', color: '#1e1e2e' } }
-    setPresentation(prev => ({ ...prev, slides: [...prev.slides, newSlide] }))
-    setCurrentSlideIndex(presentation.slides.length)
+    const newSlide = {
+      id: crypto.randomUUID(),
+      ...(colNum !== null ? { column: colNum } : {}),
+      elements: baseElements,
+      notes: '',
+      background: { type: 'color', color: '#1e1e2e' }
+    }
+
+    if (colNum === null || !is2D) {
+      // 1D: append at end
+      setPresentation(prev => ({ ...prev, slides: [...prev.slides, newSlide] }))
+      setCurrentSlideIndex(presentation.slides.length)
+    } else {
+      // 2D: insert after the last slide in this column
+      const colMap = getColumnsMap(presentation.slides)
+      const colSlides = colMap[colNum] || []
+      const insertAfterIdx = colSlides.length > 0 ? colSlides[colSlides.length - 1] : presentation.slides.length - 1
+      const newFlatIndex = insertAfterIdx + 1
+      setPresentation(prev => {
+        const slides = [...prev.slides]
+        slides.splice(newFlatIndex, 0, newSlide)
+        return { ...prev, slides }
+      })
+      setCurrentSlideIndex(newFlatIndex)
+    }
+  }
+
+  const addColumn = () => {
+    const slides = presentation?.slides || []
+    const is2D = slides.some(s => s.column !== undefined)
+    const maxCol = is2D ? slides.reduce((m, s) => Math.max(m, s.column ?? 0), 0) : 0
+    const newColNum = maxCol + 1
+    const newSlide = {
+      id: crypto.randomUUID(),
+      column: newColNum,
+      elements: [{ id: crypto.randomUUID(), type: 'text', x: 80, y: 160, width: 800, height: 220, zIndex: 1, content: '<h2 style="text-align: center">New Slide</h2><p style="text-align: center">Double-click to edit</p>' }],
+      notes: '',
+      background: { type: 'color', color: '#1e1e2e' }
+    }
+    setPresentation(prev => ({
+      ...prev,
+      slides: [
+        ...(is2D ? prev.slides : prev.slides.map(s => ({ ...s, column: 0 }))),
+        newSlide
+      ]
+    }))
+    setCurrentSlideIndex(slides.length) // new slide appended at end
+  }
+
+  const moveSlideToColumn = (flatIndex, newColNum) => {
+    setPresentation(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        slides: prev.slides.map((s, i) => i === flatIndex ? { ...s, column: newColNum } : s)
+      }
+    })
+  }
+
+  const moveSlideInColumn = (flatIndex, direction) => {
+    if (!presentation) return
+    const slides = presentation.slides
+    const col = slides[flatIndex]?.column ?? 0
+    const colItems = slides
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => (s.column ?? 0) === col)
+    const rowIdx = colItems.findIndex(({ i }) => i === flatIndex)
+    const targetRowIdx = rowIdx + direction
+    if (targetRowIdx < 0 || targetRowIdx >= colItems.length) return
+    const targetFlatIndex = colItems[targetRowIdx].i
+    setPresentation(prev => {
+      const arr = [...prev.slides]
+      ;[arr[flatIndex], arr[targetFlatIndex]] = [arr[targetFlatIndex], arr[flatIndex]]
+      return { ...prev, slides: arr }
+    })
+    if (currentSlideIndex === flatIndex) setCurrentSlideIndex(targetFlatIndex)
+    else if (currentSlideIndex === targetFlatIndex) setCurrentSlideIndex(flatIndex)
+  }
+
+  const handleImportPptx = async (file) => {
+    if (!file || !presentationId) return
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(`/api/presentations/${presentationId}/import-pptx`, { method: 'POST', body: fd })
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Import failed') }
+    const { urls } = await res.json()
+    const sw = presentation.slideWidth || 960
+    const sh = presentation.slideHeight || 540
+    const newSlides = urls.map(url => ({
+      id: crypto.randomUUID(),
+      elements: [{ id: crypto.randomUUID(), type: 'image', src: url, x: 0, y: 0, width: sw, height: sh, objectFit: 'contain', zIndex: 1 }],
+      notes: '',
+      background: { type: 'color', color: '#000000' },
+    }))
+    setPresentation(prev => {
+      const slides = [...prev.slides]
+      slides.splice(currentSlideIndex + 1, 0, ...newSlides)
+      return { ...prev, slides }
+    })
+    setCurrentSlideIndex(currentSlideIndex + 1)
   }
 
   const deleteSlide = (index) => {
@@ -1197,64 +1475,55 @@ svg.selectAll('circle').data(data).join('circle')
             <Clock size={14} />
           </button>
 
-          <button
-            className="btn btn-secondary"
-            onClick={async () => {
-              const status = await api.getShareStatus(presentationId)
-              setShareStatus(status)
-              setShowShareModal(true)
-            }}
-            title="Share presentation"
-          >
-            <Share2 size={14} />
-            Share
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={() => exportPDF(presentation)}
-            title="Export PDF"
-          >
-            <Download size={14} />
-            PDF
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={() => exportToPptx(presentation)}
-            title="Export PowerPoint"
-          >
-            <Download size={14} />
-            PPTX
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={() => downloadHTML(presentation)}
-            title="Export HTML"
-          >
-            <Download size={14} />
-            HTML
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={async () => {
-              const html = generateRevealHTML(presentation)
-              const offline = await generateOfflineHTML(html)
-              const blob = new Blob([offline], { type: 'text/html' })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `${(presentation.title || 'presentation').replace(/[^a-z0-9]/gi, '_')}_offline.html`
-              a.click()
-              URL.revokeObjectURL(url)
-            }}
-            title="Export offline HTML (no internet needed)"
-          >
-            <FileDown size={14} />
-            Offline
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              className={`btn btn-secondary ${showExportMenu ? 'active' : ''}`}
+              onClick={() => setShowExportMenu(v => !v)}
+              title="Export / Share"
+            >
+              <Download size={14} />
+              Export
+            </button>
+            {showExportMenu && (
+              <div
+                style={{
+                  position: 'absolute', top: 'calc(100% + 4px)', right: 0,
+                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: 4, zIndex: 1000, minWidth: 170,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', gap: 2,
+                }}
+                onMouseLeave={() => setShowExportMenu(false)}
+              >
+                {[
+                  { label: 'Share link', icon: <Share2 size={13} />, action: async () => { const status = await api.getShareStatus(presentationId); setShareStatus(status); setShowShareModal(true) } },
+                  { label: 'Export PDF', icon: <Download size={13} />, action: () => exportPDF(presentation) },
+                  { label: 'Export PPTX', icon: <Download size={13} />, action: () => exportToPptx(presentation) },
+                  { label: 'Export HTML', icon: <Download size={13} />, action: () => downloadHTML(presentation) },
+                  { label: 'Export Offline HTML', icon: <FileDown size={13} />, action: async () => {
+                    const html = generateRevealHTML(presentation)
+                    const offline = await generateOfflineHTML(html)
+                    const blob = new Blob([offline], { type: 'text/html' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `${(presentation.title || 'presentation').replace(/[^a-z0-9]/gi, '_')}_offline.html`
+                    a.click()
+                    URL.revokeObjectURL(url)
+                  }},
+                ].map(({ label, icon, action }) => (
+                  <button
+                    key={label}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', borderRadius: 5, textAlign: 'left', whiteSpace: 'nowrap' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    onClick={() => { setShowExportMenu(false); action() }}
+                  >
+                    {icon}{label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <button
             className="btn btn-secondary"
@@ -1640,10 +1909,13 @@ svg.selectAll('circle').data(data).join('circle')
           slides={presentation.slides}
           currentIndex={currentSlideIndex}
           onSelect={setCurrentSlideIndex}
-          onAdd={() => setShowTemplateModal(true)}
+          onAdd={(colNum) => { setPendingAddColumn(colNum ?? null); setShowTemplateModal(true) }}
+          onAddColumn={addColumn}
           onDelete={deleteSlide}
           onDuplicate={duplicateSlide}
           onMove={moveSlide}
+          onMoveInColumn={moveSlideInColumn}
+          onMoveToColumn={moveSlideToColumn}
           slideW={slideW}
           slideH={slideH}
         />
@@ -1681,6 +1953,7 @@ svg.selectAll('circle').data(data).join('circle')
             }}
             onAddAudio={addAudioElement}
             onAddTable={addTableElement}
+            onAddManim={addManimElement}
             selectedCount={selectedElementIds.length}
             onAlignElements={alignElements}
             smartGuidesEnabled={smartGuidesEnabled}
@@ -1691,6 +1964,13 @@ svg.selectAll('circle').data(data).join('circle')
             onUngroupElements={ungroupElements}
             showRulers={showRulers}
             onToggleRulers={() => setShowRulers(v => !v)}
+            onImportPptx={handleImportPptx}
+            drawTool={drawTool}
+            onSetDrawTool={setDrawTool}
+            onUndo={doUndo}
+            onRedo={doRedo}
+            canUndo={historyRef.current.length >= 2}
+            canRedo={redoStackRef.current.length > 0}
           />
           <div className="canvas-area" style={{ display: 'flex', flexDirection: 'column' }}>
             <SlideCanvas
@@ -1737,12 +2017,15 @@ svg.selectAll('circle').data(data).join('circle')
               onOpenHtmlEditor={openHtmlEditor}
               onOpenCodeEditor={openCodeEditor}
               onOpenLatexEditor={openLatexEditor}
+              onOpenManimEditor={openManimEditor}
               onAddImage={async (file, dropX, dropY) => {
                 const result = await api.uploadFile(file)
                 if (result.url) addImageElement(result.url, dropX, dropY)
               }}
               slideW={slideW}
               slideH={slideH}
+              drawTool={drawTool}
+              onAddDrawingStroke={addDrawingStroke}
             />
           </div>
         </div>
@@ -1763,6 +2046,9 @@ svg.selectAll('circle').data(data).join('circle')
           selectedElementIds={selectedElementIds}
           onDeleteSelectedElements={deleteSelectedElements}
           isTemplate={isTemplate}
+          activeMathNode={activeMathNode}
+          onUpdateMathNode={updateMathNode}
+          onCloseMathNode={() => { setActiveMathNode(null); mathNodeUpdateRef.current = null }}
         />
 
       {/* HTML / D3 Code Editor Modal */}
@@ -1918,6 +2204,115 @@ svg.selectAll('circle').data(data).join('circle')
         </div>
       )}
 
+      {/* Manim Editor Modal */}
+      {manimEditorState && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onKeyDown={e => { if (e.key === 'Escape' && !manimEditorState.rendering) setManimEditorState(null) }}
+        >
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, width: '90vw', maxWidth: 1200, height: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}>
+            {/* Header */}
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>Manim Animation</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Scene:</span>
+                <input
+                  className="prop-input"
+                  value={manimEditorState.sceneName}
+                  onChange={e => setManimEditorState(s => ({ ...s, sceneName: e.target.value }))}
+                  style={{ width: 140, fontSize: 12, padding: '3px 6px' }}
+                  placeholder="SceneName"
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Quality:</span>
+                <select
+                  value={manimEditorState.quality}
+                  onChange={e => setManimEditorState(s => ({ ...s, quality: e.target.value }))}
+                  style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '3px 6px', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
+                >
+                  <option value="l">Low (480p, fastest)</option>
+                  <option value="m">Medium (720p)</option>
+                  <option value="h">High (1080p, slow)</option>
+                </select>
+              </div>
+              <button
+                className="btn btn-primary"
+                style={{ fontSize: 12, padding: '4px 14px', opacity: manimEditorState.rendering ? 0.6 : 1 }}
+                onClick={renderManim}
+                disabled={manimEditorState.rendering}
+              >
+                {manimEditorState.rendering ? '⏳ Rendering…' : '▶ Render'}
+              </button>
+              {manimEditorState.rendered && !manimEditorState.rendering && (
+                <span style={{ fontSize: 11, color: '#4ade80' }}>✓ Rendered</span>
+              )}
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={() => setManimEditorState(null)} disabled={manimEditorState.rendering}>Cancel</button>
+                <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={commitManimEdit} disabled={manimEditorState.rendering}>Apply</button>
+              </div>
+            </div>
+
+            {/* Body: editor left, preview right */}
+            <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+              {/* Code editor */}
+              <textarea
+                value={manimEditorState.content}
+                onChange={e => setManimEditorState(s => ({ ...s, content: e.target.value }))}
+                style={{ flex: '0 0 58%', background: '#0d0d1a', color: '#e2e8f0', fontFamily: "'Fira Code','JetBrains Mono',monospace", fontSize: 13, padding: '16px 20px', border: 'none', outline: 'none', resize: 'none', lineHeight: 1.6, tabSize: 4, borderRight: '1px solid var(--border)', borderRadius: '0 0 0 12px' }}
+                spellCheck={false}
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Tab') {
+                    e.preventDefault()
+                    const { selectionStart: s, selectionEnd: end, value } = e.target
+                    const next = value.substring(0, s) + '    ' + value.substring(end)
+                    e.target.value = next
+                    setManimEditorState(st => ({ ...st, content: next }))
+                    requestAnimationFrame(() => { e.target.selectionStart = e.target.selectionEnd = s + 4 })
+                  }
+                }}
+              />
+
+              {/* Preview panel */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#0a0a14', borderRadius: '0 0 12px 0' }}>
+                {manimEditorState.rendering && (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: 32 }}>⏳</div>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>Rendering…</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 260, textAlign: 'center' }}>
+                      This can take 10–60 seconds depending on animation length and quality.
+                    </div>
+                  </div>
+                )}
+                {!manimEditorState.rendering && manimEditorState.error && (
+                  <div style={{ flex: 1, padding: 20, overflow: 'auto' }}>
+                    <div style={{ fontSize: 12, color: '#f87171', marginBottom: 8, fontWeight: 600 }}>Render Error</div>
+                    <pre style={{ fontSize: 11, color: '#fca5a5', fontFamily: 'monospace', whiteSpace: 'pre-wrap', lineHeight: 1.5, margin: 0 }}>{manimEditorState.error}</pre>
+                  </div>
+                )}
+                {!manimEditorState.rendering && !manimEditorState.error && manimEditorState.rendered && (
+                  <video
+                    key={manimEditorState.rendered}
+                    src={manimEditorState.rendered}
+                    controls
+                    autoPlay
+                    loop
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', borderRadius: '0 0 12px 0' }}
+                  />
+                )}
+                {!manimEditorState.rendering && !manimEditorState.error && !manimEditorState.rendered && (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: 40, opacity: 0.3 }}>🎬</div>
+                    <div style={{ fontSize: 13 }}>Click <strong style={{ color: 'var(--text-primary)' }}>▶ Render</strong> to generate the animation</div>
+                    <div style={{ fontSize: 11, opacity: 0.6 }}>Low quality renders in ~10–30 seconds</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Find & Replace */}
       {showFindReplace && (
         <FindReplaceBar
@@ -2013,13 +2408,13 @@ svg.selectAll('circle').data(data).join('circle')
       )}
 
       {showTemplateModal && (
-        <div className="modal-overlay" onClick={() => setShowTemplateModal(false)}>
+        <div className="modal-overlay" onClick={() => { setShowTemplateModal(false); setPendingAddColumn(null) }}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
             <h2 style={{ marginBottom: 16 }}>Add Slide</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
               {Object.entries(SLIDE_TEMPLATES).map(([key, tmpl]) => (
                 <button key={key}
-                  onClick={() => { addSlide(key); setShowTemplateModal(false) }}
+                  onClick={() => { addSlide(key, pendingAddColumn); setPendingAddColumn(null); setShowTemplateModal(false) }}
                   style={{ background: 'var(--bg-card)', border: '2px solid var(--border)', borderRadius: 8, padding: 10, cursor: 'pointer', textAlign: 'left' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = 'var(--bg-hover)' }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)' }}
@@ -2039,9 +2434,16 @@ svg.selectAll('circle').data(data).join('circle')
               ))}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowTemplateModal(false)}>Cancel</button>
+              <button className="btn btn-secondary" onClick={() => { setShowTemplateModal(false); setPendingAddColumn(null) }}>Cancel</button>
             </div>
           </div>
+        </div>
+      )}
+      {/* Park the TipTap editor DOM off-screen when not editing so ProseMirror's
+          contenteditable node doesn't float at (0,0) inside the slide canvas. */}
+      {!editingElementId && (
+        <div style={{ position: 'fixed', left: -9999, top: -9999, width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none', opacity: 0 }}>
+          <EditorContent editor={editor} />
         </div>
       )}
       </div>

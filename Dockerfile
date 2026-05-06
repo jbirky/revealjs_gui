@@ -19,7 +19,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Install rclone for cloud sync (Proton Drive, etc.) and ffmpeg for video transcoding
-RUN apk add --no-cache rclone ffmpeg
+RUN apk add --no-cache rclone ffmpeg libreoffice poppler-utils
 
 # Copy workspace manifests
 COPY package.json package-lock.json ./

@@ -1,9 +1,25 @@
 import { shapeSvgString } from './shapeUtils'
+import { pointsToPath } from './drawingUtils'
 
 function absoluteSrc(src) {
   if (!src) return src
   if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) return src
   return `${window.location.origin}${src.startsWith('/') ? '' : '/'}${src}`
+}
+
+// Group slides by column for 2D navigation.
+// If no slide has a `column` property, returns each slide as its own single-item column (1D mode).
+function getSlideColumns(slides) {
+  const is2D = slides.some(s => s.column !== undefined)
+  if (!is2D) return slides.map(s => [s])
+  const colMap = {}
+  slides.forEach(s => {
+    const c = s.column ?? 0
+    if (!colMap[c]) colMap[c] = []
+    colMap[c].push(s)
+  })
+  const sortedKeys = Object.keys(colMap).map(Number).sort((a, b) => a - b)
+  return sortedKeys.map(k => colMap[k])
 }
 
 export function generateRevealHTML(presentation) {
@@ -25,7 +41,9 @@ export function generateRevealHTML(presentation) {
   const totalNumberedSlides = (presentation.slides || []).filter(s => s.showPageNumber !== false).length
   let pageCounter = 0
 
-  const slidesHtml = presentation.slides.map((slide, slideIndex) => {
+  // Build per-slide section HTML (preserving pageCounter increment order via flat array)
+  const slideSectionHtmlByIndex = new Map()
+  presentation.slides.forEach((slide, slideIndex) => {
     const bgAttrs = getBackgroundAttrs(slide.background)
     const notes = slide.notes ? `<aside class="notes">${slide.notes}</aside>` : ''
 
@@ -122,16 +140,15 @@ export function generateRevealHTML(presentation) {
           const escaped = srcdoc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
           return `<iframe${fragClass}${fragIdx} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
-        if (el.type === 'video') {
-          const src = absoluteSrc(el.src)
+        if (el.type === 'video' || (el.type === 'manim' && el.rendered)) {
+          const src = absoluteSrc(el.type === 'manim' ? el.rendered : el.src)
           const attrs = []
-          if (el.controls !== false) attrs.push('controls')
-          if (el.autoplay) attrs.push('autoplay')
-          if (el.loop) attrs.push('loop')
-          if (el.muted) attrs.push('muted')
+          if (el.type === 'manim') { if (el.controls) attrs.push('controls'); if (el.autoplay !== false) attrs.push('autoplay'); if (el.loop !== false) attrs.push('loop'); if (el.muted !== false) attrs.push('muted') }
+          else { if (el.controls !== false) attrs.push('controls'); if (el.autoplay) attrs.push('autoplay'); if (el.loop) attrs.push('loop'); if (el.muted) attrs.push('muted') }
           const posterAttr = el.poster ? ` poster="${absoluteSrc(el.poster)}"` : ''
-          return `<div${fragClass}${fragIdx} style="${style}"><video src="${src}" ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:${el.objectFit||'contain'};display:block;"></video></div>`
+          return `<div${fragClass}${fragIdx} style="${style}"><video src="${src}" ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:contain;display:block;background:#000;"></video></div>`
         }
+        if (el.type === 'manim' && !el.rendered) return '' // not yet rendered — omit from export
         if (el.type === 'audio') {
           const src = absoluteSrc(el.src)
           const attrs = ['controls']
@@ -158,6 +175,13 @@ export function generateRevealHTML(presentation) {
           }).join('')
           return `<div${fragClass}${fragIdx} style="${style}overflow:auto;"><table style="width:100%;height:100%;border-collapse:collapse;">${rows}</table></div>`
         }
+        if (el.type === 'drawing') {
+          const svgPaths = (el.paths || []).map(path => {
+            const d = pointsToPath(path.points, el.smooth !== false)
+            return `<path d="${d}" stroke="${path.color || '#ffffff'}" stroke-width="${path.strokeWidth || 3}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${path.opacity ?? 1}"/>`
+          }).join('')
+          return `<svg${fragClass}${fragIdx} style="position:absolute;left:0;top:0;width:${slideW}px;height:${slideH}px;overflow:visible;pointer-events:none;z-index:${el.zIndex || 1};">${svgPaths}</svg>`
+        }
         return ''
       }).join('\n')
 
@@ -174,9 +198,11 @@ export function generateRevealHTML(presentation) {
         const activeIdx = slide.activeSection
         const seqSpans = sequenceSections.map((sec, i) => {
           const isActive = activeIdx === i
-          const color = isActive ? (footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor
+          const secLabel = typeof sec === 'string' ? sec : (sec?.label || '')
+          const secActiveColor = typeof sec === 'object' && sec?.color ? sec.color : (footerColor || 'rgba(255,255,255,0.9)')
+          const color = isActive ? secActiveColor : footerInactiveColor
           const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
-          return `<span style="color:${color};${weight}">${escapeHtml(sec || `Section ${i+1}`)}</span>`
+          return `<span style="color:${color};${weight}">${escapeHtml(secLabel || `Section ${i+1}`)}</span>`
         }).join('')
         const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
         footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
@@ -187,7 +213,18 @@ export function generateRevealHTML(presentation) {
     }
     const gridHtml = showPresentGrid ? `      <div style="position:absolute;inset:0;z-index:950;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,0.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.12) 1px,transparent 1px);background-size:${presentGridSize}px ${presentGridSize}px;"></div>` : ''
 
-    return `    <section${bgAttrs} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`
+    slideSectionHtmlByIndex.set(slideIndex, `    <section${bgAttrs} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`)
+  })
+
+  // Group into columns for 2D output
+  const columns = getSlideColumns(presentation.slides)
+  const slidesHtml = columns.map(colSlides => {
+    const sections = colSlides.map(slide => {
+      const idx = presentation.slides.indexOf(slide)
+      return slideSectionHtmlByIndex.get(idx) || ''
+    }).join('\n')
+    if (colSlides.length === 1) return sections
+    return `    <section>\n${sections}\n    </section>`
   }).join('\n')
 
   return `<!doctype html>
@@ -201,7 +238,7 @@ export function generateRevealHTML(presentation) {
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/${presentation.theme || 'black'}.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/${codeTheme}.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Source+Sans+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:wght@400;700&family=Merriweather:wght@400;700&family=Fira+Code:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Roboto:wght@100;300;400;500;700;900&family=Open+Sans:wght@300;400;500;600;700;800&family=Source+Sans+Pro:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700;1,900&family=Playfair+Display:wght@400;500;600;700;800;900&family=Merriweather:wght@300;400;700;900&family=Fira+Code:wght@300;400;500;600;700&family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/fonts.css">
   <style>
     @font-face { font-family: 'Latin Modern Roman'; font-style: normal; font-weight: 400; src: url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-regular.woff2') format('woff2'), url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-regular.woff') format('woff'); }
@@ -229,8 +266,10 @@ export function generateRevealHTML(presentation) {
     /* reveal.js constrains/decorates section imgs — reset everything */
     .reveal .slides section img { margin: 0 !important; border: none !important; background: none !important; box-shadow: none !important; max-width: none !important; max-height: none !important; }
     /* Footer — explicit CSS rule with high specificity so reveal.js theme cannot override */
+    /* color only on the container so per-span inline colors (inactive sections) are not overridden */
+    .reveal .slides section .reveal-footer { color: ${footerColor} !important; }
     .reveal .slides section .reveal-footer,
-    .reveal .slides section .reveal-footer * { font-family: ${footerFontFamily} !important; font-size: ${footerFontSize}px !important; color: ${footerColor} !important; }
+    .reveal .slides section .reveal-footer * { font-family: ${footerFontFamily} !important; font-size: ${footerFontSize}px !important; }
     #fs-btn {
       position: fixed; bottom: 16px; right: 16px; z-index: 9999;
       background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.3);
@@ -398,6 +437,10 @@ function generatePrintHTML(presentation) {
         if (el.type === 'video') {
           return `<div style="${style}${vis}display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);color:rgba(255,255,255,0.4);font-family:sans-serif;font-size:16px;">&#9654; Video</div>`
         }
+        if (el.type === 'manim') {
+          if (el.rendered) return `<div style="${style}${vis}"><video src="${absoluteSrc(el.rendered)}" autoplay loop muted style="width:100%;height:100%;object-fit:contain;display:block;background:#000;"></video></div>`
+          return `<div style="${style}${vis}display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);color:rgba(255,255,255,0.4);font-family:sans-serif;font-size:16px;">🎬 Manim (not rendered)</div>`
+        }
         if (el.type === 'audio') {
           return `<div style="${style}${vis}display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);color:rgba(255,255,255,0.4);font-family:sans-serif;font-size:16px;">&#9835; Audio</div>`
         }
@@ -419,6 +462,13 @@ function generatePrintHTML(presentation) {
           }).join('')
           return `<div style="${style}${vis}overflow:auto;"><table style="width:100%;height:100%;border-collapse:collapse;">${rows}</table></div>`
         }
+        if (el.type === 'drawing') {
+          const svgPaths = (el.paths || []).map(path => {
+            const d = pointsToPath(path.points, el.smooth !== false)
+            return `<path d="${d}" stroke="${path.color || '#ffffff'}" stroke-width="${path.strokeWidth || 3}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${path.opacity ?? 1}"/>`
+          }).join('')
+          return `<svg style="position:absolute;left:0;top:0;width:${slideW}px;height:${slideH}px;overflow:visible;pointer-events:none;z-index:${el.zIndex || 1};">${svgPaths}</svg>`
+        }
         return ''
       }).join('\n')
 
@@ -435,9 +485,11 @@ function generatePrintHTML(presentation) {
         const activeIdx = slide.activeSection
         const seqSpans = sequenceSections.map((sec, i) => {
           const isActive = activeIdx === i
-          const color = isActive ? footerColor : footerInactiveColor
+          const secLabel = typeof sec === 'string' ? sec : (sec?.label || '')
+          const secActiveColor = typeof sec === 'object' && sec?.color ? sec.color : footerColor
+          const color = isActive ? secActiveColor : footerInactiveColor
           const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
-          return `<span style="color:${color};${weight}">${escapeHtml(sec || `Section ${i+1}`)}</span>`
+          return `<span style="color:${color};${weight}">${escapeHtml(secLabel || `Section ${i+1}`)}</span>`
         }).join('')
         const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
         footerHtml = `<div style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;font-size:${footerFontSize}px;font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
@@ -458,7 +510,7 @@ function generatePrintHTML(presentation) {
 <head>
   <meta charset="utf-8">
   <title>${title} — PDF</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Source+Sans+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:wght@400;700&family=Merriweather:wght@400;700&family=Fira+Code:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Roboto:wght@100;300;400;500;700;900&family=Open+Sans:wght@300;400;500;600;700;800&family=Source+Sans+Pro:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700;1,900&family=Playfair+Display:wght@400;500;600;700;800;900&family=Merriweather:wght@300;400;700;900&family=Fira+Code:wght@300;400;500;600;700&family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/fonts.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/${codeTheme}.min.css">

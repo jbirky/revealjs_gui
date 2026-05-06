@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../utils/api'
 import {
   Undo2, Redo2,
+  Pencil,
   Bold, Italic, Underline, Strikethrough,
   AlignLeft, AlignCenter, AlignRight,
   List, ListOrdered,
@@ -50,7 +51,7 @@ const GRADIENT_PRESETS_BG = [
   'linear-gradient(135deg, #2c3e50, #3498db)'
 ]
 
-export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddImage, onAddImageUpload, onAddShape, onAddHtml, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers }) {
+export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddImage, onAddImageUpload, onAddShape, onAddHtml, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, onAddManim, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers, onImportPptx, drawTool, onSetDrawTool, onUndo, onRedo, canUndo, canRedo }) {
   const [showShapeMenu, setShowShapeMenu] = useState(false)
   const [showTableMenu, setShowTableMenu] = useState(false)
   const [showColorPalette, setShowColorPalette] = useState(false)
@@ -63,6 +64,8 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
   const pdfInputRef = useRef(null)
   const [pdfModal, setPdfModal] = useState(null) // { pages: [{canvas, num}], selected: Set }
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [pptxLoading, setPptxLoading] = useState(false)
+  const pptxInputRef = useRef(null)
 
   async function handlePdfUpload(file) {
     if (!file) return
@@ -167,6 +170,63 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
 
   return (
     <div className="toolbar">
+      {/* Global Undo / Redo */}
+      <button className="btn-icon" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl+Z)">
+        <Undo2 size={14} />
+      </button>
+      <button className="btn-icon" onClick={onRedo} disabled={!canRedo} title="Redo (Ctrl+Y)">
+        <Redo2 size={14} />
+      </button>
+      <span className="toolbar-divider" />
+
+      {/* Draw / Freehand tool */}
+      <button
+        className={`btn-icon ${drawTool ? 'active' : ''}`}
+        title={drawTool ? 'Exit draw mode (Esc)' : 'Freehand draw'}
+        onClick={() => onSetDrawTool(drawTool ? null : { color: '#ffffff', strokeWidth: 3, opacity: 1, smooth: true })}
+        style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}
+      >
+        <Pencil size={14} /> Draw
+      </button>
+      {drawTool && (
+        <>
+          <input type="color"
+            title="Stroke color"
+            value={drawTool.color || '#ffffff'}
+            onChange={e => onSetDrawTool({ ...drawTool, color: e.target.value })}
+            style={{ width: 28, height: 28, padding: 2, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }}
+          />
+          <select
+            title="Stroke width"
+            value={drawTool.strokeWidth || 3}
+            onChange={e => onSetDrawTool({ ...drawTool, strokeWidth: Number(e.target.value) })}
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '2px 4px', borderRadius: 4, fontSize: 12, width: 52 }}
+          >
+            {[1, 2, 3, 4, 6, 8, 12, 18].map(w => <option key={w} value={w}>{w}px</option>)}
+          </select>
+          <select
+            title="Opacity"
+            value={drawTool.opacity ?? 1}
+            onChange={e => onSetDrawTool({ ...drawTool, opacity: Number(e.target.value) })}
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '2px 4px', borderRadius: 4, fontSize: 12, width: 60 }}
+          >
+            {[1, 0.75, 0.5, 0.25].map(o => <option key={o} value={o}>{Math.round(o * 100)}%</option>)}
+          </select>
+          <button
+            className={`btn-icon ${drawTool.smooth ? 'active' : ''}`}
+            title={drawTool.smooth ? 'Auto-smooth: on' : 'Auto-smooth: off'}
+            onClick={() => onSetDrawTool({ ...drawTool, smooth: !drawTool.smooth })}
+            style={{ width: 'auto', padding: '0 6px', fontSize: 11 }}
+          >
+            ~
+          </button>
+          <button className="btn-icon" title="Undo last stroke (Ctrl+Z)" onClick={onUndo} style={{ width: 'auto', padding: '0 6px', fontSize: 11 }}>
+            ↩
+          </button>
+        </>
+      )}
+      <span className="toolbar-divider" />
+
       {/* Element tools — always active */}
       <button className="btn-icon" title="Add Text Box" onClick={onAddText} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
         <TypeIcon size={14} /> Text
@@ -183,6 +243,34 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
       <label className="btn-icon" title="Import PDF pages as images" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: pdfLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', opacity: pdfLoading ? 0.6 : 1 }}>
         <FileText size={14} /> {pdfLoading ? 'Loading…' : 'PDF'}
         <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handlePdfUpload(f) }} disabled={pdfLoading} />
+      </label>
+
+      <label
+        className="btn-icon"
+        title="Import PowerPoint — each slide becomes a new slide"
+        style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: pptxLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', opacity: pptxLoading ? 0.6 : 1 }}
+      >
+        <FileText size={14} /> {pptxLoading ? 'Converting…' : 'PPTX'}
+        <input
+          ref={pptxInputRef}
+          type="file"
+          accept=".pptx,.ppt,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
+          style={{ display: 'none' }}
+          disabled={pptxLoading}
+          onChange={async e => {
+            const f = e.target.files?.[0]
+            if (!f || !onImportPptx) return
+            if (pptxInputRef.current) pptxInputRef.current.value = ''
+            setPptxLoading(true)
+            try {
+              await onImportPptx(f)
+            } catch (err) {
+              alert('PPTX import failed: ' + err.message)
+            } finally {
+              setPptxLoading(false)
+            }
+          }}
+        />
       </label>
 
       <button className="btn-icon" title="Insert HTML / D3 embed" onClick={onAddHtml} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
@@ -273,6 +361,9 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
         if (r && c) onAddTable?.(r, c)
       }} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
         <Table2 size={14} /> Table
+      </button>
+      <button className="btn-icon" title="Add Manim animation — renders Python/Manim scene to video" onClick={onAddManim} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+        🎬 Manim
       </button>
 
       {/* Shape picker dropdown */}
@@ -567,6 +658,49 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
             {['10px','12px','14px','16px','18px','20px','24px','28px','32px','36px','40px','48px','56px','64px','72px','96px'].map(s => (
               <option key={s} value={s}>{s.replace('px','')}</option>
             ))}
+          </select>
+
+          {/* Font Weight */}
+          <select
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '3px 6px', borderRadius: 4, fontSize: 12, width: 80, cursor: 'pointer' }}
+            value={editor.getAttributes('textStyle').fontWeight || ''}
+            onChange={e => e.target.value ? editor.chain().focus().setFontWeight(e.target.value).run() : editor.chain().focus().unsetFontWeight().run()}
+            title="Font weight"
+          >
+            <option value="">Weight</option>
+            <option value="100">100 Thin</option>
+            <option value="200">200 XLight</option>
+            <option value="300">300 Light</option>
+            <option value="400">400 Regular</option>
+            <option value="500">500 Medium</option>
+            <option value="600">600 SemiBold</option>
+            <option value="700">700 Bold</option>
+            <option value="800">800 ExtraBold</option>
+            <option value="900">900 Black</option>
+          </select>
+
+          {/* Line Height */}
+          <select
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '3px 6px', borderRadius: 4, fontSize: 12, width: 72, cursor: 'pointer' }}
+            value={editor.getAttributes('paragraph').lineHeight || editor.getAttributes('heading').lineHeight || ''}
+            onChange={e => e.target.value ? editor.chain().focus().setLineHeight(e.target.value).run() : editor.chain().focus().unsetLineHeight().run()}
+            title="Line spacing"
+          >
+            <option value="">Spacing</option>
+            <option value="0.7">0.7</option>
+            <option value="0.75">0.75</option>
+            <option value="0.8">0.8</option>
+            <option value="0.85">0.85</option>
+            <option value="0.9">0.9</option>
+            <option value="0.95">0.95</option>
+            <option value="1">1</option>
+            <option value="1.15">1.15</option>
+            <option value="1.25">1.25</option>
+            <option value="1.5">1.5</option>
+            <option value="1.75">1.75</option>
+            <option value="2">2</option>
+            <option value="2.5">2.5</option>
+            <option value="3">3</option>
           </select>
 
           <span className="toolbar-divider" />

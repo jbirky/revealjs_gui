@@ -4,6 +4,7 @@ import katex from 'katex'
 import hljs from 'highlight.js'
 import { calculateGuides } from '../utils/smartGuides'
 import { generateLatexIframeHtml } from '../utils/latexRenderer'
+import { pointsToPath } from '../utils/drawingUtils'
 
 function highlightCode(code, language) {
   try {
@@ -140,7 +141,7 @@ function getBgStyle(bg) {
   return { backgroundColor: '#1e1e2e' }
 }
 
-export default function SlideCanvas({ editor, slide, selectedElementIds, editingElementId, showGrid, gridSize = 40, showFooter, showPageNumbers, pageNumberFormat, pageNumber, totalSlides, sectionName, footerFontSize = 14, footerFontFamily = '-apple-system,sans-serif', footerColor = 'rgba(255,255,255,0.65)', footerInactiveColor = 'rgba(255,255,255,0.25)', smartGuidesEnabled = true, footerMode = 'basic', sequenceSections = [], activeSection = null, showRulers = false, persistentGuides = [], onAddGuide, onRemoveGuide, onToggleSelectElement, onStartEdit, onStopEdit, onUpdateElement, onUpdateElements, onDeleteElement, onDeleteSelectedElements, onAddImage, onOpenHtmlEditor, onOpenCodeEditor, onOpenLatexEditor, slideW = 960, slideH = 540 }) {
+export default function SlideCanvas({ editor, slide, selectedElementIds, editingElementId, showGrid, gridSize = 40, showFooter, showPageNumbers, pageNumberFormat, pageNumber, totalSlides, sectionName, footerFontSize = 14, footerFontFamily = '-apple-system,sans-serif', footerColor = 'rgba(255,255,255,0.65)', footerInactiveColor = 'rgba(255,255,255,0.25)', smartGuidesEnabled = true, footerMode = 'basic', sequenceSections = [], activeSection = null, showRulers = false, persistentGuides = [], onAddGuide, onRemoveGuide, onToggleSelectElement, onStartEdit, onStopEdit, onUpdateElement, onUpdateElements, onDeleteElement, onDeleteSelectedElements, onAddImage, onOpenHtmlEditor, onOpenCodeEditor, onOpenLatexEditor, onOpenManimEditor, slideW = 960, slideH = 540, drawTool = null, onAddDrawingStroke }) {
   const SLIDE_W = slideW
   const SLIDE_H = slideH
   const containerRef = useRef(null)
@@ -167,6 +168,41 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
   useEffect(() => { smartGuidesRef.current = smartGuidesEnabled }, [smartGuidesEnabled])
   const slideRef = useRef(slide)
   useEffect(() => { slideRef.current = slide }, [slide])
+
+  // Drawing tool state
+  const drawToolRef = useRef(drawTool)
+  useEffect(() => { drawToolRef.current = drawTool }, [drawTool])
+  const drawingActiveRef = useRef(false)
+  const drawPointsRef = useRef([])
+  const [liveStroke, setLiveStroke] = useState(null)
+
+  useEffect(() => {
+    const onMouseMove = (e) => {
+      if (!drawingActiveRef.current) return
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const x = Math.max(0, Math.min(SLIDE_W, (e.clientX - rect.left) / scaleRef.current))
+      const y = Math.max(0, Math.min(SLIDE_H, (e.clientY - rect.top) / scaleRef.current))
+      drawPointsRef.current.push({ x, y })
+      setLiveStroke(prev => prev ? { ...prev, points: [...drawPointsRef.current] } : null)
+    }
+    const onMouseUp = () => {
+      if (!drawingActiveRef.current) return
+      drawingActiveRef.current = false
+      const pts = drawPointsRef.current
+      drawPointsRef.current = []
+      setLiveStroke(null)
+      if (pts.length >= 2 && drawToolRef.current && onAddDrawingStroke) {
+        onAddDrawingStroke({ ...drawToolRef.current, points: pts })
+      }
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [onAddDrawingStroke])
 
   // Scale to fit container
   useEffect(() => {
@@ -384,6 +420,24 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
     setCropMode(null)
   }, [cropMode, slide, onUpdateElement])
 
+  // Reorder element in the z-stack: 'front' | 'back' | 'forward' | 'backward'
+  const reorderElement = useCallback((elementId, direction) => {
+    const elements = slide?.elements || []
+    if (elements.length < 2) return
+    const sorted = [...elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
+    const pos = sorted.findIndex(el => el.id === elementId)
+    if (pos === -1) return
+    const reordered = [...sorted]
+    const [el] = reordered.splice(pos, 1)
+    if      (direction === 'front'    )                      reordered.push(el)
+    else if (direction === 'back'     )                      reordered.unshift(el)
+    else if (direction === 'forward'  && pos < sorted.length - 1) reordered.splice(pos + 1, 0, el)
+    else if (direction === 'backward' && pos > 0             ) reordered.splice(pos - 1, 0, el)
+    else return
+    onUpdateElements(reordered.map((e, i) => ({ id: e.id, zIndex: i + 1 })))
+    setContextMenu(null)
+  }, [slide, onUpdateElements])
+
   // File drop on canvas
   const onDragOver = (e) => {
     if (!e.dataTransfer.types.includes('Files')) return
@@ -480,10 +534,23 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
           transform: `scale(${scale})`, transformOrigin: 'center center',
           flexShrink: 0, position: 'relative', fontSize: '42px',
           outline: dragOver ? '3px dashed #6366f1' : 'none',
+          cursor: drawTool ? 'crosshair' : undefined,
           ...getBgStyle(slide?.background)
         }}
+        onMouseDown={(e) => {
+          if (!drawToolRef.current || editingElementId || cropMode) return
+          if (e.button !== 0) return
+          const rect = canvasRef.current?.getBoundingClientRect()
+          if (!rect) return
+          const x = Math.max(0, Math.min(SLIDE_W, (e.clientX - rect.left) / scaleRef.current))
+          const y = Math.max(0, Math.min(SLIDE_H, (e.clientY - rect.top) / scaleRef.current))
+          drawingActiveRef.current = true
+          drawPointsRef.current = [{ x, y }]
+          setLiveStroke({ ...drawToolRef.current, points: [{ x, y }] })
+          e.stopPropagation()
+        }}
         onClick={(e) => {
-          if (cropMode) return
+          if (cropMode || drawTool) return
           if (e.target === canvasRef.current) { onToggleSelectElement(null, false); onStopEdit() }
         }}
         onContextMenu={(e) => e.preventDefault()}
@@ -548,19 +615,21 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
             editor={editor}
             onPointerDown={(e, type, handle) => {
               if (cropMode) return
+              if (drawToolRef.current) return
               if (editingElementId === element.id) return
               if (element.locked && type === 'move') return
               e.stopPropagation()
-              onToggleSelectElement(element.id, e.shiftKey)
+              onToggleSelectElement(element.id, e.shiftKey || e.ctrlKey || e.metaKey)
               startElementDrag(e, element.id, type, handle)
             }}
-            onClick={(e) => { e.stopPropagation(); if (!cropMode) onToggleSelectElement(element.id, e.shiftKey) }}
+            onClick={(e) => { e.stopPropagation(); if (!cropMode && !drawToolRef.current) onToggleSelectElement(element.id, e.shiftKey || e.ctrlKey || e.metaKey) }}
             onDoubleClick={(e) => {
               e.stopPropagation()
               if (element.type === 'text') onStartEdit(element.id)
               else if (element.type === 'html') onOpenHtmlEditor?.(element.id)
               else if (element.type === 'code') onOpenCodeEditor?.(element.id)
               else if (element.type === 'latex') onOpenLatexEditor?.(element.id)
+              else if (element.type === 'manim') onOpenManimEditor?.(element.id)
             }}
             onContextMenu={(e) => {
               e.preventDefault(); e.stopPropagation()
@@ -594,16 +663,20 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
               pointerEvents: 'none', boxSizing: 'border-box'
             }}>
               <div style={{ display: 'flex', flex: 1, justifyContent: 'space-evenly', alignItems: 'center' }}>
-                {sequenceSections.map((sec, i) => (
-                  <span key={i} style={{
-                    color: activeSection === i ? (footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor,
-                    fontWeight: activeSection === i ? 700 : 400,
-                    fontSize: footerFontSize,
-                    transition: 'color 0.2s, font-weight 0.2s',
-                  }}>
-                    {sec || `Section ${i + 1}`}
-                  </span>
-                ))}
+                {sequenceSections.map((sec, i) => {
+                  const secLabel = typeof sec === 'string' ? sec : (sec?.label || '')
+                  const secActiveColor = typeof sec === 'object' && sec?.color ? sec.color : (footerColor || 'rgba(255,255,255,0.9)')
+                  return (
+                    <span key={i} style={{
+                      color: activeSection === i ? secActiveColor : footerInactiveColor,
+                      fontWeight: activeSection === i ? 700 : 400,
+                      fontSize: footerFontSize,
+                      transition: 'color 0.2s, font-weight 0.2s',
+                    }}>
+                      {secLabel || `Section ${i + 1}`}
+                    </span>
+                  )
+                })}
               </div>
               {showPageNumbers && pageNumber != null && (
                 <span style={{ color: footerColor, marginLeft: 12, flexShrink: 0 }}>
@@ -624,6 +697,62 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
           )
         )}
 
+        {/* Drawing elements — rendered via SVG above other elements, paths capture clicks for selection */}
+        {(slide?.elements || [])
+          .filter(el => el.type === 'drawing')
+          .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
+          .map(el => (
+            <svg key={el.id}
+              style={{
+                position: 'absolute', left: 0, top: 0,
+                width: SLIDE_W, height: SLIDE_H,
+                zIndex: el.zIndex || 1,
+                overflow: 'visible',
+                pointerEvents: 'none',
+              }}
+            >
+              {(el.paths || []).map((path, pi) => (
+                <path key={pi}
+                  d={pointsToPath(path.points, el.smooth !== false)}
+                  stroke={path.color || '#ffffff'}
+                  strokeWidth={path.strokeWidth || 3}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={path.opacity ?? 1}
+                  style={{ pointerEvents: drawTool ? 'none' : 'stroke', cursor: 'pointer' }}
+                  onClick={e => {
+                    if (drawTool) return
+                    e.stopPropagation()
+                    onToggleSelectElement(el.id, e.shiftKey || e.ctrlKey || e.metaKey)
+                  }}
+                />
+              ))}
+              {selectedElementIds.includes(el.id) && (
+                <rect x={0} y={0} width={SLIDE_W} height={SLIDE_H}
+                  fill="none" stroke="#6366f1" strokeWidth={2}
+                  strokeDasharray="6 3" pointerEvents="none"
+                />
+              )}
+            </svg>
+          ))
+        }
+
+        {/* Live stroke while drawing */}
+        {liveStroke && liveStroke.points.length >= 2 && (
+          <svg style={{ position: 'absolute', left: 0, top: 0, width: SLIDE_W, height: SLIDE_H, pointerEvents: 'none', zIndex: 9998, overflow: 'visible' }}>
+            <path
+              d={pointsToPath(liveStroke.points, false)}
+              stroke={liveStroke.color || '#ffffff'}
+              strokeWidth={liveStroke.strokeWidth || 3}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={liveStroke.opacity ?? 1}
+            />
+          </svg>
+        )}
+
         {/* Drop hint */}
         {dragOver && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 999, background: 'rgba(99,102,241,0.08)', fontSize: '16px', color: 'rgba(255,255,255,0.7)', fontFamily: 'sans-serif' }}>
@@ -642,6 +771,12 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
             style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 9999 }}
             onClick={e => e.stopPropagation()}
           >
+            <button onClick={() => reorderElement(contextMenu.elementId, 'front')}>▲▲ Bring to Front</button>
+            <button onClick={() => reorderElement(contextMenu.elementId, 'forward')}>▲ Bring Forward</button>
+            <button onClick={() => reorderElement(contextMenu.elementId, 'backward')}>▼ Send Backward</button>
+            <button onClick={() => reorderElement(contextMenu.elementId, 'back')}>▼▼ Send to Back</button>
+            <div className="canvas-context-menu-separator" />
+
             {contextMenu.elementType === 'image' && (<>
               <button onClick={() => startCrop(contextMenu.elementId)}>
                 ✂ Crop
@@ -867,6 +1002,16 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
       )}
       {element.type === 'icon' && (
         <IconRenderer element={element} />
+      )}
+
+      {element.type === 'manim' && (
+        element.rendered
+          ? <video src={element.rendered} autoPlay={element.autoplay !== false} loop={element.loop !== false} muted={element.muted !== false} controls={element.controls || false} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' }} />
+          : <div style={{ width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif' }}>
+              <div style={{ fontSize: Math.min(element.height * 0.25, 48) }}>🎬</div>
+              <div style={{ fontSize: Math.min(element.height * 0.06, 14), fontWeight: 500 }}>Manim: {element.sceneName || 'MyScene'}</div>
+              <div style={{ fontSize: Math.min(element.height * 0.05, 11), opacity: 0.6 }}>Double-click to edit & render</div>
+            </div>
       )}
 
       {/* Fragment badge */}

@@ -16,17 +16,18 @@ extraResources:
 mac:
   category: public.app-category.productivity
   target:
+    - dmg
     - zip
 
 win:
   target:
     - nsis
-    - portable
 
 linux:
   target:
     - AppImage
     - deb
   category: Office
+  executableName: slides-editor
   executableArgs:
     - "--no-sandbox"

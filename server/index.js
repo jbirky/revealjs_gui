@@ -5,6 +5,7 @@ const fs = require('fs-extra')
 const multer = require('multer')
 const { v4: uuidv4 } = require('uuid')
 const { execFileSync } = require('child_process')
+const os = require('os')
 
 const app = express()
 const PORT = process.env.PORT || 3002
@@ -727,6 +728,78 @@ app.post('/api/presentations/:id/upload', upload.single('file'), (req, res) => {
     filename = path.basename(finalPath)
   }
   res.json({ url: `/uploads/${req.params.id}/${filename}` })
+})
+
+// POST /api/presentations/:id/import-pptx — convert PPTX to per-slide PNG images
+app.post('/api/presentations/:id/import-pptx', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+  const tmpDir = path.join(os.tmpdir(), uuidv4())
+  try {
+    fs.ensureDirSync(tmpDir)
+    const pptxPath = path.join(tmpDir, 'presentation.pptx')
+    fs.moveSync(req.file.path, pptxPath)
+
+    // Convert PPTX → PDF
+    execFileSync('libreoffice', [
+      '--headless', '--norestore', '--convert-to', 'pdf', '--outdir', tmpDir, pptxPath
+    ], { timeout: 120000, env: { ...process.env, HOME: '/tmp' } })
+
+    const pdfPath = path.join(tmpDir, 'presentation.pdf')
+    if (!fs.existsSync(pdfPath)) throw new Error('LibreOffice PDF conversion failed')
+
+    // Convert PDF pages → PNG images at 150 dpi
+    execFileSync('pdftoppm', ['-r', '150', '-png', pdfPath, path.join(tmpDir, 'slide')], { timeout: 120000 })
+
+    const pngFiles = fs.readdirSync(tmpDir)
+      .filter(f => /^slide-?\d+\.png$/.test(f))
+      .sort((a, b) => {
+        const n = s => parseInt(s.match(/(\d+)/)[1])
+        return n(a) - n(b)
+      })
+
+    const uploadDir = path.join(UPLOADS_DIR, req.params.id)
+    fs.ensureDirSync(uploadDir)
+
+    const urls = pngFiles.map(f => {
+      const id = uuidv4()
+      fs.copySync(path.join(tmpDir, f), path.join(uploadDir, `${id}.png`))
+      return `/uploads/${req.params.id}/${id}.png`
+    })
+
+    res.json({ urls })
+  } catch (err) {
+    console.error('PPTX import error:', err.message)
+    res.status(500).json({ error: err.message })
+  } finally {
+    fs.removeSync(tmpDir)
+  }
+})
+
+// POST /api/render-manim — proxy to manim-renderer sidecar
+app.post('/api/render-manim', express.json(), async (req, res) => {
+  const { code, sceneName, quality } = req.body || {}
+  if (!code || !sceneName) return res.status(400).json({ error: 'Missing code or sceneName' })
+
+  const rendererUrl = process.env.MANIM_RENDERER_URL || 'http://manim-renderer:5000'
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 200000) // 200s safety net
+
+  try {
+    const upstream = await fetch(`${rendererUrl}/render`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, sceneName, quality }),
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+    const data = await upstream.json()
+    res.status(upstream.ok ? 200 : 500).json(data)
+  } catch (err) {
+    clearTimeout(timeout)
+    if (err.name === 'AbortError') return res.status(504).json({ error: 'Render timed out' })
+    res.status(503).json({ error: `Manim renderer unreachable: ${err.message}` })
+  }
 })
 
 // GET /api/presentations/:id/export - download HTML

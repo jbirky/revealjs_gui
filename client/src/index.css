@@ -1,5 +1,5 @@
 /* Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Source+Sans+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:wght@400;700&family=Merriweather:wght@400;700&family=Fira+Code:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Roboto:wght@100;300;400;500;700;900&family=Open+Sans:wght@300;400;500;600;700;800&family=Source+Sans+Pro:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700;1,900&family=Playfair+Display:wght@400;500;600;700;800;900&family=Merriweather:wght@300;400;700;900&family=Fira+Code:wght@300;400;500;600;700&family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap');
 /* Computer Modern fonts (CMU) */
 @import url('https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/fonts.css');
 /* Latin Modern Roman */
@@ -138,11 +138,13 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 .slide-item:hover { border-color: var(--border-light); }
 .slide-item.active { border-color: var(--accent); }
 .slide-number { position: absolute; top: 4px; left: 4px; font-size: 10px; color: rgba(255,255,255,0.5); background: rgba(0,0,0,0.4); padding: 1px 4px; border-radius: 3px; z-index: 10; }
+.slide-copy-btn { position: absolute; bottom: 4px; right: 4px; background: rgba(0,0,0,0.5); border: none; color: rgba(255,255,255,0.55); padding: 3px; border-radius: 3px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; transition: background 0.15s, color 0.15s; }
+.slide-copy-btn:hover { background: rgba(99,102,241,0.85); color: white; }
 .slide-actions { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s; z-index: 10; }
 .slide-item:hover .slide-actions { opacity: 1; }
 .slide-action-btn { background: rgba(0,0,0,0.6); border: none; color: white; padding: 3px; border-radius: 3px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .slide-action-btn:hover { background: rgba(99,102,241,0.8); }
-.slide-thumbnail { aspect-ratio: 16/9; display: flex; align-items: flex-start; padding: 6px; overflow: hidden; }
+.slide-thumbnail { display: block; overflow: hidden; }
 .slide-thumb-content { font-size: 5px; line-height: 1.3; color: white; width: 100%; overflow: hidden; max-height: 100%; }
 .slide-thumb-content h1 { font-size: 9px; }
 .slide-thumb-content h2 { font-size: 8px; }
