@@ -1,7 +1,17 @@
-/* Google Fonts */
+/* Google Fonts — batch 1: core */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Roboto:wght@100;300;400;500;700;900&family=Open+Sans:wght@300;400;500;600;700;800&family=Source+Sans+Pro:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700;1,900&family=Playfair+Display:wght@400;500;600;700;800;900&family=Merriweather:wght@300;400;700;900&family=Fira+Code:wght@300;400;500;600;700&family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap');
+/* Google Fonts — batch 2: rounded / geometric */
+@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@300;400;500;600;700&family=Questrial&family=Didact+Gothic&family=Nunito:wght@300;400;500;600;700;800;900&family=Nunito+Sans:wght@300;400;500;600;700;800;900&family=Quicksand:wght@300;400;500;600;700&family=Dosis:wght@300;400;500;600;700;800&family=M+PLUS+Rounded+1c:wght@300;400;500;700;900&family=Jura:wght@300;400;500;600;700&family=Codystar:wght@300;400&family=Barlow:wght@300;400;500;600;700;800;900&family=Barlow+Condensed:wght@300;400;500;600;700;800;900&family=Asap+Condensed:wght@400;500;600;700;900&family=Istok+Web:wght@400;700&family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+/* Google Fonts — batch 3: modern / technical */
+@import url('https://fonts.googleapis.com/css2?family=Inconsolata:wght@300;400;500;600;700;800;900&family=Source+Sans+3:wght@300;400;500;600;700;800;900&family=Fira+Sans:wght@300;400;500;600;700;800;900&family=Roboto+Condensed:wght@300;400;500;700&family=Roboto+Mono:wght@300;400;500;600;700&family=Rubik:wght@300;400;500;600;700;800;900&family=Ubuntu:wght@300;400;500;700&family=Manrope:wght@300;400;500;600;700;800&family=Bebas+Neue&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Roboto+Flex:wght@300;400;500;600;700&family=Inter+Tight:wght@300;400;500;600;700;800;900&family=Geist:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&family=Figtree:wght@300;400;500;600;700;800;900&display=swap');
 /* Computer Modern fonts (CMU) */
 @import url('https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/fonts.css');
+/* Futura PT */
+@import url('https://fonts.cdnfonts.com/css/futura-pt');
+/* Bauhaus 93 */
+@import url('https://fonts.cdnfonts.com/css/bauhaus-93');
+/* National Park */
+@import url('https://fonts.cdnfonts.com/css/national-park');
 /* Latin Modern Roman */
 @font-face {
   font-family: 'Latin Modern Roman';
@@ -246,9 +256,9 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 .slide-text-content h2 { font-size: 1.6em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
 .slide-text-content h3 { font-size: 1.3em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
 .slide-text-content h4 { font-size: 1em;   font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
-.slide-text-content p  { margin: 0 0 0.4em; line-height: 1.5; }
+.slide-text-content p  { margin: 0 0 0.4em; }
 .slide-text-content ul, .slide-text-content ol { padding-left: 1.5em; margin: 0 0 0.4em; }
-.slide-text-content li { margin-bottom: 0.2em; line-height: 1.5; }
+.slide-text-content li { margin-bottom: 0.2em; }
 .slide-text-content a  { text-decoration: underline; }
 .slide-text-content code { background: rgba(255,255,255,0.1); padding: 2px 5px; border-radius: 3px; font-family: monospace; }
 .slide-text-content pre  { background: rgba(0,0,0,0.4); padding: 12px 16px; border-radius: 6px; margin-bottom: 0.4em; overflow: auto; }

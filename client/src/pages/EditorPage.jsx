@@ -16,7 +16,7 @@ import TableCell from '@tiptap/extension-table-cell'
 import { ChevronLeft, Play, Download, MessageSquare, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup } from 'lucide-react'
 import { api } from '../utils/api'
 import { generateLatexIframeHtml } from '../utils/latexRenderer'
-import { downloadHTML, presentInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
+import { downloadHTML, downloadSlideHTML, presentInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
 import { exportToPptx } from '../utils/exportPptx'
 import { simplifyPoints } from '../utils/drawingUtils'
 import { generateOfflineHTML } from '../utils/offlineExport'
@@ -131,6 +131,7 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [gridSize, setGridSize] = useState(40) // synced to presentation.gridSize when changed
   const [clipboard, setClipboard] = useState(null)
   const [htmlEditorState, setHtmlEditorState] = useState(null) // { elementId, content }
+  const [p5EditorState, setP5EditorState] = useState(null) // { elementId, content }
   const [codeEditorState, setCodeEditorState] = useState(null) // { elementId, content, language }
   const [latexEditorState, setLatexEditorState] = useState(null) // { elementId, content }
   const [showTemplateModal, setShowTemplateModal] = useState(false)
@@ -224,6 +225,7 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
       }
       setPresentation(migrated)
       if (migrated.gridSize) setGridSize(migrated.gridSize)
+      if (migrated.guides && migrated.guides.length) setGuides(migrated.guides)
       setLoading(false)
       isFirstLoad.current = true
     }).catch(err => {
@@ -446,6 +448,35 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
     setSelectedElementIds([newEl.id])
   }, [])
 
+  const addTextPathElement = useCallback(() => {
+    const angle = 15
+    const fontSize = 64
+    const width = 500
+    const dy = Math.abs(width * Math.tan((angle * Math.PI) / 180))
+    const height = Math.ceil(dy + fontSize * 2.4)
+    const newEl = {
+      id: crypto.randomUUID(),
+      type: 'textpath',
+      x: 230, y: Math.round((slideH - height) / 2),
+      width, height, zIndex: 2,
+      content: 'Text on path',
+      fontSize, fontFamily: 'sans-serif',
+      color: '#ffffff', fontWeight: 'normal', fontStyle: 'normal',
+      letterSpacing: 0, textAnchor: 'start', startOffset: 0,
+      angle, showPath: true, pathSide: 'bottom',
+    }
+    setPresentation(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        slides: prev.slides.map((s, i) =>
+          i === currentSlideIndexRef.current ? { ...s, elements: [...(s.elements || []), newEl] } : s
+        )
+      }
+    })
+    setSelectedElementIds([newEl.id])
+  }, [slideH])
+
   const addImageElement = useCallback((src, dropX, dropY) => {
     const newEl = {
       id: crypto.randomUUID(),
@@ -515,6 +546,63 @@ svg.selectAll('circle').data(data).join('circle')
     updateElement(htmlEditorState.elementId, { content: htmlEditorState.content })
     setHtmlEditorState(null)
   }, [htmlEditorState, updateElement])
+
+  const DEFAULT_P5 = `function setup() {
+  createCanvas(windowWidth, windowHeight)
+  noLoop()
+}
+
+function draw() {
+  clear()
+  fill(255)
+  noStroke()
+  textAlign(CENTER, CENTER)
+  const str = 'Hello World'
+  for (let i = 0; i < str.length; i++) {
+    const t = i / (str.length - 1)
+    const x = map(t, 0, 1, 80, width - 80)
+    const y = height / 2 + sin(t * TWO_PI) * height * 0.2
+    const angle = cos(t * TWO_PI) * 0.4
+    textSize(map(sin(t * PI), 0, 1, 24, 54))
+    push()
+    translate(x, y)
+    rotate(angle)
+    text(str[i], 0, 0)
+    pop()
+  }
+}`
+
+  const addP5Element = useCallback(() => {
+    const newEl = {
+      id: crypto.randomUUID(),
+      type: 'p5',
+      x: 0, y: 0, width: slideW, height: slideH, zIndex: 2,
+      content: DEFAULT_P5,
+    }
+    setPresentation(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        slides: prev.slides.map((s, i) =>
+          i === currentSlideIndexRef.current ? { ...s, elements: [...(s.elements || []), newEl] } : s
+        )
+      }
+    })
+    setSelectedElementIds([newEl.id])
+    setP5EditorState({ elementId: newEl.id, content: DEFAULT_P5 })
+  }, [DEFAULT_P5, slideW, slideH])
+
+  const openP5Editor = useCallback((elementId) => {
+    const element = presentation?.slides[currentSlideIndexRef.current]?.elements?.find(el => el.id === elementId)
+    if (!element || element.type !== 'p5') return
+    setP5EditorState({ elementId, content: element.content || '' })
+  }, [presentation])
+
+  const commitP5Edit = useCallback(() => {
+    if (!p5EditorState) return
+    updateElement(p5EditorState.elementId, { content: p5EditorState.content })
+    setP5EditorState(null)
+  }, [p5EditorState, updateElement])
 
   const addCodeElement = useCallback(() => {
     const newEl = {
@@ -1353,6 +1441,73 @@ class MyScene(Scene):
             </span>
           )}
 
+          <span style={{ fontSize: 11, color: '#a0a0b0', userSelect: 'none' }}>Font</span>
+          <select
+            className="select-sm"
+            value={presentation.globalFont || ''}
+            onChange={e => setPresentation(prev => ({ ...prev, globalFont: e.target.value || null }))}
+            title="Global font — applies to all text elements that haven't set their own font"
+            style={{ minWidth: 110 }}
+          >
+            <option value="">— Default —</option>
+            <optgroup label="Sans-serif">
+              <option value="Arial, sans-serif">Arial</option>
+              <option value="'Helvetica Neue', sans-serif">Helvetica</option>
+              <option value="Inter, sans-serif">Inter</option>
+              <option value="'Inter Tight', sans-serif">Inter Tight</option>
+              <option value="Roboto, sans-serif">Roboto</option>
+              <option value="'Open Sans', sans-serif">Open Sans</option>
+              <option value="'Source Sans 3', sans-serif">Source Sans 3</option>
+              <option value="'Fira Sans', sans-serif">Fira Sans</option>
+              <option value="'IBM Plex Sans', sans-serif">IBM Plex Sans</option>
+              <option value="Manrope, sans-serif">Manrope</option>
+              <option value="Geist, sans-serif">Geist</option>
+              <option value="Figtree, sans-serif">Figtree</option>
+              <option value="Ubuntu, sans-serif">Ubuntu</option>
+              <option value="Rubik, sans-serif">Rubik</option>
+              <option value="'PT Sans', sans-serif">PT Sans</option>
+              <option value="'Didact Gothic', sans-serif">Didact Gothic</option>
+              <option value="Questrial, sans-serif">Questrial</option>
+              <option value="Barlow, sans-serif">Barlow</option>
+            </optgroup>
+            <optgroup label="Rounded">
+              <option value="Comfortaa, sans-serif">Comfortaa</option>
+              <option value="Nunito, sans-serif">Nunito</option>
+              <option value="'Nunito Sans', sans-serif">Nunito Sans</option>
+              <option value="Quicksand, sans-serif">Quicksand</option>
+              <option value="Dosis, sans-serif">Dosis</option>
+              <option value="'M PLUS Rounded 1c', sans-serif">M PLUS Rounded 1c</option>
+              <option value="Jura, sans-serif">Jura</option>
+            </optgroup>
+            <optgroup label="Condensed">
+              <option value="'Barlow Condensed', sans-serif">Barlow Condensed</option>
+              <option value="'Asap Condensed', sans-serif">Asap Condensed</option>
+              <option value="'Roboto Condensed', sans-serif">Roboto Condensed</option>
+            </optgroup>
+            <optgroup label="Serif">
+              <option value="Georgia, serif">Georgia</option>
+              <option value="'Times New Roman', serif">Times New Roman</option>
+              <option value="'Playfair Display', serif">Playfair Display</option>
+              <option value="Merriweather, serif">Merriweather</option>
+            </optgroup>
+            <optgroup label="Monospace">
+              <option value="'Courier New', monospace">Courier New</option>
+              <option value="'Fira Code', monospace">Fira Code</option>
+              <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+              <option value="Inconsolata, monospace">Inconsolata</option>
+              <option value="'Roboto Mono', monospace">Roboto Mono</option>
+              <option value="'Space Mono', monospace">Space Mono</option>
+            </optgroup>
+            <optgroup label="Display">
+              <option value="Impact, sans-serif">Impact</option>
+              <option value="'Bebas Neue', sans-serif">Bebas Neue</option>
+              <option value="Codystar, sans-serif">Codystar</option>
+              <option value="'National Park', sans-serif">National Park</option>
+              <option value="'Futura PT', Futura, 'Century Gothic', sans-serif">Futura</option>
+              <option value="'Bauhaus 93', Impact, sans-serif">Bauhaus 93</option>
+            </optgroup>
+          </select>
+
           <span style={{ fontSize: 11, color: '#a0a0b0', userSelect: 'none' }}>Background</span>
           <select
             className="select-sm"
@@ -1499,6 +1654,7 @@ class MyScene(Scene):
                   { label: 'Export PDF', icon: <Download size={13} />, action: () => exportPDF(presentation) },
                   { label: 'Export PPTX', icon: <Download size={13} />, action: () => exportToPptx(presentation) },
                   { label: 'Export HTML', icon: <Download size={13} />, action: () => downloadHTML(presentation) },
+                  { label: 'Export Slide HTML', icon: <Download size={13} />, action: () => downloadSlideHTML(presentation, currentSlideIndex) },
                   { label: 'Export Offline HTML', icon: <FileDown size={13} />, action: async () => {
                     const html = generateRevealHTML(presentation)
                     const offline = await generateOfflineHTML(html)
@@ -1929,6 +2085,7 @@ class MyScene(Scene):
             gridSize={gridSize}
             onGridSizeChange={(v) => { setGridSize(v); setPresentation(prev => prev ? { ...prev, gridSize: v } : prev) }}
             onAddText={addTextElement}
+            onAddTextPath={addTextPathElement}
             onAddImage={() => {
               const url = window.prompt('Image URL:')
               if (url) addImageElement(url)
@@ -1940,6 +2097,7 @@ class MyScene(Scene):
 
             onAddShape={addShapeElement}
             onAddHtml={addHtmlElement}
+            onAddP5={addP5Element}
             onAddCode={addCodeElement}
             onAddLatex={addLatexElement}
             onAddMarkdown={addMarkdownElement}
@@ -1964,6 +2122,28 @@ class MyScene(Scene):
             onUngroupElements={ungroupElements}
             showRulers={showRulers}
             onToggleRulers={() => setShowRulers(v => !v)}
+            guides={guides}
+            onAddGuide={(guide) => {
+              setGuides(prev => {
+                const next = [...prev, guide]
+                setPresentation(p => p ? { ...p, guides: next } : p)
+                return next
+              })
+            }}
+            onRemoveGuide={(idx) => {
+              setGuides(prev => {
+                const next = prev.filter((_, i) => i !== idx)
+                setPresentation(p => p ? { ...p, guides: next } : p)
+                return next
+              })
+            }}
+            onUpdateGuide={(idx, pos) => {
+              setGuides(prev => {
+                const next = prev.map((g, i) => i === idx ? { ...g, position: pos } : g)
+                setPresentation(p => p ? { ...p, guides: next } : p)
+                return next
+              })
+            }}
             onImportPptx={handleImportPptx}
             drawTool={drawTool}
             onSetDrawTool={setDrawTool}
@@ -2005,8 +2185,27 @@ class MyScene(Scene):
               smartGuidesEnabled={smartGuidesEnabled}
               showRulers={showRulers}
               persistentGuides={guides}
-              onAddGuide={(guide) => setGuides(prev => [...prev, guide])}
-              onRemoveGuide={(idx) => setGuides(prev => prev.filter((_, i) => i !== idx))}
+              onAddGuide={(guide) => {
+                setGuides(prev => {
+                  const next = [...prev, guide]
+                  setPresentation(p => p ? { ...p, guides: next } : p)
+                  return next
+                })
+              }}
+              onRemoveGuide={(idx) => {
+                setGuides(prev => {
+                  const next = prev.filter((_, i) => i !== idx)
+                  setPresentation(p => p ? { ...p, guides: next } : p)
+                  return next
+                })
+              }}
+              onUpdateGuide={(idx, pos) => {
+                setGuides(prev => {
+                  const next = prev.map((g, i) => i === idx ? { ...g, position: pos } : g)
+                  setPresentation(p => p ? { ...p, guides: next } : p)
+                  return next
+                })
+              }}
               onToggleSelectElement={toggleElementSelection}
               onStartEdit={startEditingElement}
               onStopEdit={stopEditingElement}
@@ -2015,6 +2214,7 @@ class MyScene(Scene):
               onDeleteElement={deleteElement}
               onDeleteSelectedElements={deleteSelectedElements}
               onOpenHtmlEditor={openHtmlEditor}
+              onOpenP5Editor={openP5Editor}
               onOpenCodeEditor={openCodeEditor}
               onOpenLatexEditor={openLatexEditor}
               onOpenManimEditor={openManimEditor}
@@ -2026,6 +2226,7 @@ class MyScene(Scene):
               slideH={slideH}
               drawTool={drawTool}
               onAddDrawingStroke={addDrawingStroke}
+              globalFont={presentation.globalFont || ''}
             />
           </div>
         </div>
@@ -2039,6 +2240,7 @@ class MyScene(Scene):
           onBringForward={() => selectedElementId && bringElementForward(selectedElementId)}
           onSendBackward={() => selectedElementId && sendElementBackward(selectedElementId)}
           onEditHtml={() => selectedElementId && openHtmlEditor(selectedElementId)}
+          onEditP5={() => selectedElementId && openP5Editor(selectedElementId)}
           onEditCode={() => selectedElementId && openCodeEditor(selectedElementId)}
           onEditLatex={() => selectedElementId && openLatexEditor(selectedElementId)}
           presentation={presentation}
@@ -2082,6 +2284,55 @@ class MyScene(Scene):
                 }
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* p5.js Sketch Editor Modal */}
+      {p5EditorState && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onKeyDown={e => { if (e.key === 'Escape') setP5EditorState(null) }}
+        >
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, width: '90vw', maxWidth: 1200, height: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>p5.js Sketch</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Write <code style={{ background: 'var(--bg-hover)', padding: '1px 5px', borderRadius: 3 }}>setup()</code> and <code style={{ background: 'var(--bg-hover)', padding: '1px 5px', borderRadius: 3 }}>draw()</code> — canvas auto-sizes to element
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={() => setP5EditorState(null)}>Cancel</button>
+                <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={commitP5Edit}>Apply</button>
+              </div>
+            </div>
+            <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+              <textarea
+                value={p5EditorState.content}
+                onChange={e => setP5EditorState(s => ({ ...s, content: e.target.value }))}
+                style={{ flex: 1, background: '#0d0d1a', color: '#e2e8f0', fontFamily: "'Fira Code', 'JetBrains Mono', monospace", fontSize: 13, padding: '16px 20px', border: 'none', outline: 'none', resize: 'none', lineHeight: 1.6, tabSize: 2, borderRight: '1px solid var(--border)' }}
+                spellCheck={false}
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Tab') {
+                    e.preventDefault()
+                    const { selectionStart: s, selectionEnd: end, value } = e.target
+                    const next = value.substring(0, s) + '  ' + value.substring(end)
+                    e.target.value = next
+                    setP5EditorState(st => ({ ...st, content: next }))
+                    requestAnimationFrame(() => { e.target.selectionStart = e.target.selectionEnd = s + 2 })
+                  }
+                }}
+              />
+              <div style={{ flex: 1, background: '#0a0a14', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>Preview</div>
+                <iframe
+                  key={p5EditorState.content}
+                  srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#111;overflow:hidden;}canvas{display:block;}</style><script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"><\/script></head><body><script>${p5EditorState.content}<\/script></body></html>`}
+                  style={{ flex: 1, border: 'none', display: 'block' }}
+                  sandbox="allow-scripts"
+                  title="p5.js preview"
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

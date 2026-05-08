@@ -1,4 +1,20 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
+
+function buildHtmlEmbed(userHtml, embedW, embedH) {
+  const initScript = `<script>const EMBED_WIDTH=${embedW},EMBED_HEIGHT=${embedH};(function(){function fit(){document.querySelectorAll('svg').forEach(function(s){if(s._vb)return;var w=s.getAttribute('width'),h=s.getAttribute('height');if(w&&h&&!s.getAttribute('viewBox'))s.setAttribute('viewBox','0 0 '+parseFloat(w)+' '+parseFloat(h));if(s.getAttribute('viewBox')){s.setAttribute('width','100%');s.setAttribute('height','100%');s._vb=1;}});}window.addEventListener('load',fit);setTimeout(fit,100);setTimeout(fit,400);new MutationObserver(fit).observe(document.documentElement,{childList:true,subtree:true});})();<\/script>`
+  const resetStyle = `<style>html,body{margin:0;padding:0;overflow:hidden;width:100%;height:100%;box-sizing:border-box;}canvas{display:block;}svg{display:block;}<\/style>`
+  const injection = initScript + resetStyle
+  // Inject into <head> so DOCTYPE stays first (preserves standards mode)
+  if (/<head[^>]*>/i.test(userHtml))
+    return userHtml.replace(/<head[^>]*>/i, m => m + injection)
+  // Full doc without explicit <head>: insert after <html> tag or after DOCTYPE
+  if (/<html[^>]*>/i.test(userHtml))
+    return userHtml.replace(/<html[^>]*>/i, m => m + injection)
+  if (/<!doctype[^>]*>/i.test(userHtml))
+    return userHtml.replace(/(<!doctype[^>]*>)/i, '$1' + injection)
+  // Snippet: prepend directly
+  return injection + userHtml
+}
 import { EditorContent } from '@tiptap/react'
 import katex from 'katex'
 import hljs from 'highlight.js'
@@ -40,6 +56,15 @@ function snapWithRef(rawX, rawY, w, h, ref, snapFn) {
 }
 
 const MIN_SIZE = 40
+
+function textPathGeometry(width, angle, fontSize) {
+  const angleRad = ((angle || 0) * Math.PI) / 180
+  const dy = width * Math.tan(angleRad)
+  const pad = Math.ceil((fontSize || 64) * 1.2)
+  const minY = Math.min(0, dy)
+  const svgH = Math.ceil(Math.abs(dy) + pad * 2)
+  return { svgH, pathD: `M 0,${pad - minY} L ${width},${pad - minY + dy}` }
+}
 
 const HANDLE_STYLES = {
   nw: { top: -5, left: -5, cursor: 'nw-resize' },
@@ -133,6 +158,15 @@ function applyCropHandle(handle, startCrop, dx, dy, elW, elH) {
   return { x, y, w, h }
 }
 
+function buildP5Srcdoc(userCode, w, h) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>*{margin:0;padding:0;box-sizing:border-box;}body{background:transparent;overflow:hidden;}canvas{display:block;}</style>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"><\/script>
+</head><body><script>
+${userCode}
+<\/script></body></html>`
+}
+
 function getBgStyle(bg) {
   if (!bg) return { backgroundColor: '#1e1e2e' }
   if (bg.type === 'color') return { backgroundColor: bg.color || '#1e1e2e' }
@@ -141,7 +175,7 @@ function getBgStyle(bg) {
   return { backgroundColor: '#1e1e2e' }
 }
 
-export default function SlideCanvas({ editor, slide, selectedElementIds, editingElementId, showGrid, gridSize = 40, showFooter, showPageNumbers, pageNumberFormat, pageNumber, totalSlides, sectionName, footerFontSize = 14, footerFontFamily = '-apple-system,sans-serif', footerColor = 'rgba(255,255,255,0.65)', footerInactiveColor = 'rgba(255,255,255,0.25)', smartGuidesEnabled = true, footerMode = 'basic', sequenceSections = [], activeSection = null, showRulers = false, persistentGuides = [], onAddGuide, onRemoveGuide, onToggleSelectElement, onStartEdit, onStopEdit, onUpdateElement, onUpdateElements, onDeleteElement, onDeleteSelectedElements, onAddImage, onOpenHtmlEditor, onOpenCodeEditor, onOpenLatexEditor, onOpenManimEditor, slideW = 960, slideH = 540, drawTool = null, onAddDrawingStroke }) {
+export default function SlideCanvas({ editor, slide, selectedElementIds, editingElementId, showGrid, gridSize = 40, showFooter, showPageNumbers, pageNumberFormat, pageNumber, totalSlides, sectionName, footerFontSize = 14, footerFontFamily = '-apple-system,sans-serif', footerColor = 'rgba(255,255,255,0.65)', footerInactiveColor = 'rgba(255,255,255,0.25)', smartGuidesEnabled = true, footerMode = 'basic', sequenceSections = [], activeSection = null, showRulers = false, persistentGuides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onToggleSelectElement, onStartEdit, onStopEdit, onUpdateElement, onUpdateElements, onDeleteElement, onDeleteSelectedElements, onAddImage, onOpenHtmlEditor, onOpenCodeEditor, onOpenLatexEditor, onOpenManimEditor, onOpenP5Editor, slideW = 960, slideH = 540, drawTool = null, onAddDrawingStroke, globalFont = '' }) {
   const SLIDE_W = slideW
   const SLIDE_H = slideH
   const containerRef = useRef(null)
@@ -168,6 +202,10 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
   useEffect(() => { smartGuidesRef.current = smartGuidesEnabled }, [smartGuidesEnabled])
   const slideRef = useRef(slide)
   useEffect(() => { slideRef.current = slide }, [slide])
+  const persistentGuidesRef = useRef(persistentGuides)
+  useEffect(() => { persistentGuidesRef.current = persistentGuides }, [persistentGuides])
+  const draggingGuideRef = useRef(null) // { index, axis }
+  const [previewGuide, setPreviewGuide] = useState(null) // { axis: 'x'|'y', position }
 
   // Drawing tool state
   const drawToolRef = useRef(drawTool)
@@ -221,7 +259,40 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
   useEffect(() => {
     const snap = (v) => showGridRef.current ? Math.round(v / gridSizeRef.current) * gridSizeRef.current : v
 
+    const GUIDE_THRESHOLD = 8
+    const guideSnap = (rawX, rawY, w, h) => {
+      const guides = persistentGuidesRef.current
+      if (!guides || !guides.length) return { x: rawX, y: rawY, didX: false, didY: false }
+      let x = rawX, y = rawY, didX = false, didY = false
+      let bestXDist = GUIDE_THRESHOLD, bestYDist = GUIDE_THRESHOLD
+      for (const guide of guides) {
+        if (guide.axis === 'x') {
+          for (const xp of [rawX, rawX + w / 2, rawX + w]) {
+            const d = Math.abs(xp - guide.position)
+            if (d < bestXDist) { bestXDist = d; x = rawX + (guide.position - xp); didX = true }
+          }
+        } else {
+          for (const yp of [rawY, rawY + h / 2, rawY + h]) {
+            const d = Math.abs(yp - guide.position)
+            if (d < bestYDist) { bestYDist = d; y = rawY + (guide.position - yp); didY = true }
+          }
+        }
+      }
+      return { x, y, didX, didY }
+    }
+
     const onMouseMove = (e) => {
+      // Guide drag
+      if (draggingGuideRef.current && canvasRef.current) {
+        const dg = draggingGuideRef.current
+        const rect = canvasRef.current.getBoundingClientRect()
+        const pos = dg.axis === 'x'
+          ? Math.max(0, Math.min(SLIDE_W, Math.round((e.clientX - rect.left) / scaleRef.current)))
+          : Math.max(0, Math.min(SLIDE_H, Math.round((e.clientY - rect.top) / scaleRef.current)))
+        onUpdateGuide?.(dg.index, pos)
+        return
+      }
+
       // Crop drag
       if (cropDragRef.current) {
         const cd = cropDragRef.current
@@ -267,6 +338,15 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
             const { x: snappedX, y: snappedY } = snapWithRef(rawX, rawY, drag.startEl.width, drag.startEl.height, drag.startEl.snapRef || 'ul', snap)
             newX = Math.max(0, Math.min(SLIDE_W - drag.startEl.width, snappedX))
             newY = Math.max(0, Math.min(SLIDE_H - drag.startEl.height, snappedY))
+            // Custom guides override grid snap when closer
+            const { x: gx, y: gy, didX, didY } = guideSnap(newX, newY, drag.startEl.width, drag.startEl.height)
+            if (didX) newX = Math.max(0, Math.min(SLIDE_W - drag.startEl.width, gx))
+            if (didY) newY = Math.max(0, Math.min(SLIDE_H - drag.startEl.height, gy))
+            setActiveGuides([])
+          } else if (persistentGuidesRef.current.length > 0) {
+            const { x: gx, y: gy } = guideSnap(rawX, rawY, drag.startEl.width, drag.startEl.height)
+            newX = Math.max(0, Math.min(SLIDE_W - drag.startEl.width, gx))
+            newY = Math.max(0, Math.min(SLIDE_H - drag.startEl.height, gy))
             setActiveGuides([])
           } else if (smartGuidesRef.current) {
             const allEls = (slideRef.current?.elements || [])
@@ -300,6 +380,12 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
         updates.y = snap(Math.max(0, updates.y))
         updates.width = snap(Math.min(SLIDE_W - updates.x, updates.width))
         updates.height = snap(Math.min(SLIDE_H - updates.y, updates.height))
+        // Snap resize edges to custom guides
+        if (persistentGuidesRef.current.length > 0) {
+          const { x: gx, y: gy, didX, didY } = guideSnap(updates.x, updates.y, updates.width, updates.height)
+          if (didX) { updates.width = Math.max(MIN_SIZE, updates.width + (gx - updates.x)); updates.x = gx }
+          if (didY) { updates.height = Math.max(MIN_SIZE, updates.height + (gy - updates.y)); updates.y = gy }
+        }
         updates.width = Math.max(MIN_SIZE, updates.width)
         updates.height = Math.max(MIN_SIZE, updates.height)
         onUpdateElement(drag.elementId, updates)
@@ -317,6 +403,7 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
       }
     }
     const onMouseUp = () => {
+      draggingGuideRef.current = null
       cropDragRef.current = null
       pendingDragRef.current = null
       draggingRef.current = null
@@ -465,16 +552,21 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
   const handleRulerMouseDown = (axis, e) => {
     if (!canvasRef.current) return
     const rect = canvasRef.current.getBoundingClientRect()
+    const getPos = (me) => axis === 'x'
+      ? (me.clientX - rect.left) / scaleRef.current
+      : (me.clientY - rect.top) / scaleRef.current
     const onMove = (me) => {
-      // Show a preview line while dragging
+      const pos = getPos(me)
+      if (pos >= 0 && pos <= (axis === 'x' ? SLIDE_W : SLIDE_H)) {
+        setPreviewGuide({ axis, position: Math.round(pos) })
+      }
     }
     const onUp = (me) => {
-      const pos = axis === 'x'
-        ? (me.clientX - rect.left) / scale
-        : (me.clientY - rect.top) / scale
+      const pos = getPos(me)
       if (pos >= 0 && pos <= (axis === 'x' ? SLIDE_W : SLIDE_H)) {
         onAddGuide?.({ axis, position: Math.round(pos) })
       }
+      setPreviewGuide(null)
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
@@ -571,22 +663,45 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
         {persistentGuides.map((guide, i) => (
           guide.axis === 'x' ? (
             <div key={`pg${i}`} style={{
-              position: 'absolute', left: guide.position, top: 0, width: 1, height: SLIDE_H,
-              background: '#22d3ee', zIndex: 998, pointerEvents: 'auto', cursor: 'col-resize',
+              position: 'absolute', left: guide.position, top: 0, width: 9, height: SLIDE_H,
+              marginLeft: -4,
+              background: 'transparent', zIndex: 998, pointerEvents: 'auto', cursor: 'col-resize',
             }}
+            onMouseDown={e => { e.stopPropagation(); e.preventDefault(); draggingGuideRef.current = { index: i, axis: 'x' } }}
             onDoubleClick={() => onRemoveGuide?.(i)}
-            title="Double-click to remove guide"
-            />
+            title={`Vertical guide x=${guide.position} — drag to move, double-click to delete`}
+            >
+              <div style={{ position: 'absolute', left: 4, top: 0, width: 1, height: '100%', background: '#22d3ee', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', top: 4, left: 7, fontSize: 9, color: '#22d3ee', whiteSpace: 'nowrap', background: 'rgba(0,0,0,0.65)', padding: '1px 3px', borderRadius: 2, pointerEvents: 'none' }}>
+                {guide.position}
+              </div>
+            </div>
           ) : (
             <div key={`pg${i}`} style={{
-              position: 'absolute', top: guide.position, left: 0, height: 1, width: SLIDE_W,
-              background: '#22d3ee', zIndex: 998, pointerEvents: 'auto', cursor: 'row-resize',
+              position: 'absolute', top: guide.position, left: 0, height: 9, width: SLIDE_W,
+              marginTop: -4,
+              background: 'transparent', zIndex: 998, pointerEvents: 'auto', cursor: 'row-resize',
             }}
+            onMouseDown={e => { e.stopPropagation(); e.preventDefault(); draggingGuideRef.current = { index: i, axis: 'y' } }}
             onDoubleClick={() => onRemoveGuide?.(i)}
-            title="Double-click to remove guide"
-            />
+            title={`Horizontal guide y=${guide.position} — drag to move, double-click to delete`}
+            >
+              <div style={{ position: 'absolute', top: 4, left: 0, width: '100%', height: 1, background: '#22d3ee', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', left: 4, top: 7, fontSize: 9, color: '#22d3ee', whiteSpace: 'nowrap', background: 'rgba(0,0,0,0.65)', padding: '1px 3px', borderRadius: 2, pointerEvents: 'none' }}>
+                {guide.position}
+              </div>
+            </div>
           )
         ))}
+
+        {/* Preview guide while dragging from ruler */}
+        {previewGuide && (
+          previewGuide.axis === 'x' ? (
+            <div style={{ position: 'absolute', left: previewGuide.position, top: 0, width: 1, height: SLIDE_H, background: 'rgba(34,211,238,0.5)', zIndex: 997, pointerEvents: 'none' }} />
+          ) : (
+            <div style={{ position: 'absolute', top: previewGuide.position, left: 0, height: 1, width: SLIDE_W, background: 'rgba(34,211,238,0.5)', zIndex: 997, pointerEvents: 'none' }} />
+          )
+        )}
 
         {/* Smart guide lines */}
         {activeGuides.map((guide, i) => (
@@ -630,12 +745,15 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
               else if (element.type === 'code') onOpenCodeEditor?.(element.id)
               else if (element.type === 'latex') onOpenLatexEditor?.(element.id)
               else if (element.type === 'manim') onOpenManimEditor?.(element.id)
+              else if (element.type === 'p5') onOpenP5Editor?.(element.id)
+              else if (element.type === 'textpath') onStartEdit(element.id)
             }}
             onContextMenu={(e) => {
               e.preventDefault(); e.stopPropagation()
               setContextMenu({ elementId: element.id, elementType: element.type, x: e.clientX, y: e.clientY })
             }}
             onStopEdit={onStopEdit}
+            onUpdateContent={(id, content) => onUpdateElement?.(id, { content })}
             onAutoResize={(id, h) => onUpdateElement?.(id, { height: h })}
             onCropHandleDown={(handle, clientX, clientY) => {
               const el = slide?.elements?.find(el => el.id === element.id)
@@ -650,6 +768,7 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
               }
             }}
             onCommitCrop={commitCrop}
+            globalFont={globalFont}
           />
         ))}
 
@@ -827,7 +946,7 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
   )
 }
 
-function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, isDragging, editor, onPointerDown, onClick, onDoubleClick, onContextMenu, onStopEdit, onCropHandleDown, onCommitCrop, onAutoResize }) {
+function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, isDragging, editor, onPointerDown, onClick, onDoubleClick, onContextMenu, onStopEdit, onCropHandleDown, onCommitCrop, onAutoResize, onUpdateContent, globalFont }) {
   const contentRef = useRef(null)
   const outerRef = useRef(null)
   const lastAutoHeightRef = useRef(null)
@@ -873,7 +992,7 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
         outline: element.locked ? '2px solid #f59e0b' : (isSelected || isEditing) && !isCropping ? '2px solid #6366f1' : isCropping ? '2px solid #f59e0b' : 'none',
         cursor: isCropping ? 'crosshair' : isEditing ? 'text' : isDragging ? 'grabbing' : element.locked ? 'not-allowed' : 'grab',
         userSelect: isEditing ? 'text' : 'none',
-        overflow: isAutoFit ? 'visible' : 'hidden',
+        overflow: isAutoFit || element.type === 'textpath' ? 'visible' : 'hidden',
         boxSizing: 'border-box',
         borderRadius: (element.type === 'image' || element.type === 'code') && element.borderRadius ? element.borderRadius : undefined,
         transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
@@ -886,16 +1005,34 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
     >
+      {element.animationEnter && element.animationEnter !== 'none' && !isEditing && (
+        <div style={{ position: 'absolute', top: 3, right: 3, zIndex: 20, background: 'rgba(99,102,241,0.85)', color: 'white', fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 3, pointerEvents: 'none', letterSpacing: '0.04em', lineHeight: 1.5 }}>
+          ▶ {element.animationDelay ? `+${element.animationDelay}ms` : 'anim'}
+        </div>
+      )}
       {element.type === 'text' && !isEditing && (
         <div
           ref={contentRef}
           className="slide-text-content"
-          style={{ width: '100%', height: isAutoFit ? 'auto' : '100%', overflow: isAutoFit ? 'visible' : 'hidden', color: 'white', padding: '8px 12px', boxSizing: 'border-box' }}
+          style={{
+            width: '100%', height: isAutoFit ? 'auto' : '100%', overflow: isAutoFit ? 'visible' : 'hidden',
+            color: 'white', padding: '8px 12px', boxSizing: 'border-box',
+            fontFamily: globalFont || undefined,
+            lineHeight: element.lineHeight ?? 1.5,
+            letterSpacing: element.letterSpacing ? `${element.letterSpacing}px` : undefined,
+            wordSpacing: element.wordSpacing ? `${element.wordSpacing}px` : undefined,
+          }}
           dangerouslySetInnerHTML={{ __html: element.content || '' }}
         />
       )}
       {element.type === 'text' && isEditing && (
-        <EditorContent editor={editor} style={{ width: '100%', height: isAutoFit ? 'auto' : '100%', minHeight: isAutoFit ? 40 : undefined, color: 'white' }} />
+        <EditorContent editor={editor} style={{
+          width: '100%', height: isAutoFit ? 'auto' : '100%', minHeight: isAutoFit ? 40 : undefined, color: 'white',
+          fontFamily: globalFont || undefined,
+          lineHeight: element.lineHeight || undefined,
+          letterSpacing: element.letterSpacing ? `${element.letterSpacing}px` : undefined,
+          wordSpacing: element.wordSpacing ? `${element.wordSpacing}px` : undefined,
+        }} />
       )}
       {element.type === 'image' && (() => {
         const imgFilter = [
@@ -943,10 +1080,19 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
       {element.type === 'html' && (
         <iframe
           key={`${element.id}-${element.width}-${element.height}`}
-          srcDoc={element.content || ''}
+          srcDoc={buildHtmlEmbed(element.content || '', element.width, element.height)}
           style={{ width: '100%', height: '100%', border: 'none', display: 'block', pointerEvents: isSelected ? 'auto' : 'none' }}
           sandbox="allow-scripts"
           title="HTML embed"
+        />
+      )}
+      {element.type === 'p5' && (
+        <iframe
+          key={`${element.id}-${element.width}-${element.height}-${element.content}`}
+          srcDoc={buildP5Srcdoc(element.content || '', element.width, element.height)}
+          style={{ width: '100%', height: '100%', border: 'none', display: 'block', pointerEvents: isSelected ? 'auto' : 'none' }}
+          sandbox="allow-scripts"
+          title="p5.js sketch"
         />
       )}
       {element.type === 'code' && (
@@ -1013,6 +1159,145 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
               <div style={{ fontSize: Math.min(element.height * 0.05, 11), opacity: 0.6 }}>Double-click to edit & render</div>
             </div>
       )}
+
+      {element.type === 'textpath' && !isEditing && (() => {
+        const pathSide = element.pathSide || 'bottom'
+        const fontSize = element.fontSize || 64
+        const w = element.width
+        const effectiveFont = element.fontFamily || globalFont || 'sans-serif'
+
+        // Edge modes: multi-line text with each line's first/last char aligned to an (optionally angled) guide
+        if (pathSide === 'leftedge' || pathSide === 'rightedge') {
+          const pad = Math.ceil(fontSize * 0.6)
+          const pathX0 = pathSide === 'leftedge' ? pad : (w - pad)
+          const svgH = element.height || 300
+          const lineH = fontSize * (element.lineHeight ?? 1.35)
+          const tanA = Math.tan(((element.angle || 0) * Math.PI) / 180)
+          const lines = (element.content || '').split('\n')
+          const lineXAt = (i) => pathX0 + (fontSize + i * lineH) * tanA
+          const guideX2 = pathX0 + svgH * tanA
+          return (
+            <svg width={w} height={svgH} viewBox={`0 0 ${w} ${svgH}`}
+              style={{ display: 'block', overflow: 'visible', pointerEvents: 'none' }}>
+              {element.showPath !== false && (
+                <line x1={pathX0} y1={0} x2={guideX2} y2={svgH} stroke="rgba(34,211,238,0.4)" strokeWidth={1} />
+              )}
+              <text
+                fontSize={fontSize}
+                fontFamily={effectiveFont}
+                fill={element.color || '#ffffff'}
+                fontWeight={element.fontWeight || 'normal'}
+                fontStyle={element.fontStyle || 'normal'}
+                letterSpacing={element.letterSpacing || 0}
+                wordSpacing={element.wordSpacing || undefined}
+                textAnchor={pathSide === 'leftedge' ? 'start' : 'end'}
+              >
+                {lines.map((line, i) => (
+                  <tspan key={i} x={lineXAt(i)} dy={i === 0 ? fontSize : lineH}>                    {line || ' '}
+                  </tspan>
+                ))}
+              </text>
+            </svg>
+          )
+        }
+
+        // Diagonal modes: text follows slanted path
+        const { svgH, pathD } = textPathGeometry(w, element.angle, fontSize)
+        const pathId = `tp-${element.id}`
+        const capHeight = Math.round(fontSize * 0.72)
+        const textDy = (pathSide === 'left' || pathSide === 'right') ? capHeight : 0
+        const tpSide = (pathSide === 'top' || pathSide === 'right') ? 'right' : 'left'
+        return (
+          <svg width={w} height={svgH} viewBox={`0 0 ${w} ${svgH}`}
+            style={{ display: 'block', overflow: 'visible', pointerEvents: 'none' }}>
+            <defs><path id={pathId} d={pathD} /></defs>
+            {element.showPath !== false && (
+              <use href={`#${pathId}`} stroke="rgba(34,211,238,0.4)" strokeWidth={1} fill="none" />
+            )}
+            <text
+              fontSize={fontSize}
+              fontFamily={effectiveFont}
+              fill={element.color || '#ffffff'}
+              fontWeight={element.fontWeight || 'normal'}
+              fontStyle={element.fontStyle || 'normal'}
+              letterSpacing={element.letterSpacing || 0}
+              wordSpacing={element.wordSpacing || undefined}
+              dy={textDy || undefined}
+            >
+              <textPath href={`#${pathId}`} startOffset={`${element.startOffset || 0}%`} textAnchor={element.textAnchor || 'start'} side={tpSide}>
+                {element.content || ''}
+              </textPath>
+            </text>
+          </svg>
+        )
+      })()}
+
+      {element.type === 'textpath' && isEditing && (() => {
+        const pathSide = element.pathSide || 'bottom'
+        const fontSize = element.fontSize || 64
+        const w = element.width
+        const effectiveFont = element.fontFamily || globalFont || 'sans-serif'
+
+        const editOverlay = (svgH, svgPreview) => (
+          <div style={{ position: 'relative', width: w, height: svgH }}>
+            {svgPreview}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.65)' }}>
+              <textarea
+                autoFocus
+                defaultValue={element.content || ''}
+                onBlur={e => { onUpdateContent?.(element.id, e.target.value); onStopEdit?.() }}
+                onClick={e => e.stopPropagation()}
+                onKeyDown={e => { if (e.key === 'Escape') { onUpdateContent?.(element.id, e.target.value); onStopEdit?.() } e.stopPropagation() }}
+                style={{ width: '90%', background: 'rgba(15,15,30,0.95)', color: 'white', border: '1px solid #6366f1', borderRadius: 6, padding: '10px 14px', fontSize: 14, fontFamily: effectiveFont, resize: 'vertical', outline: 'none', minHeight: 48 }}
+                placeholder="Use Enter for new lines in edge mode"
+                rows={3}
+              />
+            </div>
+          </div>
+        )
+
+        if (pathSide === 'leftedge' || pathSide === 'rightedge') {
+          const pad = Math.ceil(fontSize * 0.6)
+          const pathX0 = pathSide === 'leftedge' ? pad : (w - pad)
+          const svgH = element.height || 300
+          const lineH = fontSize * (element.lineHeight ?? 1.35)
+          const tanA = Math.tan(((element.angle || 0) * Math.PI) / 180)
+          const lines = (element.content || '').split('\n')
+          const lineXAt = (i) => pathX0 + (fontSize + i * lineH) * tanA
+          const guideX2 = pathX0 + svgH * tanA
+          const preview = (
+            <svg width={w} height={svgH} viewBox={`0 0 ${w} ${svgH}`}
+              style={{ display: 'block', overflow: 'visible', opacity: 0.25, pointerEvents: 'none' }}>
+              <line x1={pathX0} y1={0} x2={guideX2} y2={svgH} stroke="#22d3ee" strokeWidth={1} />
+              <text fontSize={fontSize} fontFamily={effectiveFont} fill={element.color || '#ffffff'}
+                letterSpacing={element.letterSpacing || 0} wordSpacing={element.wordSpacing || undefined}
+                textAnchor={pathSide === 'leftedge' ? 'start' : 'end'}>
+                {lines.map((line, i) => (
+                  <tspan key={i} x={lineXAt(i)} dy={i === 0 ? fontSize : lineH}>{line || ' '}</tspan>
+                ))}
+              </text>
+            </svg>
+          )
+          return editOverlay(svgH, preview)
+        }
+
+        const { svgH, pathD } = textPathGeometry(w, element.angle, fontSize)
+        const pathId = `tp-edit-${element.id}`
+        const capHeight = Math.round(fontSize * 0.72)
+        const textDy = (pathSide === 'left' || pathSide === 'right') ? capHeight : 0
+        const tpSide = (pathSide === 'top' || pathSide === 'right') ? 'right' : 'left'
+        const preview = (
+          <svg width={w} height={svgH} viewBox={`0 0 ${w} ${svgH}`}
+            style={{ display: 'block', overflow: 'visible', opacity: 0.25, pointerEvents: 'none' }}>
+            <defs><path id={pathId} d={pathD} /></defs>
+            <use href={`#${pathId}`} stroke="#22d3ee" strokeWidth={1} fill="none" />
+            <text fontSize={fontSize} fontFamily={effectiveFont} fill={element.color || '#ffffff'} dy={textDy || undefined}>
+              <textPath href={`#${pathId}`} side={tpSide}>{element.content || ''}</textPath>
+            </text>
+          </svg>
+        )
+        return editOverlay(svgH, preview)
+      })()}
 
       {/* Fragment badge */}
       {element.fragment && (
@@ -1362,14 +1647,16 @@ function ShapeRenderer({ element }) {
   const stroke = element.stroke || 'none'
   const sw = element.strokeWidth || 0
   const shape = element.shape || 'rect'
+  const sda = element.strokeDasharray === 'dashed' ? `${sw*3} ${sw*2}` : element.strokeDasharray === 'dotted' ? `${sw} ${sw*1.5}` : undefined
 
   const renderShape = () => {
     if (shape === 'line') {
       const lw = element.strokeWidth || 3
       const lineColor = element.stroke && element.stroke !== 'none' ? element.stroke : (element.fill || '#ffffff')
-      return <line x1={lw} y1={h/2} x2={w-lw} y2={h/2} stroke={lineColor} strokeWidth={lw} fill="none" />
+      const lsda = element.strokeDasharray === 'dashed' ? `${lw*3} ${lw*2}` : element.strokeDasharray === 'dotted' ? `${lw} ${lw*1.5}` : undefined
+      return <line x1={lw} y1={h/2} x2={w-lw} y2={h/2} stroke={lineColor} strokeWidth={lw} strokeDasharray={lsda} fill="none" />
     }
-    const gProps = { fill, stroke, strokeWidth: sw }
+    const gProps = { fill, stroke, strokeWidth: sw, strokeDasharray: sda }
     switch(shape) {
       case 'rect':
         return <g {...gProps}><rect x={sw/2} y={sw/2} width={w-sw} height={h-sw} rx={element.borderRadius || 0} /></g>
@@ -1384,7 +1671,10 @@ function ShapeRenderer({ element }) {
       case 'arrow-right':
         return <g {...gProps}><polygon points={`${sw},${h*0.35} ${w*0.6},${h*0.35} ${w*0.6},${sw} ${w-sw},${h/2} ${w*0.6},${h-sw} ${w*0.6},${h*0.65} ${sw},${h*0.65}`} /></g>
       case 'star': {
-        const cx=w/2, cy=h/2, outerR=Math.min(w,h)/2-sw, innerR=outerR*0.4
+        const cx = element.starCx != null ? element.starCx : w/2
+        const cy = element.starCy != null ? element.starCy : h/2
+        const outerR = element.starOuterR != null ? element.starOuterR : Math.min(w,h)/2-sw
+        const innerR = element.starInnerR != null ? element.starInnerR : outerR*0.4
         const pts=[]; for(let i=0;i<10;i++){const a=(Math.PI/5)*i-Math.PI/2;const r=i%2===0?outerR:innerR;pts.push(`${cx+r*Math.cos(a)},${cy+r*Math.sin(a)}`)}
         return <g {...gProps}><polygon points={pts.join(' ')} /></g>
       }

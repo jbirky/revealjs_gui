@@ -29,7 +29,7 @@ const CODE_LANGUAGES = [
   { id: 'latex', label: 'LaTeX' },
 ]
 
-export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide, onUpdateElement, onDeleteElement, onBringForward, onSendBackward, onEditHtml, onEditCode, onEditLatex, presentation, onUpdatePresentation, selectedElementIds, onDeleteSelectedElements, isTemplate = false, activeMathNode, onUpdateMathNode, onCloseMathNode }) {
+export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide, onUpdateElement, onDeleteElement, onBringForward, onSendBackward, onEditHtml, onEditCode, onEditLatex, onEditP5, presentation, onUpdatePresentation, selectedElementIds, onDeleteSelectedElements, isTemplate = false, activeMathNode, onUpdateMathNode, onCloseMathNode }) {
   const [videoUploading, setVideoUploading] = useState(false)
   const videoFileRef = useRef(null)
 
@@ -189,7 +189,7 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
 
           {/* Text box sizing mode */}
           {selectedElement.type === 'text' && (
-            <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
               {[['fixed', 'Fixed Box'], ['auto', 'Auto Fit']].map(([mode, label]) => (
                 <button
                   key={mode}
@@ -204,6 +204,33 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                   {label}
                 </button>
               ))}
+            </div>
+          )}
+
+          {/* Text spacing controls */}
+          {selectedElement.type === 'text' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Line Height</div>
+                <input className="prop-input" type="number" min={0.1} max={4} step={0.1}
+                  value={selectedElement.lineHeight ?? 1.4}
+                  onChange={e => onUpdateElement({ lineHeight: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Letter (px)</div>
+                <input className="prop-input" type="number" min={-20} max={100} step={0.5}
+                  value={selectedElement.letterSpacing ?? 0}
+                  onChange={e => onUpdateElement({ letterSpacing: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Word (px)</div>
+                <input className="prop-input" type="number" min={-10} max={200} step={0.5}
+                  value={selectedElement.wordSpacing ?? 0}
+                  onChange={e => onUpdateElement({ wordSpacing: Number(e.target.value) })}
+                />
+              </div>
             </div>
           )}
 
@@ -228,6 +255,19 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
             </div>
           )}
 
+          {selectedElement.type === 'p5' && (
+            <div style={{ marginBottom: 10 }}>
+              <button
+                className="btn btn-secondary"
+                style={{ width: '100%', justifyContent: 'center', fontSize: 12, marginBottom: 6 }}
+                onClick={onEditP5}
+              >
+                Edit p5.js Sketch
+              </button>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Double-click element to open sketch editor</p>
+            </div>
+          )}
+
           {/* LaTeX / TikZ options */}
           {selectedElement.type === 'latex' && (
             <div style={{ marginBottom: 10 }}>
@@ -239,6 +279,215 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 Edit LaTeX / TikZ
               </button>
               <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Double-click element to open editor</p>
+            </div>
+          )}
+
+          {/* Text Path options */}
+          {selectedElement.type === 'textpath' && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Text Content</div>
+              <textarea
+                value={selectedElement.content || ''}
+                onChange={e => onUpdateElement({ content: e.target.value })}
+                style={{ width: '100%', minHeight: 48, background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '6px 8px', borderRadius: 4, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', marginBottom: 8 }}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Angle (°)</div>
+                  <input className="prop-input" type="number" min={-85} max={85} step={1}
+                    value={selectedElement.angle ?? 15}
+                    onChange={e => {
+                      const angle = Math.max(-85, Math.min(85, Number(e.target.value) || 0))
+                      const fs = selectedElement.fontSize || 64
+                      const w = selectedElement.width || 500
+                      const dy = Math.abs(w * Math.tan((angle * Math.PI) / 180))
+                      onUpdateElement({ angle, height: Math.ceil(dy + fs * 2.4) })
+                    }}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Font Size</div>
+                  <input className="prop-input" type="number" min={8} max={300}
+                    value={selectedElement.fontSize || 64}
+                    onChange={e => {
+                      const fontSize = Math.max(8, Number(e.target.value) || 64)
+                      const angle = selectedElement.angle ?? 0
+                      const w = selectedElement.width || 500
+                      const dy = Math.abs(w * Math.tan((angle * Math.PI) / 180))
+                      onUpdateElement({ fontSize, height: Math.ceil(dy + fontSize * 2.4) })
+                    }}
+                  />
+                </div>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Font Family</div>
+                <select className="prop-input" value={selectedElement.fontFamily || ''} onChange={e => onUpdateElement({ fontFamily: e.target.value || null })}>
+                  <option value="">↺ Use Global{presentation?.globalFont ? ` (${presentation.globalFont.split(',')[0].replace(/'/g, '')})` : ''}</option>
+                  <option value="sans-serif">Default Sans</option>
+                  <optgroup label="Sans-serif">
+                    <option value="Arial, sans-serif">Arial</option>
+                    <option value="'Helvetica Neue', sans-serif">Helvetica</option>
+                    <option value="Inter, sans-serif">Inter</option>
+                    <option value="'Inter Tight', sans-serif">Inter Tight</option>
+                    <option value="Roboto, sans-serif">Roboto</option>
+                    <option value="'Roboto Flex', sans-serif">Roboto Flex</option>
+                    <option value="'Open Sans', sans-serif">Open Sans</option>
+                    <option value="'Source Sans Pro', sans-serif">Source Sans Pro</option>
+                    <option value="'Source Sans 3', sans-serif">Source Sans 3</option>
+                    <option value="'Fira Sans', sans-serif">Fira Sans</option>
+                    <option value="'IBM Plex Sans', sans-serif">IBM Plex Sans</option>
+                    <option value="Manrope, sans-serif">Manrope</option>
+                    <option value="Geist, sans-serif">Geist</option>
+                    <option value="Figtree, sans-serif">Figtree</option>
+                    <option value="Ubuntu, sans-serif">Ubuntu</option>
+                    <option value="Rubik, sans-serif">Rubik</option>
+                    <option value="'PT Sans', sans-serif">PT Sans</option>
+                    <option value="'Didact Gothic', sans-serif">Didact Gothic</option>
+                    <option value="Questrial, sans-serif">Questrial</option>
+                    <option value="Barlow, sans-serif">Barlow</option>
+                  </optgroup>
+                  <optgroup label="Rounded">
+                    <option value="Comfortaa, sans-serif">Comfortaa</option>
+                    <option value="Nunito, sans-serif">Nunito</option>
+                    <option value="'Nunito Sans', sans-serif">Nunito Sans</option>
+                    <option value="Quicksand, sans-serif">Quicksand</option>
+                    <option value="Dosis, sans-serif">Dosis</option>
+                    <option value="'M PLUS Rounded 1c', sans-serif">M PLUS Rounded 1c</option>
+                    <option value="Jura, sans-serif">Jura</option>
+                  </optgroup>
+                  <optgroup label="Condensed">
+                    <option value="'Barlow Condensed', sans-serif">Barlow Condensed</option>
+                    <option value="'Asap Condensed', sans-serif">Asap Condensed</option>
+                    <option value="'Roboto Condensed', sans-serif">Roboto Condensed</option>
+                  </optgroup>
+                  <optgroup label="Serif">
+                    <option value="Georgia, serif">Georgia</option>
+                    <option value="'Times New Roman', serif">Times New Roman</option>
+                    <option value="'Playfair Display', serif">Playfair Display</option>
+                    <option value="Merriweather, serif">Merriweather</option>
+                    <option value="'Computer Modern Serif', serif">Computer Modern</option>
+                    <option value="'Latin Modern Roman', serif">Latin Modern Roman</option>
+                  </optgroup>
+                  <optgroup label="Monospace">
+                    <option value="'Courier New', monospace">Courier New</option>
+                    <option value="'Fira Code', monospace">Fira Code</option>
+                    <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                    <option value="Inconsolata, monospace">Inconsolata</option>
+                    <option value="'Roboto Mono', monospace">Roboto Mono</option>
+                    <option value="'Space Mono', monospace">Space Mono</option>
+                  </optgroup>
+                  <optgroup label="Display">
+                    <option value="Impact, sans-serif">Impact</option>
+                    <option value="'Bebas Neue', sans-serif">Bebas Neue</option>
+                    <option value="Codystar, sans-serif">Codystar</option>
+                    <option value="'National Park', sans-serif">National Park</option>
+                    <option value="'Futura PT', Futura, 'Century Gothic', sans-serif">Futura</option>
+                    <option value="'Bauhaus 93', Impact, sans-serif">Bauhaus 93</option>
+                  </optgroup>
+                </select>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Color</div>
+                <input type="color" value={selectedElement.color || '#ffffff'}
+                  onChange={e => onUpdateElement({ color: e.target.value })}
+                  style={{ width: '100%', height: 28, border: '1px solid var(--border)', borderRadius: 4, padding: 2, background: 'none', cursor: 'pointer' }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Line Height</div>
+                  <input className="prop-input" type="number" min={0.1} max={4} step={0.1}
+                    value={selectedElement.lineHeight ?? 1.35}
+                    onChange={e => onUpdateElement({ lineHeight: Number(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Letter (px)</div>
+                  <input className="prop-input" type="number" min={-20} max={100} step={0.5}
+                    value={selectedElement.letterSpacing || 0}
+                    onChange={e => onUpdateElement({ letterSpacing: Number(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Word (px)</div>
+                  <input className="prop-input" type="number" min={-10} max={200} step={0.5}
+                    value={selectedElement.wordSpacing || 0}
+                    onChange={e => onUpdateElement({ wordSpacing: Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Weight</div>
+                  <select className="prop-input" value={selectedElement.fontWeight || 'normal'} onChange={e => onUpdateElement({ fontWeight: e.target.value })}>
+                    <option value="100">Thin</option>
+                    <option value="300">Light</option>
+                    <option value="normal">Normal</option>
+                    <option value="500">Medium</option>
+                    <option value="700">Bold</option>
+                    <option value="900">Black</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Style</div>
+                  <select className="prop-input" value={selectedElement.fontStyle || 'normal'} onChange={e => onUpdateElement({ fontStyle: e.target.value })}>
+                    <option value="normal">Normal</option>
+                    <option value="italic">Italic</option>
+                    <option value="oblique">Oblique</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Alignment</div>
+                  <select className="prop-input" value={selectedElement.textAnchor || 'start'} onChange={e => onUpdateElement({ textAnchor: e.target.value })}>
+                    <option value="start">Start</option>
+                    <option value="middle">Middle</option>
+                    <option value="end">End</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Offset (%)</div>
+                  <input className="prop-input" type="number" min={0} max={100}
+                    value={selectedElement.startOffset || 0}
+                    onChange={e => onUpdateElement({ startOffset: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                  />
+                </div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: 8 }}>
+                <input type="checkbox" checked={selectedElement.showPath !== false}
+                  onChange={e => onUpdateElement({ showPath: e.target.checked })}
+                  style={{ accentColor: 'var(--accent)' }}
+                />
+                Show path guide line
+              </label>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Path Position</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginBottom: 4 }}>
+                  {[
+                    { value: 'bottom', label: 'Base' },
+                    { value: 'left',   label: 'Mid' },
+                    { value: 'top',    label: 'Cap' },
+                    { value: 'right',  label: 'Below' },
+                    { value: 'leftedge',  label: '← Left' },
+                    { value: 'rightedge', label: 'Right →' },
+                  ].map(opt => (
+                    <button key={opt.value}
+                      onClick={() => onUpdateElement({ pathSide: opt.value })}
+                      style={{
+                        padding: '4px 0', fontSize: 11, borderRadius: 4, cursor: 'pointer', border: '1px solid var(--border)',
+                        background: (selectedElement.pathSide || 'bottom') === opt.value ? 'var(--accent)' : 'var(--bg-hover)',
+                        color: (selectedElement.pathSide || 'bottom') === opt.value ? '#fff' : 'var(--text-secondary)',
+                      }}
+                    >{opt.label}</button>
+                  ))}
+                </div>
+                {(selectedElement.pathSide === 'leftedge' || selectedElement.pathSide === 'rightedge') && (
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                    Resize element height to control path length. Text flows top → bottom along the edge.
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -485,12 +734,70 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 />
               </div>
               <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Stroke Style</div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {[
+                    { value: 'solid',  label: '—',   title: 'Solid' },
+                    { value: 'dashed', label: '- -',  title: 'Dashed' },
+                    { value: 'dotted', label: '···', title: 'Dotted' },
+                  ].map(({ value, label, title }) => (
+                    <button key={value} title={title}
+                      onClick={() => onUpdateElement({ strokeDasharray: value === 'solid' ? undefined : value })}
+                      style={{
+                        flex: 1, padding: '4px 0', fontSize: 13, borderRadius: 4, cursor: 'pointer',
+                        background: (selectedElement.strokeDasharray || 'solid') === value ? 'var(--accent)' : 'var(--bg-hover)',
+                        color: 'white', border: '1px solid var(--border)', fontFamily: 'monospace',
+                      }}
+                    >{label}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Opacity: {Math.round((selectedElement.opacity ?? 1) * 100)}%</div>
                 <input type="range" min="0" max="100" value={Math.round((selectedElement.opacity ?? 1) * 100)}
                   onChange={e => onUpdateElement({ opacity: Number(e.target.value) / 100 })}
                   style={{ width: '100%', accentColor: 'var(--accent)' }}
                 />
               </div>
+              {selectedElement.shape === 'star' && (() => {
+                const w = selectedElement.width || 100
+                const h = selectedElement.height || 100
+                const sw = selectedElement.strokeWidth || 0
+                const defOuter = Math.min(w,h)/2 - sw
+                const defInner = defOuter * 0.4
+                return (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 6 }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Center X</div>
+                        <input className="prop-input" type="number" step={1}
+                          value={selectedElement.starCx != null ? selectedElement.starCx : Math.round(w/2)}
+                          onChange={e => onUpdateElement({ starCx: Number(e.target.value) })} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Center Y</div>
+                        <input className="prop-input" type="number" step={1}
+                          value={selectedElement.starCy != null ? selectedElement.starCy : Math.round(h/2)}
+                          onChange={e => onUpdateElement({ starCy: Number(e.target.value) })} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Outer R</div>
+                        <input className="prop-input" type="number" step={1} min={1}
+                          value={selectedElement.starOuterR != null ? selectedElement.starOuterR : Math.round(defOuter)}
+                          onChange={e => onUpdateElement({ starOuterR: Number(e.target.value) })} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Inner R</div>
+                        <input className="prop-input" type="number" step={1} min={1}
+                          value={selectedElement.starInnerR != null ? selectedElement.starInnerR : Math.round(defInner)}
+                          onChange={e => onUpdateElement({ starInnerR: Number(e.target.value) })} />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
               {(selectedElement.shape === 'rect' || selectedElement.shape === 'rounded-rect') && (
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Corner Radius: {selectedElement.borderRadius || 0}px</div>
@@ -694,6 +1001,66 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
             </div>
           )}
 
+          {/* Slide entry animation (GSAP) */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Slide Entry Animation</div>
+            <select
+              className="prop-input"
+              style={{ padding: '4px 6px', marginBottom: 6, width: '100%' }}
+              value={selectedElement.animationEnter || 'none'}
+              onChange={e => onUpdateElement({ animationEnter: e.target.value })}
+            >
+              <option value="none">None</option>
+              <optgroup label="Fade">
+                <option value="fadeIn">Fade In</option>
+                <option value="fadeUp">Fade Up ↑</option>
+                <option value="fadeDown">Fade Down ↓</option>
+                <option value="fadeLeft">Fade Left ←</option>
+                <option value="fadeRight">Fade Right →</option>
+              </optgroup>
+              <optgroup label="Zoom">
+                <option value="zoomIn">Zoom In</option>
+                <option value="zoomOut">Zoom Out</option>
+              </optgroup>
+              <optgroup label="Slide">
+                <option value="slideUp">Slide Up ↑</option>
+                <option value="slideDown">Slide Down ↓</option>
+                <option value="slideLeft">Slide Left ←</option>
+                <option value="slideRight">Slide Right →</option>
+              </optgroup>
+              <optgroup label="Flip">
+                <option value="flipX">Flip X</option>
+                <option value="flipY">Flip Y</option>
+              </optgroup>
+            </select>
+            {selectedElement.animationEnter && selectedElement.animationEnter !== 'none' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Delay (ms)</div>
+                  <input
+                    className="prop-input"
+                    type="number"
+                    min={0} max={5000} step={50}
+                    placeholder="0"
+                    value={selectedElement.animationDelay ?? 0}
+                    onChange={e => onUpdateElement({ animationDelay: Number(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Duration (ms)</div>
+                  <input
+                    className="prop-input"
+                    type="number"
+                    min={100} max={5000} step={50}
+                    placeholder="600"
+                    value={selectedElement.animationDuration ?? 600}
+                    onChange={e => onUpdateElement({ animationDuration: Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Fragment animation */}
           <div style={{ marginBottom: 10 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, cursor: 'pointer' }}>
@@ -804,6 +1171,32 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
           </button>
         </div>
       )}
+
+      {/* Present Grid per-slide override */}
+      <div className="prop-section">
+        <h3>Present Grid</h3>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+          {[['default', 'Default'], ['show', 'Show'], ['hide', 'Hide']].map(([val, label]) => {
+            const current = slide.showPresentGrid == null ? 'default' : (slide.showPresentGrid ? 'show' : 'hide')
+            return (
+              <button
+                key={val}
+                className={`bg-type-tab ${current === val ? 'active' : ''}`}
+                onClick={() => {
+                  const newVal = val === 'default' ? null : val === 'show'
+                  onUpdateSlide({ showPresentGrid: newVal })
+                }}
+                style={{ flex: 1 }}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+          Default: grid {presentation?.showPresentGrid ? 'on' : 'off'} (controlled by top bar)
+        </div>
+      </div>
 
       {/* Slide Section + Footer Style */}
       <div className="prop-section">

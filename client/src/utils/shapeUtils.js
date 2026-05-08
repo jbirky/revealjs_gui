@@ -17,11 +17,16 @@ export function shapeSvgString(el) {
   const sw = el.strokeWidth || 0
   const shape = el.shape || 'rect'
 
+  const sda = el.strokeDasharray === 'dashed' ? `${sw*3} ${sw*2}` : el.strokeDasharray === 'dotted' ? `${sw} ${sw*1.5}` : ''
+  const sdaAttr = sda ? ` stroke-dasharray="${sda}"` : ''
+
   let inner = ''
   if (shape === 'line') {
     const lw = el.strokeWidth || 3
     const lineColor = el.stroke && el.stroke !== 'none' ? el.stroke : (el.fill || '#ffffff')
-    inner = `<line x1="${lw}" y1="${h/2}" x2="${w-lw}" y2="${h/2}" stroke="${lineColor}" stroke-width="${lw}" fill="none" />`
+    const lsda = el.strokeDasharray === 'dashed' ? `${lw*3} ${lw*2}` : el.strokeDasharray === 'dotted' ? `${lw} ${lw*1.5}` : ''
+    const lsdaAttr = lsda ? ` stroke-dasharray="${lsda}"` : ''
+    inner = `<line x1="${lw}" y1="${h/2}" x2="${w-lw}" y2="${h/2}" stroke="${lineColor}" stroke-width="${lw}"${lsdaAttr} fill="none" />`
   } else {
     let shapeEl = ''
     switch(shape) {
@@ -38,7 +43,10 @@ export function shapeSvgString(el) {
       case 'arrow-right':
         shapeEl = `<polygon points="${sw},${h*0.35} ${w*0.6},${h*0.35} ${w*0.6},${sw} ${w-sw},${h/2} ${w*0.6},${h-sw} ${w*0.6},${h*0.65} ${sw},${h*0.65}" />`; break
       case 'star': {
-        const cx=w/2, cy=h/2, outerR=Math.min(w,h)/2-sw, innerR=outerR*0.4
+        const cx = el.starCx != null ? el.starCx : w/2
+        const cy = el.starCy != null ? el.starCy : h/2
+        const outerR = el.starOuterR != null ? el.starOuterR : Math.min(w,h)/2-sw
+        const innerR = el.starInnerR != null ? el.starInnerR : outerR*0.4
         const pts=[]
         for(let i=0;i<10;i++){const a=(Math.PI/5)*i-Math.PI/2;const r=i%2===0?outerR:innerR;pts.push(`${cx+r*Math.cos(a)},${cy+r*Math.sin(a)}`)}
         shapeEl = `<polygon points="${pts.join(' ')}" />`; break
@@ -46,7 +54,7 @@ export function shapeSvgString(el) {
       default:
         shapeEl = `<rect x="${sw/2}" y="${sw/2}" width="${w-sw}" height="${h-sw}" />`
     }
-    inner = `<g fill="${fill}" stroke="${stroke}" stroke-width="${sw}">${shapeEl}</g>`
+    inner = `<g fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${sdaAttr}>${shapeEl}</g>`
   }
 
   let textEl = ''

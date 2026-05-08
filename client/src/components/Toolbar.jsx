@@ -51,7 +51,7 @@ const GRADIENT_PRESETS_BG = [
   'linear-gradient(135deg, #2c3e50, #3498db)'
 ]
 
-export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddImage, onAddImageUpload, onAddShape, onAddHtml, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, onAddManim, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers, onImportPptx, drawTool, onSetDrawTool, onUndo, onRedo, canUndo, canRedo }) {
+export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddTextPath, onAddImage, onAddImageUpload, onAddShape, onAddHtml, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, onAddManim, onAddP5, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers, guides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onImportPptx, drawTool, onSetDrawTool, onUndo, onRedo, canUndo, canRedo }) {
   const [showShapeMenu, setShowShapeMenu] = useState(false)
   const [showTableMenu, setShowTableMenu] = useState(false)
   const [showColorPalette, setShowColorPalette] = useState(false)
@@ -231,6 +231,9 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
       <button className="btn-icon" title="Add Text Box" onClick={onAddText} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
         <TypeIcon size={14} /> Text
       </button>
+      <button className="btn-icon" title="Add Text on Path — text that follows a slanted baseline" onClick={onAddTextPath} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+        <span style={{ fontSize: 13, fontStyle: 'italic', transform: 'rotate(-8deg)', display: 'inline-block', lineHeight: 1 }}>T/</span> Path
+      </button>
       <div className="color-btn-wrapper" title="Add Image" style={{ position: 'relative' }}>
         <button className="btn-icon" title="Add Image" onClick={onAddImage} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
           <ImageIcon size={14} /> Image
@@ -275,6 +278,9 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
 
       <button className="btn-icon" title="Insert HTML / D3 embed" onClick={onAddHtml} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
         <FileCode size={14} /> Embed
+      </button>
+      <button className="btn-icon" title="Insert p5.js sketch" onClick={onAddP5} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+        <Code size={14} /> p5
       </button>
       <button className="btn-icon" title="Insert Code Block" onClick={onAddCode} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
         <Code size={14} /> Code
@@ -564,14 +570,51 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
         <Magnet size={14} />
       </button>
 
-      {/* Ruler toggle */}
+      {/* Ruler / guide toggle */}
       <button
         className={`btn-icon ${showRulers ? 'active' : ''}`}
         onClick={onToggleRulers}
-        title={showRulers ? 'Hide rulers' : 'Show rulers (drag to add guides)'}
+        title={showRulers ? 'Hide rulers & guides' : 'Show rulers — drag from ruler to add custom guides'}
       >
         <Ruler size={14} />
       </button>
+
+      {/* Custom guide manager */}
+      {showRulers && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'var(--bg-hover)', borderRadius: 5, padding: '2px 5px', border: '1px solid var(--border)' }}>
+          <button
+            onClick={() => onAddGuide?.({ axis: 'y', position: 270 })}
+            title="Add horizontal guide"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#22d3ee', fontWeight: 700, fontSize: 11, padding: '1px 4px', borderRadius: 3, lineHeight: 1 }}
+          >+H</button>
+          <button
+            onClick={() => onAddGuide?.({ axis: 'x', position: 480 })}
+            title="Add vertical guide"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#22d3ee', fontWeight: 700, fontSize: 11, padding: '1px 4px', borderRadius: 3, lineHeight: 1 }}
+          >+V</button>
+          {guides.length > 0 && (
+            <>
+              <span style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 2px' }} />
+              {guides.map((g, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <span style={{ fontSize: 9, color: '#22d3ee', fontWeight: 700, minWidth: 10 }}>{g.axis === 'x' ? 'V' : 'H'}</span>
+                  <input
+                    type="number" min="0" max={g.axis === 'x' ? 960 : 540}
+                    value={g.position}
+                    onChange={e => onUpdateGuide?.(i, Math.max(0, Math.min(g.axis === 'x' ? 960 : 540, Number(e.target.value) || 0)))}
+                    style={{ width: 40, padding: '1px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 3, fontSize: 11, textAlign: 'center' }}
+                  />
+                  <button
+                    onClick={() => onRemoveGuide?.(i)}
+                    title="Remove guide"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, padding: '0 2px', lineHeight: 1 }}
+                  >×</button>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
 
       {selectedCount >= 2 && (
         <>
@@ -623,11 +666,40 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
               <option value="Tahoma, sans-serif">Tahoma</option>
               <option value="'Trebuchet MS', sans-serif">Trebuchet</option>
               <option value="Inter, sans-serif">Inter</option>
+              <option value="'Inter Tight', sans-serif">Inter Tight</option>
               <option value="Roboto, sans-serif">Roboto</option>
+              <option value="'Roboto Flex', sans-serif">Roboto Flex</option>
               <option value="'Open Sans', sans-serif">Open Sans</option>
               <option value="'Source Sans Pro', sans-serif">Source Sans Pro</option>
+              <option value="'Source Sans 3', sans-serif">Source Sans 3</option>
+              <option value="'Fira Sans', sans-serif">Fira Sans</option>
+              <option value="'IBM Plex Sans', sans-serif">IBM Plex Sans</option>
+              <option value="Manrope, sans-serif">Manrope</option>
+              <option value="Geist, sans-serif">Geist</option>
+              <option value="Figtree, sans-serif">Figtree</option>
+              <option value="Ubuntu, sans-serif">Ubuntu</option>
+              <option value="Rubik, sans-serif">Rubik</option>
+              <option value="'PT Sans', sans-serif">PT Sans</option>
+              <option value="'Istok Web', sans-serif">Istok Web</option>
+              <option value="'Didact Gothic', sans-serif">Didact Gothic</option>
+              <option value="Questrial, sans-serif">Questrial</option>
+              <option value="Barlow, sans-serif">Barlow</option>
               <option value="'Computer Modern Sans', sans-serif">Computer Modern Sans</option>
               <option value="'Humanist 777 BT', 'Gill Sans', 'Gill Sans MT', Calibri, sans-serif">Humanist 777</option>
+            </optgroup>
+            <optgroup label="Rounded">
+              <option value="Comfortaa, sans-serif">Comfortaa</option>
+              <option value="Nunito, sans-serif">Nunito</option>
+              <option value="'Nunito Sans', sans-serif">Nunito Sans</option>
+              <option value="Quicksand, sans-serif">Quicksand</option>
+              <option value="Dosis, sans-serif">Dosis</option>
+              <option value="'M PLUS Rounded 1c', sans-serif">M PLUS Rounded 1c</option>
+              <option value="Jura, sans-serif">Jura</option>
+            </optgroup>
+            <optgroup label="Condensed">
+              <option value="'Barlow Condensed', sans-serif">Barlow Condensed</option>
+              <option value="'Asap Condensed', sans-serif">Asap Condensed</option>
+              <option value="'Roboto Condensed', sans-serif">Roboto Condensed</option>
             </optgroup>
             <optgroup label="Serif">
               <option value="Georgia, serif">Georgia</option>
@@ -641,9 +713,17 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
               <option value="'Courier New', monospace">Courier New</option>
               <option value="'Fira Code', monospace">Fira Code</option>
               <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+              <option value="Inconsolata, monospace">Inconsolata</option>
+              <option value="'Roboto Mono', monospace">Roboto Mono</option>
+              <option value="'Space Mono', monospace">Space Mono</option>
             </optgroup>
             <optgroup label="Display">
               <option value="Impact, sans-serif">Impact</option>
+              <option value="'Bebas Neue', sans-serif">Bebas Neue</option>
+              <option value="Codystar, sans-serif">Codystar</option>
+              <option value="'National Park', sans-serif">National Park</option>
+              <option value="'Futura PT', Futura, 'Century Gothic', sans-serif">Futura</option>
+              <option value="'Bauhaus 93', Impact, sans-serif">Bauhaus 93</option>
             </optgroup>
           </select>
 
