@@ -1,0 +1,29 @@
+---
+layout: home
+
+hero:
+  name: "Slides Editor"
+  text: "Build beautiful presentations — self-hosted"
+  tagline: "WYSIWYG slides powered by reveal.js. Run it yourself — no account, no cloud, no tracking."
+  actions:
+    - theme: brand
+      text: Get Started
+      link: /guide/getting-started
+    - theme: alt
+      text: View on GitHub
+      link: https://github.com/jbirky/revealjs_gui
+
+features:
+  - title: WYSIWYG Editing
+    details: Click and type directly on slides with TipTap rich text. Headings, bold/italic, tables, code blocks, and more — no markup required.
+  - title: LaTeX & TikZ
+    details: Full LaTeX math and TikZ diagrams with live split-pane preview. Inline KaTeX in text elements too.
+  - title: Export Anywhere
+    details: Export as standalone HTML, offline HTML, PDF, or PowerPoint. Share via link or push directly to GitHub.
+  - title: Self-Hosted
+    details: Docker, desktop app (Electron), or run from source. Your data stays on your machine — no sign-up required.
+  - title: Themes & Templates
+    details: 11 reveal.js themes, 6 design presets, custom reusable templates, and per-slide backgrounds.
+  - title: Cloud Sync
+    details: Sync to Proton Drive or any rclone-supported provider — S3, Google Drive, Dropbox, and more.
+---
