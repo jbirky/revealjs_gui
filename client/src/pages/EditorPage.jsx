@@ -16,7 +16,7 @@ import TableCell from '@tiptap/extension-table-cell'
 import { ChevronLeft, Play, Download, MessageSquare, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup } from 'lucide-react'
 import { api } from '../utils/api'
 import { generateLatexIframeHtml } from '../utils/latexRenderer'
-import { downloadHTML, downloadSlideHTML, presentInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
+import { downloadHTML, downloadSlideHTML, presentInWindow, previewSlideInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
 import { exportToPptx } from '../utils/exportPptx'
 import { simplifyPoints } from '../utils/drawingUtils'
 import { generateOfflineHTML } from '../utils/offlineExport'
@@ -27,6 +27,7 @@ import PropertiesPanel from '../components/PropertiesPanel'
 import FindReplaceBar from '../components/FindReplaceBar'
 import TransitionPreview from '../components/TransitionPreview'
 import AnimationTimeline from '../components/AnimationTimeline'
+import KineticTextModal from '../components/KineticTextModal'
 import { MathNode } from '../extensions/MathExtension'
 import { FontSize } from '../extensions/FontSize'
 import { FontFamily } from '../extensions/FontFamily'
@@ -57,7 +58,7 @@ const CODE_THEME_CSS = {
 }
 
 const THEMES = ['black', 'white', 'league', 'beige', 'sky', 'night', 'serif', 'simple', 'solarized', 'moon', 'dracula']
-const TRANSITIONS = ['none', 'fade', 'slide', 'convex', 'concave', 'zoom']
+const TRANSITIONS = ['none', 'fade', 'slide', 'convex', 'concave', 'zoom', 'differential-rotation']
 
 const SLIDE_TEMPLATES = {
   blank: { label: 'Blank', elements: [] },
@@ -100,6 +101,90 @@ const SLIDE_TEMPLATES = {
     { type: 'text', x: 80, y: 80, width: 800, height: 200, zIndex: 1, content: '<h1 style="text-align:center; font-size: 120px; color: #6366f1">42%</h1>' },
     { type: 'text', x: 160, y: 300, width: 640, height: 120, zIndex: 2, content: '<p style="text-align:center">Key statistic or metric description</p>' },
   ]},
+
+  // ── Typographic System Presets (Elam / Bauhaus) ──────────────────────
+
+  'system-axial': {
+    label: 'Axial',
+    category: 'systems',
+    layoutGrid: { enabled: true, columns: 2, rows: 0, gutter: 0, marginX: 40, marginY: 40, snap: true },
+    axisLines: [{ id: 'ax1', axis: 'x', position: 320, visible: true, snap: true }],
+    elements: [
+      { type: 'text', x: 40, y: 50, width: 260, height: 80, zIndex: 1, content: '<h2 style="text-align:right">Title</h2>' },
+      { type: 'text', x: 40, y: 140, width: 260, height: 60, zIndex: 2, content: '<p style="text-align:right; color: rgba(255,255,255,0.6)">Subtitle text</p>' },
+      { type: 'text', x: 340, y: 50, width: 580, height: 440, zIndex: 3, content: '<p>Main content arranged to the right of the axis. The asymmetric division creates visual tension.</p>' },
+      { type: 'shape', shape: 'rect', x: 318, y: 40, width: 3, height: 460, zIndex: 0, fill: 'rgba(244,114,182,0.4)', stroke: 'none', strokeWidth: 0, locked: true },
+    ]
+  },
+
+  'system-bilateral': {
+    label: 'Bilateral',
+    category: 'systems',
+    axisLines: [{ id: 'ax1', axis: 'x', position: 480, visible: true, snap: true }],
+    elements: [
+      { type: 'text', x: 130, y: 60, width: 700, height: 80, zIndex: 1, content: '<h2 style="text-align:center">Title</h2>' },
+      { type: 'shape', shape: 'rect', x: 380, y: 150, width: 200, height: 3, zIndex: 0, fill: '#6366f1', stroke: 'none', strokeWidth: 0, locked: true },
+      { type: 'text', x: 130, y: 170, width: 700, height: 60, zIndex: 2, content: '<p style="text-align:center; color: rgba(255,255,255,0.6)">Symmetry centered on a single axis</p>' },
+      { type: 'text', x: 130, y: 260, width: 700, height: 220, zIndex: 3, content: '<p style="text-align:center">Content arranged symmetrically. Place the axis off-center for asymmetric bilateral compositions.</p>' },
+    ]
+  },
+
+  'system-grid': {
+    label: 'Grid System',
+    category: 'systems',
+    layoutGrid: { enabled: true, columns: 3, rows: 2, gutter: 16, marginX: 40, marginY: 40, snap: true },
+    elements: [
+      { type: 'text', x: 40, y: 40, width: 880, height: 60, zIndex: 1, content: '<h2>Title</h2>' },
+      { type: 'shape', shape: 'rect', x: 40, y: 105, width: 880, height: 2, zIndex: 0, fill: 'rgba(99,102,241,0.3)', stroke: 'none', strokeWidth: 0, locked: true },
+      { type: 'text', x: 40, y: 116, width: 277, height: 190, zIndex: 2, content: '<p>Cell 1</p>' },
+      { type: 'text', x: 333, y: 116, width: 277, height: 190, zIndex: 3, content: '<p>Cell 2</p>' },
+      { type: 'text', x: 626, y: 116, width: 277, height: 190, zIndex: 4, content: '<p>Cell 3</p>' },
+      { type: 'text', x: 40, y: 322, width: 277, height: 178, zIndex: 5, content: '<p>Cell 4</p>' },
+      { type: 'text', x: 333, y: 322, width: 277, height: 178, zIndex: 6, content: '<p>Cell 5</p>' },
+      { type: 'text', x: 626, y: 322, width: 277, height: 178, zIndex: 7, content: '<p>Cell 6</p>' },
+    ]
+  },
+
+  'system-modular': {
+    label: 'Modular',
+    category: 'systems',
+    layoutGrid: { enabled: true, columns: 4, rows: 3, gutter: 8, marginX: 32, marginY: 32, snap: true },
+    elements: [
+      { type: 'shape', shape: 'rect', x: 32, y: 32, width: 214, height: 150, zIndex: 0, fill: 'rgba(99,102,241,0.15)', stroke: 'rgba(99,102,241,0.3)', strokeWidth: 1, text: 'Module', fontSize: 12, textColor: 'rgba(255,255,255,0.4)' },
+      { type: 'shape', shape: 'rect', x: 254, y: 32, width: 214, height: 150, zIndex: 0, fill: 'rgba(99,102,241,0.15)', stroke: 'rgba(99,102,241,0.3)', strokeWidth: 1 },
+      { type: 'shape', shape: 'rect', x: 476, y: 32, width: 214, height: 150, zIndex: 0, fill: 'rgba(99,102,241,0.15)', stroke: 'rgba(99,102,241,0.3)', strokeWidth: 1 },
+      { type: 'shape', shape: 'rect', x: 698, y: 32, width: 214, height: 150, zIndex: 0, fill: 'rgba(99,102,241,0.15)', stroke: 'rgba(99,102,241,0.3)', strokeWidth: 1 },
+      { type: 'text', x: 32, y: 198, width: 436, height: 304, zIndex: 1, content: '<h2>Title</h2><p>Content spans multiple modules</p>' },
+      { type: 'shape', shape: 'circle', x: 828, y: 420, width: 80, height: 80, zIndex: 2, fill: '#6366f1', stroke: 'none', strokeWidth: 0, opacity: 0.7 },
+    ]
+  },
+
+  'system-transitional': {
+    label: 'Transitional',
+    category: 'systems',
+    elements: [
+      { type: 'text', x: 60, y: 40, width: 500, height: 80, zIndex: 3, content: '<h2>Title</h2>' },
+      { type: 'text', x: 120, y: 130, width: 380, height: 50, zIndex: 2, content: '<p style="color: rgba(255,255,255,0.6)">Subtitle floats freely</p>' },
+      { type: 'shape', shape: 'rect', x: 0, y: 200, width: 700, height: 3, zIndex: 0, fill: 'rgba(255,255,255,0.15)', stroke: 'none', strokeWidth: 0, locked: true },
+      { type: 'text', x: 80, y: 220, width: 500, height: 200, zIndex: 1, content: '<p>Elements relate through massing and texture rather than alignment. The transitional system is the most informal — no axis required.</p>' },
+      { type: 'text', x: 520, y: 400, width: 400, height: 120, zIndex: 2, content: '<p style="text-align:right; color: rgba(255,255,255,0.4); font-size: 14px">Details drift toward the lower right, creating natural movement.</p>' },
+    ]
+  },
+
+  'system-radial': {
+    label: 'Radial',
+    category: 'systems',
+    elements: [
+      { type: 'shape', shape: 'circle', x: 380, y: 170, width: 200, height: 200, zIndex: 0, fill: 'rgba(99,102,241,0.12)', stroke: 'rgba(99,102,241,0.3)', strokeWidth: 1 },
+      { type: 'shape', shape: 'circle', x: 330, y: 120, width: 300, height: 300, zIndex: 0, fill: 'none', stroke: 'rgba(99,102,241,0.15)', strokeWidth: 1 },
+      { type: 'shape', shape: 'circle', x: 444, y: 234, width: 72, height: 72, zIndex: 1, fill: '#6366f1', stroke: 'none', strokeWidth: 0 },
+      { type: 'text', x: 440, y: 245, width: 80, height: 50, zIndex: 2, content: '<p style="text-align:center; font-size:11px; color:white">Focus</p>' },
+      { type: 'text', x: 540, y: 100, width: 380, height: 60, zIndex: 3, content: '<h3>Point 1</h3>' },
+      { type: 'text', x: 570, y: 310, width: 350, height: 60, zIndex: 3, content: '<h3>Point 2</h3>' },
+      { type: 'text', x: 40, y: 180, width: 300, height: 60, zIndex: 3, content: '<h3 style="text-align:right">Point 3</h3>' },
+      { type: 'text', x: 40, y: 420, width: 300, height: 60, zIndex: 3, content: '<h3 style="text-align:right">Point 4</h3>' },
+    ]
+  },
 }
 
 const migrateSlide = (slide) => {
@@ -152,6 +237,7 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [smartGuidesEnabled, setSmartGuidesEnabled] = useState(true)
   const [showMasterPanel, setShowMasterPanel] = useState(false)
   const [showSyncModal, setShowSyncModal] = useState(false)
+  const [showKineticModal, setShowKineticModal] = useState(false)
   const [syncStatus, setSyncStatus] = useState(null) // { installed, remotes, hasConfig }
   const [syncConfig, setSyncConfig] = useState({ username: '', password: '', remoteName: 'protondrive' })
   const [syncResult, setSyncResult] = useState(null) // { type, message }
@@ -535,6 +621,26 @@ svg.selectAll('circle').data(data).join('circle')
     setHtmlEditorState({ elementId: newEl.id, content: DEFAULT_HTML })
   }, [DEFAULT_HTML])
 
+  const insertKineticText = useCallback((html) => {
+    const newEl = {
+      id: crypto.randomUUID(),
+      type: 'html',
+      x: 40, y: 40, width: slideW - 80, height: 120, zIndex: 2,
+      content: html
+    }
+    setPresentation(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        slides: prev.slides.map((s, i) =>
+          i === currentSlideIndexRef.current ? { ...s, elements: [...(s.elements || []), newEl] } : s
+        )
+      }
+    })
+    setSelectedElementIds([newEl.id])
+    setShowKineticModal(false)
+  }, [slideW])
+
   const openHtmlEditor = useCallback((elementId) => {
     const element = presentation?.slides[currentSlideIndexRef.current]?.elements?.find(el => el.id === elementId)
     if (!element || element.type !== 'html') return
@@ -776,6 +882,91 @@ function draw() {
     })
     setSelectedElementIds([newEl.id])
   }, [currentSlide])
+
+  const addNonobjectiveElement = useCallback((preset) => {
+    const presets = {
+      'rule-h-thin':    { shape: 'rect', width: 400, height: 2,   fill: 'rgba(255,255,255,0.5)', locked: true },
+      'rule-h-medium':  { shape: 'rect', width: 500, height: 4,   fill: 'rgba(255,255,255,0.7)', locked: true },
+      'rule-h-heavy':   { shape: 'rect', width: 600, height: 8,   fill: '#ffffff', locked: true },
+      'rule-v-thin':    { shape: 'rect', width: 2,   height: 300, fill: 'rgba(255,255,255,0.5)', locked: true },
+      'rule-v-medium':  { shape: 'rect', width: 4,   height: 350, fill: 'rgba(255,255,255,0.7)', locked: true },
+      'rule-v-heavy':   { shape: 'rect', width: 8,   height: 400, fill: '#ffffff', locked: true },
+      'rule-diagonal':  { shape: 'line', width: 500, height: 40,  fill: '#ffffff', stroke: '#ffffff', strokeWidth: 2, rotation: -15 },
+      'circle-dot':     { shape: 'circle', width: 24,  height: 24,  fill: '#ffffff' },
+      'circle-medium':  { shape: 'circle', width: 80,  height: 80,  fill: '#6366f1', opacity: 0.8 },
+      'circle-large':   { shape: 'circle', width: 200, height: 200, fill: '#6366f1', opacity: 0.15, stroke: 'rgba(99,102,241,0.3)', strokeWidth: 1 },
+      'tone-dark':      { shape: 'rect', width: 300, height: 200, fill: '#0a0a14', opacity: 0.9 },
+      'tone-medium':    { shape: 'rect', width: 300, height: 200, fill: '#2d2d4e', opacity: 0.8 },
+      'tone-light':     { shape: 'rect', width: 300, height: 200, fill: 'rgba(255,255,255,0.08)' },
+      'tone-accent':    { shape: 'rect', width: 300, height: 200, fill: 'rgba(99,102,241,0.15)' },
+    }
+    const p = presets[preset]
+    if (!p) return
+    const newEl = {
+      id: crypto.randomUUID(),
+      type: 'shape',
+      x: (slideW - p.width) / 2,
+      y: (slideH - p.height) / 2,
+      zIndex: p.locked ? 0 : (currentSlide?.elements?.length || 0) + 1,
+      stroke: 'none',
+      strokeWidth: 0,
+      borderRadius: 0,
+      opacity: 1,
+      text: '',
+      fontSize: 16,
+      textColor: '#ffffff',
+      ...p,
+    }
+    setPresentation(prev => {
+      if (!prev) return prev
+      return { ...prev, slides: prev.slides.map((s, i) => i === currentSlideIndexRef.current ? { ...s, elements: [...(s.elements || []), newEl] } : s) }
+    })
+    setSelectedElementIds([newEl.id])
+  }, [currentSlide, slideW, slideH])
+
+  const addModularGrid = useCallback((moduleShape, cols, rows, gap) => {
+    const mx = 32, my = 32
+    const usableW = slideW - 2 * mx
+    const usableH = slideH - 2 * my
+    const modW = (usableW - (cols - 1) * gap) / cols
+    const modH = (usableH - (rows - 1) * gap) / rows
+    const newElements = []
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        newElements.push({
+          id: crypto.randomUUID(),
+          type: 'shape',
+          shape: moduleShape,
+          x: mx + c * (modW + gap),
+          y: my + r * (modH + gap),
+          width: modW,
+          height: moduleShape === 'circle' ? modW : modH,
+          zIndex: 0,
+          fill: 'rgba(99,102,241,0.08)',
+          stroke: 'rgba(99,102,241,0.25)',
+          strokeWidth: 1,
+          borderRadius: 0,
+          opacity: 1,
+          text: '',
+          fontSize: 11,
+          textColor: 'rgba(255,255,255,0.4)',
+        })
+      }
+    }
+    setPresentation(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        slides: prev.slides.map((s, i) =>
+          i === currentSlideIndexRef.current ? {
+            ...s,
+            elements: [...(s.elements || []), ...newElements],
+            layoutGrid: { enabled: true, columns: cols, rows, gutter: gap, marginX: mx, marginY: my, snap: true },
+          } : s
+        )
+      }
+    })
+  }, [slideW, slideH])
 
   const addDrawingStroke = useCallback((stroke) => {
     const pts = simplifyPoints(stroke.points, 1.5)
@@ -1262,7 +1453,9 @@ class MyScene(Scene):
       ...(colNum !== null ? { column: colNum } : {}),
       elements: baseElements,
       notes: '',
-      background: { type: 'color', color: '#1e1e2e' }
+      background: { type: 'color', color: '#1e1e2e' },
+      ...(template?.layoutGrid ? { layoutGrid: { ...template.layoutGrid } } : {}),
+      ...(template?.axisLines ? { axisLines: template.axisLines.map(a => ({ ...a, id: crypto.randomUUID() })) } : {}),
     }
 
     if (colNum === null || !is2D) {
@@ -1600,6 +1793,32 @@ class MyScene(Scene):
               style={{ accentColor: 'var(--accent)' }} />
             Page #
           </label>
+
+          <select
+            className="select-sm"
+            value={presentation.footerTimeMode || 'none'}
+            onChange={e => setPresentation(prev => ({ ...prev, footerTimeMode: e.target.value }))}
+            title="Clock / Timer"
+            style={{ fontSize: 11 }}
+          >
+            <option value="none">No Clock</option>
+            <option value="clock12">Clock 12h</option>
+            <option value="clock24">Clock 24h</option>
+            <option value="timer-up">Timer ↑</option>
+            <option value="timer-down">Timer ↓</option>
+          </select>
+
+          {presentation.footerTimeMode === 'timer-down' && (
+            <input
+              type="number"
+              className="prop-input"
+              value={presentation.timerDuration ?? 20}
+              onChange={e => setPresentation(prev => ({ ...prev, timerDuration: Math.max(1, Number(e.target.value) || 1) }))}
+              title="Countdown duration (minutes)"
+              min={1}
+              style={{ width: 42, fontSize: 11, padding: '2px 4px' }}
+            />
+          )}
 
           {presentation.showPageNumbers && (
             <select
@@ -2096,7 +2315,10 @@ class MyScene(Scene):
             }}
 
             onAddShape={addShapeElement}
+            onAddNonobjective={addNonobjectiveElement}
+            onAddModularGrid={addModularGrid}
             onAddHtml={addHtmlElement}
+            onAddKineticText={() => setShowKineticModal(true)}
             onAddP5={addP5Element}
             onAddCode={addCodeElement}
             onAddLatex={addLatexElement}
@@ -2162,6 +2384,8 @@ class MyScene(Scene):
               gridSize={gridSize}
               showFooter={presentation.showFooter || false}
               showPageNumbers={presentation.showPageNumbers || false}
+              footerTimeMode={presentation.footerTimeMode || 'none'}
+              timerDuration={presentation.timerDuration ?? 20}
               pageNumberFormat={presentation.pageNumberFormat || 'c/t'}
               pageNumber={(() => {
                 if (!presentation.showPageNumbers) return null
@@ -2227,6 +2451,7 @@ class MyScene(Scene):
               drawTool={drawTool}
               onAddDrawingStroke={addDrawingStroke}
               globalFont={presentation.globalFont || ''}
+              onUpdateAxisLines={(axisLines) => updateCurrentSlide({ axisLines })}
             />
           </div>
         </div>
@@ -2251,6 +2476,8 @@ class MyScene(Scene):
           activeMathNode={activeMathNode}
           onUpdateMathNode={updateMathNode}
           onCloseMathNode={() => { setActiveMathNode(null); mathNodeUpdateRef.current = null }}
+          onPreviewSlide={() => previewSlideInWindow(presentation, currentSlideIndex)}
+          currentSlideIndex={currentSlideIndex}
         />
 
       {/* HTML / D3 Code Editor Modal */}
@@ -2596,6 +2823,15 @@ class MyScene(Scene):
         />
       )}
 
+      {showKineticModal && (
+        <KineticTextModal
+          onInsert={insertKineticText}
+          onClose={() => setShowKineticModal(false)}
+          slideW={slideW}
+          slideH={slideH}
+        />
+      )}
+
       {/* Share Modal */}
       {showShareModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}
@@ -2660,10 +2896,10 @@ class MyScene(Scene):
 
       {showTemplateModal && (
         <div className="modal-overlay" onClick={() => { setShowTemplateModal(false); setPendingAddColumn(null) }}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
             <h2 style={{ marginBottom: 16 }}>Add Slide</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
-              {Object.entries(SLIDE_TEMPLATES).map(([key, tmpl]) => (
+              {Object.entries(SLIDE_TEMPLATES).filter(([, t]) => !t.category).map(([key, tmpl]) => (
                 <button key={key}
                   onClick={() => { addSlide(key, pendingAddColumn); setPendingAddColumn(null); setShowTemplateModal(false) }}
                   style={{ background: 'var(--bg-card)', border: '2px solid var(--border)', borderRadius: 8, padding: 10, cursor: 'pointer', textAlign: 'left' }}
@@ -2683,6 +2919,32 @@ class MyScene(Scene):
                   <div style={{ fontSize: 11, color: '#e0e0e0', fontWeight: 500 }}>{tmpl.label}</div>
                 </button>
               ))}
+            </div>
+            <h3 style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10, borderTop: '1px solid var(--border)', paddingTop: 12 }}>Typographic Systems</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+              {Object.entries(SLIDE_TEMPLATES).filter(([, t]) => t.category === 'systems').map(([key, tmpl]) => {
+                const icons = {
+                  'system-axial':        <div style={{display:'flex',height:'60%',width:'80%',gap:0}}><div style={{width:'35%',borderRight:'2px solid #f472b6'}}/><div style={{flex:1,background:'rgba(255,255,255,0.06)'}}/></div>,
+                  'system-bilateral':    <div style={{display:'flex',flexDirection:'column',alignItems:'center',height:'60%',width:'80%'}}><div style={{width:'60%',height:2,background:'#6366f1',marginTop:'30%'}}/></div>,
+                  'system-grid':         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gridTemplateRows:'1fr 1fr',gap:2,width:'80%',height:'60%'}}>{Array.from({length:6}).map((_,i)=><div key={i} style={{background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.25)',borderRadius:1}}/>)}</div>,
+                  'system-modular':      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:2,width:'85%',height:'60%'}}>{Array.from({length:8}).map((_,i)=><div key={i} style={{background:i<4?'rgba(99,102,241,0.15)':'transparent',border:'1px solid rgba(99,102,241,0.2)',borderRadius:1}}/>)}</div>,
+                  'system-transitional': <div style={{width:'80%',height:'60%',position:'relative'}}><div style={{position:'absolute',top:'10%',left:'5%',width:'55%',height:8,background:'rgba(255,255,255,0.12)',borderRadius:1}}/><div style={{position:'absolute',top:'35%',left:'15%',width:'45%',height:6,background:'rgba(255,255,255,0.08)',borderRadius:1}}/><div style={{position:'absolute',top:'55%',width:'70%',height:1,background:'rgba(255,255,255,0.15)'}}/><div style={{position:'absolute',top:'65%',left:'10%',width:'50%',height:8,background:'rgba(255,255,255,0.1)',borderRadius:1}}/></div>,
+                  'system-radial':       <div style={{width:'80%',height:'60%',position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{width:16,height:16,borderRadius:'50%',background:'#6366f1'}}/><div style={{position:'absolute',width:32,height:32,borderRadius:'50%',border:'1px solid rgba(99,102,241,0.3)'}}/><div style={{position:'absolute',width:48,height:48,borderRadius:'50%',border:'1px solid rgba(99,102,241,0.15)'}}/></div>,
+                }
+                return (
+                  <button key={key}
+                    onClick={() => { addSlide(key, pendingAddColumn); setPendingAddColumn(null); setShowTemplateModal(false) }}
+                    style={{ background: 'var(--bg-card)', border: '2px solid var(--border)', borderRadius: 8, padding: 10, cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#f472b6'; e.currentTarget.style.background = 'var(--bg-hover)' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)' }}
+                  >
+                    <div style={{ height: 55, background: '#1e1e2e', borderRadius: 4, marginBottom: 6, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--text-muted)' }}>
+                      {icons[key] || <span style={{ fontSize: 9 }}>{tmpl.label}</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#f472b6', fontWeight: 500 }}>{tmpl.label}</div>
+                  </button>
+                )
+              })}
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => { setShowTemplateModal(false); setPendingAddColumn(null) }}>Cancel</button>

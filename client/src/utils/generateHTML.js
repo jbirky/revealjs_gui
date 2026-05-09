@@ -35,12 +35,17 @@ function getSlideColumns(slides) {
   return sortedKeys.map(k => colMap[k])
 }
 
+const CUSTOM_TRANSITIONS = ['differential-rotation']
+
 export function generateRevealHTML(presentation) {
   const slideW = presentation.slideWidth || 960
   const slideH = presentation.slideHeight || 540
   const globalFont = presentation.globalFont || ''
   const showFooter = presentation.showFooter || false
   const showPageNumbers = presentation.showPageNumbers || false
+  const footerTimeMode = presentation.footerTimeMode || 'none'
+  const timerDuration = presentation.timerDuration ?? 20
+  const showTimeWidget = footerTimeMode !== 'none'
   const pageNumberFormat = presentation.pageNumberFormat || 'c/t'
   const codeTheme = presentation.codeTheme || 'monokai'
   const footerFontSize = presentation.footerFontSize || 14
@@ -71,6 +76,7 @@ export function generateRevealHTML(presentation) {
         const borderRadiusStyle = (el.type === 'image' || el.type === 'code') && el.borderRadius ? `border-radius:${el.borderRadius}px;` : ''
         const rotationStyle = el.rotation ? `transform:rotate(${el.rotation}deg);` : ''
         const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;z-index:${el.zIndex || 1};overflow:hidden;box-sizing:border-box;${shadowStyle}${borderRadiusStyle}${rotationStyle}`
+        const dataId = slide.autoAnimate ? ` data-id="${el.id}"` : ''
         const fragClass = el.fragment ? ` class="fragment ${el.fragmentAnimation || 'fade-in'}"` : ''
         const fragIdx = el.fragment && el.fragmentIndex != null ? ` data-fragment-index="${el.fragmentIndex}"` : ''
         const gsapAttrs = (el.animationEnter && el.animationEnter !== 'none')
@@ -78,7 +84,7 @@ export function generateRevealHTML(presentation) {
           : ''
         if (el.type === 'text') {
           const spacingStyle = `${globalFont ? `font-family:${globalFont};` : ''}line-height:${el.lineHeight ?? 1.5};${el.letterSpacing ? `letter-spacing:${el.letterSpacing}px;` : ''}${el.wordSpacing ? `word-spacing:${el.wordSpacing}px;` : ''}`
-          return `<div${fragClass}${fragIdx}${gsapAttrs} style="${style} padding:8px 12px; color:white;${spacingStyle}">${el.content || ''}</div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style} padding:8px 12px; color:white;${spacingStyle}">${el.content || ''}</div>`
         }
         if (el.type === 'image') {
           const src = absoluteSrc(el.src)
@@ -88,37 +94,40 @@ export function generateRevealHTML(presentation) {
             el.filterGrayscale ? `grayscale(${el.filterGrayscale}%)` : '',
           ].filter(Boolean).join(' ')
           const filterStyle = imgFilterParts ? `filter:${imgFilterParts};` : ''
+          const expandAttr = el.clickToExpand ? ' data-expand="true"' : ''
+          const popupAttr = el.popupText ? ` data-popup="${el.popupText.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}" data-popup-pos="${el.popupPosition || 'below'}" data-popup-fs="${el.popupFontSize || 15}"` : ''
+          const interactiveCursor = (el.clickToExpand || el.popupText) ? 'cursor:pointer;' : ''
           if (el.imageW != null) {
             const offX = el.imageOffsetX ?? 0
             const offY = el.imageOffsetY ?? 0
             const imgStyle = `position:absolute;left:${offX}px;top:${offY}px;width:${el.imageW}px;height:${el.imageH}px;object-fit:${el.objectFit||'contain'};${filterStyle}`
-            return `<div${fragClass}${fragIdx}${gsapAttrs} style="${style}"><img src="${src}" alt="${el.alt||''}" style="${imgStyle}" /></div>`
+            return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs}${expandAttr}${popupAttr} style="${style}${interactiveCursor}"><img src="${src}" alt="${el.alt||''}" style="${imgStyle}" /></div>`
           }
-          return `<div${fragClass}${fragIdx}${gsapAttrs} style="${style}"><img src="${src}" alt="${el.alt||''}" style="display:block;width:100%;height:100%;object-fit:${el.objectFit||'contain'};${filterStyle}" /></div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs}${expandAttr}${popupAttr} style="${style}${interactiveCursor}"><img src="${src}" alt="${el.alt||''}" style="display:block;width:100%;height:100%;object-fit:${el.objectFit||'contain'};${filterStyle}" /></div>`
         }
         if (el.type === 'shape') {
           const opacityStyle = el.opacity !== undefined && el.opacity !== 1 ? `opacity:${el.opacity};` : ''
-          return `<div${fragClass}${fragIdx}${gsapAttrs} style="${style}${opacityStyle}">${shapeSvgString(el)}</div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}${opacityStyle}">${shapeSvgString(el)}</div>`
         }
         if (el.type === 'html') {
           const srcdoc = buildHtmlEmbed(el.content || '', el.width, el.height).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-          return `<iframe${fragClass}${fragIdx}${gsapAttrs} srcdoc="${srcdoc}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+          return `<iframe${dataId}${fragClass}${fragIdx}${gsapAttrs} srcdoc="${srcdoc}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
         if (el.type === 'p5') {
           const p5Doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:transparent;overflow:hidden;}canvas{display:block;}</style><script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"><\/script></head><body><script>${el.content || ''}<\/script></body></html>`
           const srcdoc = p5Doc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-          return `<iframe${fragClass}${fragIdx}${gsapAttrs} srcdoc="${srcdoc}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+          return `<iframe${dataId}${fragClass}${fragIdx}${gsapAttrs} srcdoc="${srcdoc}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
         if (el.type === 'code') {
           const lang = el.language || 'plaintext'
           const codeContent = escapeHtml(el.content || '')
-          return `<div${fragClass}${fragIdx}${gsapAttrs} style="${style}"><pre style="margin:0;padding:10px 14px;width:100%;height:100%;overflow:hidden;box-sizing:border-box;font-family:'Fira Code','JetBrains Mono','Courier New',monospace;font-size:${el.fontSize || 14}px;line-height:1.5;"><code class="language-${lang}" data-trim>${codeContent}</code></pre></div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}"><pre style="margin:0;padding:10px 14px;width:100%;height:100%;overflow:hidden;box-sizing:border-box;font-family:'Fira Code','JetBrains Mono','Courier New',monospace;font-size:${el.fontSize || 14}px;line-height:1.5;"><code class="language-${lang}" data-trim>${codeContent}</code></pre></div>`
         }
         if (el.type === 'markdown') {
           const md = (el.content || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
           const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\\/script><style>*{margin:0;padding:0;box-sizing:border-box}html,body{background:transparent;color:white;font-family:-apple-system,sans-serif;font-size:18px;line-height:1.6;padding:8px 12px;overflow:auto}h1,h2,h3,h4{margin:0 0 .4em}p{margin:0 0 .4em}ul,ol{padding-left:1.5em;margin:0 0 .4em}a{color:#60a5fa}pre{background:rgba(0,0,0,0.3);padding:10px 14px;border-radius:6px;overflow:auto;font-size:13px}code{font-family:'Fira Code',monospace}</style></head><body><div id="out"></div><script>document.getElementById('out').innerHTML=marked.parse(${JSON.stringify(el.content || '')});<\\/script></body></html>`
           const escaped = srcdoc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-          return `<iframe${fragClass}${fragIdx}${gsapAttrs} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+          return `<iframe${dataId}${fragClass}${fragIdx}${gsapAttrs} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
         if (el.type === 'chart') {
           const { chartType = 'bar', chartData = {} } = el
@@ -131,20 +140,20 @@ export function generateRevealHTML(presentation) {
           const scalesOpt = chartType === 'pie' || chartType === 'doughnut' ? '{}' : `{x:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}},y:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}}}`
           const chartSrc = `<!doctype html><html><head><meta charset="utf-8"><script src="https://cdn.jsdelivr.net/npm/chart.js@4"><\\/script><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:transparent;overflow:hidden}</style></head><body><canvas id="c" style="width:100%;height:100%"></canvas><script>new Chart(document.getElementById('c'),{type:'${chartType}',data:{labels:${labels},datasets:${datasets}},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'rgba(255,255,255,0.7)',font:{size:12}}}},scales:${scalesOpt}}});<\\/script></body></html>`
           const escaped = chartSrc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-          return `<iframe${fragClass}${fragIdx}${gsapAttrs} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+          return `<iframe${dataId}${fragClass}${fragIdx}${gsapAttrs} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
         if (el.type === 'callout') {
           const bg = el.calloutColor || '#ef4444'
           const tc = el.calloutTextColor || '#ffffff'
           const fs = el.fontSize || 16
-          return `<div${fragClass}${fragIdx}${gsapAttrs} style="${style}border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;color:${tc};font-size:${fs}px;font-weight:700;font-family:-apple-system,sans-serif;">${el.calloutNumber || 1}</div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;color:${tc};font-size:${fs}px;font-weight:700;font-family:-apple-system,sans-serif;">${el.calloutNumber || 1}</div>`
         }
         if (el.type === 'icon') {
           const color = el.iconColor || '#ffffff'
           const sw = el.iconStrokeWidth || 2
           const iconPaths = { Star:'<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>', Heart:'<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>', Check:'<polyline points="20,6 9,17 4,12"/>', X:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>', Zap:'<polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/>', Target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>' }
           const path = iconPaths[el.iconName] || iconPaths['Star']
-          return `<div${fragClass}${fragIdx}${gsapAttrs} style="${style}display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${path}</svg></div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${path}</svg></div>`
         }
         if (el.type === 'latex') {
           const content = el.content || ''
@@ -161,7 +170,7 @@ export function generateRevealHTML(presentation) {
             srcdoc = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"><script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\\/script><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:transparent;overflow:hidden;color:white}.katex{font-size:1.4em}svg{max-width:100%;max-height:100%}</style></head><body><div id="m"></div><script>try{katex.render(${JSON.stringify(content)},document.getElementById('m'),{displayMode:true,throwOnError:false})}catch(e){document.getElementById('m').textContent=e.message}<\\/script></body></html>`
           }
           const escaped = srcdoc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-          return `<iframe${fragClass}${fragIdx}${gsapAttrs} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+          return `<iframe${dataId}${fragClass}${fragIdx}${gsapAttrs} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
         if (el.type === 'video' || (el.type === 'manim' && el.rendered)) {
           const src = absoluteSrc(el.type === 'manim' ? el.rendered : el.src)
@@ -169,7 +178,7 @@ export function generateRevealHTML(presentation) {
           if (el.type === 'manim') { if (el.controls) attrs.push('controls'); if (el.autoplay !== false) attrs.push('autoplay'); if (el.loop !== false) attrs.push('loop'); if (el.muted !== false) attrs.push('muted') }
           else { if (el.controls !== false) attrs.push('controls'); if (el.autoplay) attrs.push('autoplay'); if (el.loop) attrs.push('loop'); if (el.muted) attrs.push('muted') }
           const posterAttr = el.poster ? ` poster="${absoluteSrc(el.poster)}"` : ''
-          return `<div${fragClass}${fragIdx}${gsapAttrs} style="${style}"><video src="${src}" ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:contain;display:block;background:#000;"></video></div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}"><video src="${src}" ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:contain;display:block;background:#000;"></video></div>`
         }
         if (el.type === 'manim' && !el.rendered) return '' // not yet rendered — omit from export
         if (el.type === 'audio') {
@@ -178,7 +187,7 @@ export function generateRevealHTML(presentation) {
           if (el.autoplay) attrs.push('autoplay')
           if (el.loop) attrs.push('loop')
           if (el.muted) attrs.push('muted')
-          return `<div${fragClass}${fragIdx}${gsapAttrs} style="${style}display:flex;align-items:center;justify-content:center;"><audio src="${src}" ${attrs.join(' ')} style="width:90%;"></audio></div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}display:flex;align-items:center;justify-content:center;"><audio src="${src}" ${attrs.join(' ')} style="width:90%;"></audio></div>`
         }
         if (el.type === 'table') {
           const data = el.data || [['']]
@@ -196,7 +205,7 @@ export function generateRevealHTML(presentation) {
             }).join('')
             return `<tr>${cells}</tr>`
           }).join('')
-          return `<div${fragClass}${fragIdx}${gsapAttrs} style="${style}overflow:auto;"><table style="width:100%;height:100%;border-collapse:collapse;">${rows}</table></div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}overflow:auto;"><table style="width:100%;height:100%;border-collapse:collapse;">${rows}</table></div>`
         }
         if (el.type === 'textpath') {
           const fontSize = el.fontSize || 64
@@ -239,14 +248,14 @@ export function generateRevealHTML(presentation) {
             svg = `<svg width="${w}" height="${svgH}" viewBox="0 0 ${w} ${svgH}" xmlns="http://www.w3.org/2000/svg" overflow="visible"><defs><path id="${pathId}" d="${pathD}"/></defs><text ${baseTextAttrs}${dyAttr}><textPath href="#${pathId}" startOffset="${el.startOffset || 0}%" textAnchor="${el.textAnchor || 'start'}" side="${tpSide}">${escapeHtml(el.content || '')}</textPath></text></svg>`
           }
           const elStyle = `position:absolute;left:${el.x}px;top:${el.y}px;width:${w}px;height:${svgH}px;z-index:${el.zIndex || 1};overflow:visible;${el.rotation ? `transform:rotate(${el.rotation}deg);` : ''}`
-          return `<div${fragClass}${fragIdx}${gsapAttrs} style="${elStyle}">${svg}</div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${elStyle}">${svg}</div>`
         }
         if (el.type === 'drawing') {
           const svgPaths = (el.paths || []).map(path => {
             const d = pointsToPath(path.points, el.smooth !== false)
             return `<path d="${d}" stroke="${path.color || '#ffffff'}" stroke-width="${path.strokeWidth || 3}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${path.opacity ?? 1}"/>`
           }).join('')
-          return `<svg${fragClass}${fragIdx}${gsapAttrs} style="position:absolute;left:0;top:0;width:${slideW}px;height:${slideH}px;overflow:visible;pointer-events:none;z-index:${el.zIndex || 1};">${svgPaths}</svg>`
+          return `<svg${dataId}${fragClass}${fragIdx}${gsapAttrs} style="position:absolute;left:0;top:0;width:${slideW}px;height:${slideH}px;overflow:visible;pointer-events:none;z-index:${el.zIndex || 1};">${svgPaths}</svg>`
         }
         return ''
       }).join('\n')
@@ -260,7 +269,8 @@ export function generateRevealHTML(presentation) {
 
     let footerHtml = ''
     if (!slide.hideFooter) {
-      if (footerMode === 'sequence' && sequenceSections.length > 0 && showFooter) {
+      const timeSpan = showTimeWidget ? `<span class="reveal-time-widget" style="flex-shrink:0;"></span>` : ''
+      if (footerMode === 'sequence' && sequenceSections.length > 0 && (showFooter || showTimeWidget)) {
         const activeIdx = slide.activeSection
         const seqSpans = sequenceSections.map((sec, i) => {
           const isActive = activeIdx === i
@@ -271,16 +281,25 @@ export function generateRevealHTML(presentation) {
           return `<span style="color:${color};${weight}">${escapeHtml(secLabel || `Section ${i+1}`)}</span>`
         }).join('')
         const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
-        footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
+        const timePart = timeSpan ? `${timeSpan}` : ''
+        footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;">${timePart}<div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
       } else {
         const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
-        footerHtml = (sectionLabel || pageLabel) ? `      <div class="reveal-footer" style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>` : ''
+        const leftContent = [timeSpan, sectionLabel].filter(Boolean).join(' — ')
+        footerHtml = (leftContent || pageLabel) ? `      <div class="reveal-footer" style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;pointer-events:none;box-sizing:border-box;"><span>${leftContent}</span><span>${pageLabel}</span></div>` : ''
       }
     }
     const slideShowGrid = slide.showPresentGrid != null ? slide.showPresentGrid : showPresentGrid
     const gridHtml = slideShowGrid ? `      <div style="position:absolute;inset:0;z-index:950;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,0.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.12) 1px,transparent 1px);background-size:${presentGridSize}px ${presentGridSize}px;"></div>` : ''
 
-    slideSectionHtmlByIndex.set(slideIndex, `    <section${bgAttrs} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`)
+    const autoAnimateAttr = slide.autoAnimate ? ' data-auto-animate' : ''
+    const autoAnimateDurAttr = slide.autoAnimate && slide.autoAnimateDuration ? ` data-auto-animate-duration="${slide.autoAnimateDuration}"` : ''
+    const autoAnimateEasingAttr = slide.autoAnimate && slide.autoAnimateEasing ? ` data-auto-animate-easing="${slide.autoAnimateEasing}"` : ''
+    const isCustomTrans = CUSTOM_TRANSITIONS.includes(slide.transition)
+    const perSlideTransition = slide.transition ? ` data-transition="${isCustomTrans ? 'none' : slide.transition}"` : ''
+    const customTransAttr = isCustomTrans ? ` data-custom-transition="${slide.transition}"` : ''
+    const perSlideSpeed = slide.transitionSpeed ? ` data-transition-speed="${slide.transitionSpeed}"` : ''
+    slideSectionHtmlByIndex.set(slideIndex, `    <section${bgAttrs}${autoAnimateAttr}${autoAnimateDurAttr}${autoAnimateEasingAttr}${perSlideTransition}${customTransAttr}${perSlideSpeed} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`)
   })
 
   // Group into columns for 2D output
@@ -350,6 +369,15 @@ export function generateRevealHTML(presentation) {
     }
     #fs-btn:hover { background: rgba(0,0,0,0.75); }
     :fullscreen #fs-btn, :-webkit-full-screen #fs-btn { display: none; }
+    [data-expand] { transition:box-shadow 0.2s, outline 0.2s; outline:2px solid transparent; outline-offset:2px; }
+    [data-expand]:hover { outline-color:rgba(99,102,241,0.6); box-shadow:0 0 16px rgba(99,102,241,0.25); }
+    .expand-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.92);z-index:10000;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity 0.2s; }
+    .expand-overlay.active { opacity:1; }
+    .expand-overlay img { max-width:90vw;max-height:90vh;object-fit:contain;cursor:default;border-radius:4px; }
+    .image-popup { position:fixed;z-index:10001;background:rgba(20,20,30,0.95);color:#fff;padding:12px 18px;border-radius:8px;font-family:-apple-system,sans-serif;font-size:15px;line-height:1.5;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);opacity:0;transition:opacity 0.2s;white-space:pre-wrap;pointer-events:auto; }
+    .image-popup.active { opacity:1; }
+    [data-popup] { transition:box-shadow 0.2s, outline 0.2s; outline:2px solid transparent; outline-offset:2px; }
+    [data-popup]:hover { outline-color:rgba(251,191,36,0.5); box-shadow:0 0 12px rgba(251,191,36,0.2); }
   </style>${presentation.customCSS ? `\n  <style>\n${presentation.customCSS}\n  </style>` : ''}
 </head>
 <body>
@@ -365,6 +393,9 @@ ${slidesHtml}
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
   <script>
+    var _customTransitions = ['differential-rotation'];
+    var _globalTransition = '${presentation.transition || 'slide'}';
+    var _isGlobalCustom = _customTransitions.indexOf(_globalTransition) !== -1;
     Reveal.initialize({
       hash: true,
       width: ${slideW},
@@ -373,7 +404,7 @@ ${slidesHtml}
       minScale: 0,
       maxScale: 10,
       center: false,
-      transition: '${presentation.transition || 'slide'}',
+      transition: _isGlobalCustom ? 'none' : _globalTransition,
       plugins: [ RevealNotes, RevealHighlight ]
     });
     Reveal.on('ready', function() {
@@ -426,6 +457,148 @@ ${slidesHtml}
     }
     Reveal.on('ready',        function(e) { notifyIframes(e.currentSlide); });
     Reveal.on('slidechanged', function(e) { notifyIframes(e.currentSlide); });
+
+    // ── Custom transitions (differential rotation) ───────────────────────
+    (function() {
+      var prevH = 0, prevV = 0;
+      Reveal.on('ready', function(e) { prevH = e.indexh || 0; prevV = e.indexv || 0; });
+      Reveal.on('slidechanged', function(e) {
+        var prev = e.previousSlide;
+        var transName = null;
+        if (prev && prev.getAttribute('data-custom-transition'))
+          transName = prev.getAttribute('data-custom-transition');
+        else if (_isGlobalCustom)
+          transName = _globalTransition;
+        var dir = 1;
+        if ((e.indexh || 0) < prevH || ((e.indexh || 0) === prevH && (e.indexv || 0) < prevV)) dir = -1;
+        prevH = e.indexh || 0;
+        prevV = e.indexv || 0;
+        if (transName === 'differential-rotation') drTransition(dir);
+      });
+      function drTransition(dir) {
+        var N = 16;
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var bh = vh / N;
+        var BAUHAUS = ['#CC0000', '#003399', '#FFCC00'];
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9998;pointer-events:none;overflow:hidden;';
+        var pending = N;
+        for (var i = 0; i < N; i++) {
+          var band = document.createElement('div');
+          band.style.cssText = 'position:absolute;left:0;width:100%;background:#000;box-sizing:border-box;';
+          band.style.top = (i * bh) + 'px';
+          band.style.height = (bh + 0.5) + 'px';
+          if (i < N - 1) {
+            band.style.borderBottom = '1.5px solid ' + BAUHAUS[i % 3];
+          }
+          overlay.appendChild(band);
+          var lat = Math.PI * ((i + 0.5) / N - 0.5);
+          var cos2 = Math.cos(lat); cos2 = cos2 * cos2;
+          var dur = 0.4 + 1.0 * (1 - cos2);
+          gsap.to(band, {
+            x: dir * (vw + 20),
+            duration: dur,
+            ease: 'none',
+            onComplete: function() { pending--; if (pending <= 0) overlay.remove(); }
+          });
+        }
+        document.body.appendChild(overlay);
+      }
+    })();
+
+    // ── Image click interactions (popup + expand) ─────────────────────
+    (function() {
+      function dismissAll() {
+        var p = document.querySelector('.image-popup');
+        if (p) { p.classList.remove('active'); setTimeout(function() { p.remove(); }, 200); }
+        var ov = document.querySelector('.expand-overlay');
+        if (ov) { ov.classList.remove('active'); setTimeout(function() { ov.remove(); }, 200); }
+      }
+      function showPopup(el, anchor) {
+        var old = document.querySelector('.image-popup');
+        if (old) old.remove();
+        var text = el.getAttribute('data-popup');
+        var pos = el.getAttribute('data-popup-pos') || 'below';
+        var fs = el.getAttribute('data-popup-fs') || '15';
+        var rect = anchor.getBoundingClientRect();
+        var p = document.createElement('div');
+        p.className = 'image-popup';
+        p.textContent = text;
+        p.style.fontSize = fs + 'px';
+        if (pos === 'center') {
+          p.style.left = (rect.left + rect.width/2) + 'px';
+          p.style.top = (rect.top + rect.height/2) + 'px';
+          p.style.transform = 'translate(-50%,-50%)';
+        } else if (pos === 'side') {
+          p.style.top = (rect.top + rect.height/2) + 'px';
+          if (rect.right + 320 < window.innerWidth) {
+            p.style.left = (rect.right + 12) + 'px';
+            p.style.transform = 'translateY(-50%)';
+          } else {
+            p.style.left = (rect.left - 12) + 'px';
+            p.style.transform = 'translate(-100%,-50%)';
+          }
+        } else {
+          p.style.left = (rect.left + rect.width/2) + 'px';
+          p.style.top = (rect.bottom + 12) + 'px';
+          p.style.transform = 'translateX(-50%)';
+        }
+        document.body.appendChild(p);
+        requestAnimationFrame(function() { p.classList.add('active'); });
+      }
+      document.addEventListener('click', function(e) {
+        if (e.target.closest('.image-popup')) return;
+        var ov = e.target.closest('.expand-overlay');
+        if (ov) {
+          if (e.target.tagName === 'IMG') return;
+          dismissAll(); return;
+        }
+        var el = e.target.closest('[data-popup],[data-expand]');
+        if (!el) { dismissAll(); return; }
+        e.stopPropagation();
+        dismissAll();
+        var hasPopup = el.hasAttribute('data-popup');
+        var hasExpand = el.hasAttribute('data-expand');
+        var img = el.querySelector('img');
+        if (hasExpand && img) {
+          var overlay = document.createElement('div');
+          overlay.className = 'expand-overlay';
+          var big = document.createElement('img');
+          big.src = img.src;
+          big.onclick = function(ev) { ev.stopPropagation(); };
+          overlay.appendChild(big);
+          document.body.appendChild(overlay);
+          requestAnimationFrame(function() {
+            overlay.classList.add('active');
+            if (hasPopup) showPopup(el, big);
+          });
+        } else if (hasPopup) {
+          showPopup(el, el);
+        }
+      });
+      document.addEventListener('keydown', function(e) { if (e.key === 'Escape') dismissAll(); });
+    })();
+
+${showTimeWidget ? `
+    // Time widget (clock or timer)
+    (function() {
+      var mode = '${footerTimeMode}';
+      var timerDur = ${timerDuration} * 60;
+      var timerStart = Date.now();
+      function pad(n) { return n < 10 ? '0' + n : '' + n; }
+      function fmt() {
+        if (mode === 'clock12') return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        if (mode === 'clock24') return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        var elapsed = Math.floor((Date.now() - timerStart) / 1000);
+        var secs = mode === 'timer-down' ? Math.max(0, timerDur - elapsed) : elapsed;
+        var h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+        return h > 0 ? h + ':' + pad(m) + ':' + pad(s) : pad(m) + ':' + pad(s);
+      }
+      function update() { document.querySelectorAll('.reveal-time-widget').forEach(function(el) { el.textContent = fmt(); }); }
+      update();
+      setInterval(update, 1000);
+    })();
+` : ''}
   </script>
 </body>
 </html>`
@@ -473,6 +646,17 @@ export function downloadSlideHTML(presentation, slideIndex) {
   URL.revokeObjectURL(url)
 }
 
+export function previewSlideInWindow(presentation, slideIndex) {
+  const slide = presentation.slides[slideIndex]
+  if (!slide) return
+  const singleSlide = { ...presentation, slides: [slide] }
+  const html = generateRevealHTML(singleSlide)
+  const blob = new Blob([html], { type: 'text/html' })
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
+}
+
 // ─── PDF export (print-ready HTML, one page per fragment state) ───────────────
 
 function getBgPrintStyle(bg) {
@@ -492,6 +676,8 @@ function generatePrintHTML(presentation) {
   const globalFont = presentation.globalFont || ''
   const showFooter = presentation.showFooter || false
   const showPageNumbers = presentation.showPageNumbers || false
+  const footerTimeMode = presentation.footerTimeMode || 'none'
+  const showTimeWidget = footerTimeMode !== 'none'
   const pageNumberFormat = presentation.pageNumberFormat || 'c/t'
   const codeTheme = presentation.codeTheme || 'monokai'
   const footerFontSize = presentation.footerFontSize || 14
@@ -500,6 +686,14 @@ function generatePrintHTML(presentation) {
   const footerMode = presentation.footerMode || 'basic'
   const sequenceSections = presentation.sequenceSections || []
   const footerInactiveColor = presentation.footerInactiveColor || 'rgba(255,255,255,0.25)'
+  const printTimeLabel = (() => {
+    if (!showTimeWidget) return ''
+    if (footerTimeMode === 'clock12') return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+    if (footerTimeMode === 'clock24') return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    const dur = (presentation.timerDuration ?? 20) * 60
+    const m = Math.floor(dur / 60), s = dur % 60
+    return footerTimeMode === 'timer-down' ? `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : '00:00'
+  })()
 
   // Expand each slide into one page per fragment step (initial + one per unique index)
   const pages = []
@@ -657,7 +851,8 @@ function generatePrintHTML(presentation) {
 
     let footerHtml = ''
     if (!slide.hideFooter) {
-      if (footerMode === 'sequence' && sequenceSections.length > 0 && showFooter) {
+      const timeLabel = printTimeLabel
+      if (footerMode === 'sequence' && sequenceSections.length > 0 && (showFooter || showTimeWidget)) {
         const activeIdx = slide.activeSection
         const seqSpans = sequenceSections.map((sec, i) => {
           const isActive = activeIdx === i
@@ -668,11 +863,13 @@ function generatePrintHTML(presentation) {
           return `<span style="color:${color};${weight}">${escapeHtml(secLabel || `Section ${i+1}`)}</span>`
         }).join('')
         const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
-        footerHtml = `<div style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;font-size:${footerFontSize}px;font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
+        const timePart = timeLabel ? `<span style="flex-shrink:0;margin-right:12px;">${timeLabel}</span>` : ''
+        footerHtml = `<div style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;font-size:${footerFontSize}px;font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;">${timePart}<div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
       } else {
         const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
-        footerHtml = (sectionLabel || pageLabel)
-          ? `<div style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;font-size:${footerFontSize}px;color:${footerColor};font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>`
+        const leftContent = [timeLabel, sectionLabel].filter(Boolean).join(' — ')
+        footerHtml = (leftContent || pageLabel)
+          ? `<div style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;font-size:${footerFontSize}px;color:${footerColor};font-family:${footerFontFamily};pointer-events:none;box-sizing:border-box;"><span>${leftContent}</span><span>${pageLabel}</span></div>`
           : ''
       }
     }

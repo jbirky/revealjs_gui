@@ -220,6 +220,9 @@ export default function SlidePanel({ slides, currentIndex, onSelect, onAdd, onAd
             >
               <span className="slide-number">{index + 1}</span>
               <SlideThumbnail slide={slide} slideW={slideW} slideH={slideH} />
+              {slide.autoAnimate && (
+                <div style={{ position: 'absolute', top: 2, right: 2, fontSize: 7, color: '#fff', background: 'rgba(99,102,241,0.85)', padding: '1px 4px', borderRadius: 2, zIndex: 10, fontWeight: 600 }}>M</div>
+              )}
               {slide.section && (
                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, fontSize: 8, color: 'rgba(255,255,255,0.6)', background: 'rgba(0,0,0,0.55)', padding: '2px 5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', zIndex: 10 }}>
                   {slide.section}
@@ -341,6 +344,9 @@ export default function SlidePanel({ slides, currentIndex, onSelect, onAdd, onAd
                 >
                   <span className="slide-number">{flatIndex + 1}</span>
                   <SlideThumbnail slide={slide} slideW={slideW} slideH={slideH} />
+                  {slide.autoAnimate && (
+                    <div style={{ position: 'absolute', top: 2, right: 2, fontSize: 7, color: '#fff', background: 'rgba(99,102,241,0.85)', padding: '1px 4px', borderRadius: 2, zIndex: 10, fontWeight: 600 }}>M</div>
+                  )}
                   {slide.section && (
                     <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, fontSize: 8, color: 'rgba(255,255,255,0.6)', background: 'rgba(0,0,0,0.55)', padding: '2px 5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', zIndex: 10 }}>
                       {slide.section}

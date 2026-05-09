@@ -15,6 +15,8 @@ import {
   Image as ImageIcon,
   Upload,
   Grid,
+  Columns3,
+  Minus,
   Shapes,
   Video,
   Music,
@@ -51,8 +53,10 @@ const GRADIENT_PRESETS_BG = [
   'linear-gradient(135deg, #2c3e50, #3498db)'
 ]
 
-export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddTextPath, onAddImage, onAddImageUpload, onAddShape, onAddHtml, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, onAddManim, onAddP5, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers, guides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onImportPptx, drawTool, onSetDrawTool, onUndo, onRedo, canUndo, canRedo }) {
+export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddTextPath, onAddImage, onAddImageUpload, onAddShape, onAddNonobjective, onAddModularGrid, onAddHtml, onAddKineticText, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, onAddManim, onAddP5, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers, guides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onImportPptx, drawTool, onSetDrawTool, onUndo, onRedo, canUndo, canRedo }) {
   const [showShapeMenu, setShowShapeMenu] = useState(false)
+  const [showNonobjectiveMenu, setShowNonobjectiveMenu] = useState(false)
+  const [showModularMenu, setShowModularMenu] = useState(false)
   const [showTableMenu, setShowTableMenu] = useState(false)
   const [showColorPalette, setShowColorPalette] = useState(false)
   const [showHighlightPalette, setShowHighlightPalette] = useState(false)
@@ -279,6 +283,9 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
       <button className="btn-icon" title="Insert HTML / D3 embed" onClick={onAddHtml} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
         <FileCode size={14} /> Embed
       </button>
+      <button className="btn-icon" title="Insert kinetic text animation" onClick={onAddKineticText} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+        <Type size={14} /> Kinetic
+      </button>
       <button className="btn-icon" title="Insert p5.js sketch" onClick={onAddP5} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
         <Code size={14} /> p5
       </button>
@@ -401,6 +408,113 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
                 <span>{s.icon}</span>
                 <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{s.name.split(' ')[0]}</span>
               </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Nonobjective Elements palette */}
+      <div style={{ position: 'relative', display: 'inline-flex' }}>
+        <button
+          className="btn-icon"
+          style={{ width: 'auto', padding: '0 8px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+          title="Nonobjective elements (rules, circles, tone blocks)"
+          onClick={() => setShowNonobjectiveMenu(v => !v)}
+        >
+          <span style={{ fontSize: 16, lineHeight: 1 }}>|</span> Compose
+        </button>
+        {showNonobjectiveMenu && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0, marginTop: 4,
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: 10, zIndex: 1000, width: 240,
+          }}
+          onMouseLeave={() => setShowNonobjectiveMenu(false)}
+          >
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Rules</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginBottom: 10 }}>
+              {[
+                { id: 'rule-h-thin', label: 'H thin', icon: <div style={{width:28,height:1,background:'rgba(255,255,255,0.5)'}}/> },
+                { id: 'rule-h-medium', label: 'H med', icon: <div style={{width:28,height:3,background:'rgba(255,255,255,0.7)'}}/> },
+                { id: 'rule-h-heavy', label: 'H heavy', icon: <div style={{width:28,height:6,background:'#fff'}}/> },
+                { id: 'rule-diagonal', label: 'Diag', icon: <div style={{width:28,height:2,background:'#fff',transform:'rotate(-15deg)'}}/> },
+                { id: 'rule-v-thin', label: 'V thin', icon: <div style={{width:1,height:20,background:'rgba(255,255,255,0.5)'}}/> },
+                { id: 'rule-v-medium', label: 'V med', icon: <div style={{width:3,height:20,background:'rgba(255,255,255,0.7)'}}/> },
+                { id: 'rule-v-heavy', label: 'V heavy', icon: <div style={{width:6,height:20,background:'#fff'}}/> },
+              ].map(item => (
+                <button key={item.id} title={item.label}
+                  style={{ padding: '6px 4px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 36 }}
+                  onClick={() => { onAddNonobjective?.(item.id); setShowNonobjectiveMenu(false) }}
+                >{item.icon}<span style={{fontSize:7,color:'var(--text-muted)'}}>{item.label}</span></button>
+              ))}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Circles</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginBottom: 10 }}>
+              {[
+                { id: 'circle-dot', label: 'Dot', icon: <div style={{width:10,height:10,borderRadius:'50%',background:'#fff'}}/> },
+                { id: 'circle-medium', label: 'Medium', icon: <div style={{width:20,height:20,borderRadius:'50%',background:'#6366f1'}}/> },
+                { id: 'circle-large', label: 'Large', icon: <div style={{width:28,height:28,borderRadius:'50%',background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.3)'}}/> },
+              ].map(item => (
+                <button key={item.id} title={item.label}
+                  style={{ padding: '6px 4px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 36 }}
+                  onClick={() => { onAddNonobjective?.(item.id); setShowNonobjectiveMenu(false) }}
+                >{item.icon}<span style={{fontSize:7,color:'var(--text-muted)'}}>{item.label}</span></button>
+              ))}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Tone Blocks</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+              {[
+                { id: 'tone-dark', label: 'Dark', color: '#0a0a14' },
+                { id: 'tone-medium', label: 'Mid', color: '#2d2d4e' },
+                { id: 'tone-light', label: 'Light', color: 'rgba(255,255,255,0.08)' },
+                { id: 'tone-accent', label: 'Accent', color: 'rgba(99,102,241,0.15)' },
+              ].map(item => (
+                <button key={item.id} title={item.label}
+                  style={{ padding: '6px 4px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 36 }}
+                  onClick={() => { onAddNonobjective?.(item.id); setShowNonobjectiveMenu(false) }}
+                >
+                  <div style={{width:28,height:18,background:item.color,borderRadius:2,border:'1px solid rgba(255,255,255,0.1)'}}/>
+                  <span style={{fontSize:7,color:'var(--text-muted)'}}>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modular Grid generator */}
+      <div style={{ position: 'relative', display: 'inline-flex' }}>
+        <button
+          className="btn-icon"
+          style={{ width: 'auto', padding: '0 8px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+          title="Generate modular grid (standardized shape units)"
+          onClick={() => setShowModularMenu(v => !v)}
+        >
+          <span style={{ fontSize: 14, lineHeight: 1 }}>&#x25A3;</span> Modular
+        </button>
+        {showModularMenu && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0, marginTop: 4,
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: 10, zIndex: 1000, width: 200,
+          }}
+          onMouseLeave={() => setShowModularMenu(false)}
+          >
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600 }}>Generate Module Grid</div>
+            {[
+              { label: '2 x 2 Squares', shape: 'rect', cols: 2, rows: 2, gap: 16 },
+              { label: '3 x 2 Rectangles', shape: 'rect', cols: 3, rows: 2, gap: 12 },
+              { label: '4 x 3 Rectangles', shape: 'rect', cols: 4, rows: 3, gap: 8 },
+              { label: '3 x 3 Circles', shape: 'circle', cols: 3, rows: 3, gap: 12 },
+              { label: '4 x 2 Cards', shape: 'rounded-rect', cols: 4, rows: 2, gap: 10 },
+              { label: '6 x 1 Strip', shape: 'rect', cols: 6, rows: 1, gap: 8 },
+            ].map(preset => (
+              <button key={preset.label}
+                onClick={() => { onAddModularGrid?.(preset.shape, preset.cols, preset.rows, preset.gap); setShowModularMenu(false) }}
+                style={{ display: 'block', width: '100%', padding: '5px 8px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', color: 'var(--text-primary)', fontSize: 11, textAlign: 'left', marginBottom: 3 }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+              >{preset.label}</button>
             ))}
           </div>
         )}
@@ -615,6 +729,56 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
           )}
         </div>
       )}
+
+      {/* Layout Grid toggle */}
+      <button
+        className={`btn-icon ${slide?.layoutGrid?.enabled ? 'active' : ''}`}
+        onClick={() => {
+          const lg = slide?.layoutGrid || {}
+          onUpdateSlide({ layoutGrid: { columns: 3, rows: 0, gutter: 20, marginX: 40, marginY: 40, snap: true, ...lg, enabled: !lg.enabled } })
+        }}
+        title={slide?.layoutGrid?.enabled ? 'Hide layout grid' : 'Show layout grid (columns/rows)'}
+      >
+        <Columns3 size={14} />
+      </button>
+      {slide?.layoutGrid?.enabled && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'var(--bg-hover)', borderRadius: 5, padding: '2px 5px', border: '1px solid var(--border)' }}>
+          <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>C</span>
+          <input type="number" min="1" max="12" value={slide.layoutGrid?.columns ?? 3}
+            onChange={e => onUpdateSlide({ layoutGrid: { ...slide.layoutGrid, columns: Math.max(1, Math.min(12, Number(e.target.value) || 3)) } })}
+            style={{ width: 32, padding: '1px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 3, fontSize: 11, textAlign: 'center' }}
+            title="Columns"
+          />
+          <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>G</span>
+          <input type="number" min="0" max="100" value={slide.layoutGrid?.gutter ?? 20}
+            onChange={e => onUpdateSlide({ layoutGrid: { ...slide.layoutGrid, gutter: Math.max(0, Math.min(100, Number(e.target.value) || 0)) } })}
+            style={{ width: 32, padding: '1px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 3, fontSize: 11, textAlign: 'center' }}
+            title="Gutter (px)"
+          />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+            <input type="checkbox" checked={slide.layoutGrid?.snap !== false}
+              onChange={e => onUpdateSlide({ layoutGrid: { ...slide.layoutGrid, snap: e.target.checked } })}
+              style={{ accentColor: 'var(--accent)', width: 12, height: 12 }}
+            />
+            <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>Snap</span>
+          </label>
+        </div>
+      )}
+
+      {/* Add Axis Line */}
+      <button
+        className="btn-icon"
+        onClick={() => {
+          const existing = slide?.axisLines || []
+          const id = crypto.randomUUID()
+          const axis = existing.length % 2 === 0 ? 'x' : 'y'
+          const position = axis === 'x' ? Math.round(960 / 3) : 270
+          onUpdateSlide({ axisLines: [...existing, { id, axis, position, visible: true, snap: true }] })
+        }}
+        title="Add axis line (composition guide)"
+      >
+        <Minus size={14} style={{ transform: 'rotate(90deg)' }} />
+      </button>
 
       {selectedCount >= 2 && (
         <>
