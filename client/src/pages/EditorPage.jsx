@@ -348,7 +348,7 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   }, [presentationId])
 
   const handleGithubSaveConfig = async () => {
-    const data = { owner: githubConfig.owner, repo: githubConfig.repo }
+    const data = { owner: githubConfig.owner, repo: githubConfig.repo, pagesUrl: githubConfig.pagesUrl || '' }
     if (githubToken) data.token = githubToken
     const result = await api.saveGithubConfig(data)
     setGithubConfig(result)
@@ -2181,6 +2181,15 @@ class MyScene(Scene):
                   value={githubToken}
                   onChange={e => setGithubToken(e.target.value)}
                   placeholder={githubConfig.hasToken ? '••••••••  (leave blank to keep)' : 'ghp_...'}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: '#a0a0b0', display: 'block', marginBottom: 4 }}>Pages URL <span style={{ color: '#666' }}>(optional)</span></label>
+                <input
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 14, boxSizing: 'border-box' }}
+                  value={githubConfig.pagesUrl || ''}
+                  onChange={e => setGithubConfig(prev => ({ ...prev, pagesUrl: e.target.value }))}
+                  placeholder="https://jessicabirky.com/presentations"
                 />
               </div>
               <button

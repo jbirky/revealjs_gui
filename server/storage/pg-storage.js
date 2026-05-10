@@ -229,9 +229,9 @@ class PgStorage extends StorageInterface {
   // --- GitHub config ---
 
   async getGithubConfig(userId) {
-    if (!userId) return { token: '', owner: '', repo: '' }
-    const { rows } = await this.query('SELECT token, owner, repo FROM github_configs WHERE user_id = $1', [userId])
-    return rows.length ? rows[0] : { token: '', owner: '', repo: '' }
+    if (!userId) return { token: '', owner: '', repo: '', pagesUrl: '' }
+    const { rows } = await this.query('SELECT token, owner, repo, pages_url as "pagesUrl" FROM github_configs WHERE user_id = $1', [userId])
+    return rows.length ? rows[0] : { token: '', owner: '', repo: '', pagesUrl: '' }
   }
 
   async setGithubConfig(config, userId) {
@@ -241,11 +241,12 @@ class PgStorage extends StorageInterface {
       token: config.token !== undefined ? config.token : existing.token,
       owner: config.owner !== undefined ? config.owner : existing.owner,
       repo: config.repo !== undefined ? config.repo : existing.repo,
+      pagesUrl: config.pagesUrl !== undefined ? config.pagesUrl : (existing.pagesUrl || ''),
     }
     await this.query(
-      `INSERT INTO github_configs (user_id, token, owner, repo) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id) DO UPDATE SET token = $2, owner = $3, repo = $4`,
-      [userId, updated.token, updated.owner, updated.repo]
+      `INSERT INTO github_configs (user_id, token, owner, repo, pages_url) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id) DO UPDATE SET token = $2, owner = $3, repo = $4, pages_url = $5`,
+      [userId, updated.token, updated.owner, updated.repo, updated.pagesUrl]
     )
     return updated
   }

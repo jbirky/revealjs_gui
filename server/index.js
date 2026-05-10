@@ -471,9 +471,11 @@ function generateRevealHTML(presentation) {
       const activeIdx = slide.activeSection
       const seqSpans = sequenceSections.map((sec, i) => {
         const isActive = activeIdx === i
-        const color = isActive ? (footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor
+        const secLabel = typeof sec === 'object' ? (sec.label || 'Section ' + (i+1)) : (sec || 'Section ' + (i+1))
+        const secColor = typeof sec === 'object' && sec.color ? sec.color : null
+        const color = isActive ? (secColor || footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor
         const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
-        return `<span style="color:${color};${weight}">${escapeHtml(sec || 'Section ' + (i+1))}</span>`
+        return `<span style="color:${color};${weight}">${escapeHtml(secLabel)}</span>`
       }).join('')
       const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
       footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
@@ -1324,7 +1326,7 @@ app.post('/api/rclone/sync-single', async (req, res) => {
 app.get('/api/github/config', async (req, res) => {
   try {
     const config = await storage.getGithubConfig(req.userId)
-    res.json({ owner: config.owner || '', repo: config.repo || '', hasToken: !!config.token })
+    res.json({ owner: config.owner || '', repo: config.repo || '', hasToken: !!config.token, pagesUrl: config.pagesUrl || '' })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1334,7 +1336,7 @@ app.get('/api/github/config', async (req, res) => {
 app.post('/api/github/config', async (req, res) => {
   try {
     const updated = await storage.setGithubConfig(req.body, req.userId)
-    res.json({ owner: updated.owner || '', repo: updated.repo || '', hasToken: !!updated.token })
+    res.json({ owner: updated.owner || '', repo: updated.repo || '', hasToken: !!updated.token, pagesUrl: updated.pagesUrl || '' })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1438,7 +1440,8 @@ app.post('/api/presentations/:id/github/push', async (req, res) => {
     const sortedFolders = [...existingFolders].sort()
     for (const folder of sortedFolders) {
       const displayName = folder.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-      const viewUrl = `https://htmlpreview.github.io/?https://github.com/${owner}/${repo}/blob/${branch}/${encodeURIComponent(folder)}/presentation.html`
+      const pagesUrl = config.pagesUrl || `https://${owner}.github.io/${repo}`
+      const viewUrl = `${pagesUrl}/${encodeURIComponent(folder)}/presentation.html`
       readmeLines.push(`- [${displayName}](${viewUrl})`)
     }
     const readmeContent = readmeLines.join('\n') + '\n'
