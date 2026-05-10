@@ -18,14 +18,14 @@ export const api = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
-  }).then(r => r.json()),
+  }).then(async r => { const b = await r.json(); if (!r.ok) throw new Error(b.message || b.error || 'Create failed'); return b }),
   updatePresentation: (id, data) => authFetch(`${BASE}/presentations/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   }).then(r => r.json()),
   deletePresentation: (id) => authFetch(`${BASE}/presentations/${id}`, { method: 'DELETE' }).then(r => r.json()),
-  duplicatePresentation: (id) => authFetch(`${BASE}/presentations/${id}/duplicate`, { method: 'POST' }).then(r => r.json()),
+  duplicatePresentation: (id) => authFetch(`${BASE}/presentations/${id}/duplicate`, { method: 'POST' }).then(async r => { const b = await r.json(); if (!r.ok) throw new Error(b.message || b.error || 'Duplicate failed'); return b }),
   uploadFile: (file) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -97,6 +97,9 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   }).then(async r => { const b = await r.json(); if (!r.ok) throw new Error(b.error); return b }),
+
+  // User / plan
+  getMe: () => authFetch(`${BASE}/me`).then(r => r.json()),
 
   // Share links
   enableShare: (id) => authFetch(`${BASE}/presentations/${id}/share`, { method: 'POST' }).then(r => r.json()),

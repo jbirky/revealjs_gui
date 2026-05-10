@@ -17,9 +17,12 @@ class PgStorage extends StorageInterface {
 
   // --- Presentations ---
 
-  async listPresentations(userId) {
-    const where = userId ? 'WHERE user_id = $1' : ''
-    const params = userId ? [userId] : []
+  async listPresentations(userId, opts = {}) {
+    const conditions = ['is_template = false']
+    const params = []
+    if (userId) { params.push(userId); conditions.push(`user_id = $${params.length}`) }
+    if (opts.excludeExpired) { conditions.push('(expires_at IS NULL OR expires_at > NOW())') }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
     const { rows } = await this.query(`
       SELECT id, title,
         data->>'theme' as theme,
@@ -27,11 +30,12 @@ class PgStorage extends StorageInterface {
         jsonb_array_length(COALESCE(data->'slides', '[]'::jsonb)) as "slideCount",
         updated_at as "updatedAt",
         created_at as "createdAt",
+        expires_at as "expiresAt",
         data->'slides'->0->'background' as thumbnail
       FROM presentations
-      ${where} AND is_template = false
+      ${where}
       ORDER BY updated_at DESC
-    `.replace('AND', userId ? 'AND' : 'WHERE'), params)
+    `, params)
     return rows.map(r => ({ ...r, slideCount: parseInt(r.slideCount) || 0, thumbnail: r.thumbnail || null }))
   }
 
@@ -45,14 +49,15 @@ class PgStorage extends StorageInterface {
     return { ...r.data, id: r.id, createdAt: r.createdAt, updatedAt: r.updatedAt }
   }
 
-  async createPresentation(data, userId) {
+  async createPresentation(data, userId, expiresAt = null) {
     const id = data.id || uuidv4()
     const now = new Date().toISOString()
     const title = data.title || 'Untitled'
     const pres = { ...data, id, createdAt: now, updatedAt: now }
+    if (expiresAt) pres.expiresAt = expiresAt
     await this.query(
-      'INSERT INTO presentations (id, user_id, title, data, is_template, created_at, updated_at) VALUES ($1, $2, $3, $4, false, $5, $5)',
-      [id, userId || null, title, JSON.stringify(pres), now]
+      'INSERT INTO presentations (id, user_id, title, data, is_template, created_at, updated_at, expires_at) VALUES ($1, $2, $3, $4, false, $5, $5, $6)',
+      [id, userId || null, title, JSON.stringify(pres), now, expiresAt]
     )
     return pres
   }

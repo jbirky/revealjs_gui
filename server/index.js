@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 3002
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
 const createStorage = require('./storage')
 const storage = createStorage()
-const { authStack, requireUser, IS_CLOUD } = require('./middleware/auth')
+const { authStack, requireUser, IS_CLOUD, PLAN_LIMITS } = require('./middleware/auth')
 const { isR2Enabled, streamFromR2 } = require('./services/r2')
 const { handleUpload: r2Upload, deleteUploadsForPresentation } = require('./services/upload-service')
 
@@ -83,6 +83,7 @@ authStack().forEach(mw => app.use(mw))
 // On first authenticated request, creates a row in the users table.
 if (IS_CLOUD) {
   const provisionCache = new Map()
+  const CACHE_TTL = 5 * 60 * 1000
   let clerkClient = null
   try { clerkClient = require('@clerk/express').clerkClient } catch {}
 
@@ -90,16 +91,19 @@ if (IS_CLOUD) {
     if (!req.userId) return next()
     const clerkId = req.userId
 
-    if (provisionCache.has(clerkId)) {
-      req.userId = provisionCache.get(clerkId)
+    const cached = provisionCache.get(clerkId)
+    if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
+      req.userId = cached.id
+      req.userPlan = cached.plan
       return next()
     }
 
     try {
-      const { rows } = await storage.query('SELECT id FROM users WHERE auth_id = $1', [clerkId])
+      const { rows } = await storage.query('SELECT id, plan FROM users WHERE auth_id = $1', [clerkId])
       if (rows.length) {
-        provisionCache.set(clerkId, rows[0].id)
+        provisionCache.set(clerkId, { id: rows[0].id, plan: rows[0].plan, cachedAt: Date.now() })
         req.userId = rows[0].id
+        req.userPlan = rows[0].plan
         return next()
       }
 
@@ -120,8 +124,9 @@ if (IS_CLOUD) {
         'INSERT INTO users (id, email, name, avatar_url, auth_provider, auth_id) VALUES ($1, $2, $3, $4, $5, $6)',
         [id, email, name, avatarUrl, 'clerk', clerkId]
       )
-      provisionCache.set(clerkId, id)
+      provisionCache.set(clerkId, { id, plan: 'free', cachedAt: Date.now() })
       req.userId = id
+      req.userPlan = 'free'
     } catch (err) {
       console.error('User provisioning error:', err.message)
       return res.status(500).json({ error: 'User provisioning failed' })
@@ -132,6 +137,48 @@ if (IS_CLOUD) {
 
 // Protect all /api routes in cloud mode
 app.use('/api', requireUser)
+
+// Plan quota check helper
+async function checkPresentationQuota(req, res) {
+  if (!IS_CLOUD || !req.userId) return true
+  const plan = req.userPlan || 'free'
+  const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free
+  if (limits.maxPresentations === Infinity) return true
+  const { rows } = await storage.query(
+    'SELECT COUNT(*)::int as count FROM presentations WHERE user_id = $1 AND is_template = false AND (expires_at IS NULL OR expires_at > NOW())',
+    [req.userId]
+  )
+  if (rows[0].count >= limits.maxPresentations) {
+    res.status(403).json({
+      error: 'presentation_limit_reached',
+      message: `Free plan is limited to ${limits.maxPresentations} presentations. Upgrade to Pro for unlimited.`,
+      limit: limits.maxPresentations, current: rows[0].count,
+    })
+    return false
+  }
+  return true
+}
+
+// GET /api/me — returns user plan and usage
+app.get('/api/me', async (req, res) => {
+  if (!IS_CLOUD) return res.json({ plan: null, presentationCount: 0, limits: null })
+  try {
+    const plan = req.userPlan || 'free'
+    const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free
+    const { rows } = await storage.query(
+      'SELECT COUNT(*)::int as count FROM presentations WHERE user_id = $1 AND is_template = false AND (expires_at IS NULL OR expires_at > NOW())',
+      [req.userId]
+    )
+    res.json({
+      plan,
+      presentationCount: rows[0].count,
+      limits: {
+        maxPresentations: limits.maxPresentations === Infinity ? null : limits.maxPresentations,
+        expirationDays: limits.expirationDays,
+      },
+    })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
 
 // Transcode a video file to H.264 MP4 if its codec isn't web-compatible.
 // Returns the (possibly new) filename. Deletes the original on success.
@@ -689,7 +736,8 @@ function escapeHtml(str) {
 // GET /api/presentations - list summaries
 app.get('/api/presentations', async (req, res) => {
   try {
-    res.json(await storage.listPresentations(req.userId))
+    const excludeExpired = IS_CLOUD && (req.userPlan || 'free') === 'free'
+    res.json(await storage.listPresentations(req.userId, { excludeExpired }))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -698,6 +746,7 @@ app.get('/api/presentations', async (req, res) => {
 // POST /api/presentations - create new (optionally from template)
 app.post('/api/presentations', async (req, res) => {
   try {
+    if (!(await checkPresentationQuota(req, res))) return
     const { title, theme, transition, templateId, slides: providedSlides, ...extraFields } = req.body
     const now = new Date().toISOString()
     let presentation
@@ -767,7 +816,12 @@ app.post('/api/presentations', async (req, res) => {
       }
     }
 
-    const created = await storage.createPresentation(presentation, req.userId)
+    const plan = req.userPlan || 'free'
+    const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free
+    const expiresAt = limits.expirationDays
+      ? new Date(Date.now() + limits.expirationDays * 86400000).toISOString()
+      : null
+    const created = await storage.createPresentation(presentation, req.userId, expiresAt)
     res.status(201).json(created)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -878,6 +932,7 @@ app.delete('/api/presentations/:id', async (req, res) => {
 // POST /api/presentations/:id/duplicate
 app.post('/api/presentations/:id/duplicate', async (req, res) => {
   try {
+    if (!(await checkPresentationQuota(req, res))) return
     const copy = await storage.duplicatePresentation(req.params.id, req.userId)
     if (!copy) return res.status(404).json({ error: 'Not found' })
     res.status(201).json(copy)
@@ -1449,6 +1504,18 @@ function startServer(port) {
       resolve(server)
     })
   })
+}
+
+// Periodic cleanup: hard-delete free-tier presentations expired > 7 days
+if (IS_CLOUD) {
+  setInterval(async () => {
+    try {
+      const { rowCount } = await storage.query(
+        "DELETE FROM presentations WHERE expires_at IS NOT NULL AND expires_at < NOW() - INTERVAL '7 days'"
+      )
+      if (rowCount > 0) console.log(`Cleanup: deleted ${rowCount} expired presentations`)
+    } catch (err) { console.error('Cleanup error:', err.message) }
+  }, 60 * 60 * 1000)
 }
 
 if (require.main === module) {

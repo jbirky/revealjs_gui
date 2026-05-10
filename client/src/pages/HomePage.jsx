@@ -167,6 +167,10 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ title: '', theme: 'black', transition: 'slide', templateId: null })
   const [creating, setCreating] = useState(false)
+  const [planInfo, setPlanInfo] = useState(null)
+
+  const atLimit = isCloud && planInfo && planInfo.limits?.maxPresentations != null
+    && planInfo.presentationCount >= planInfo.limits.maxPresentations
 
   useEffect(() => {
     loadData()
@@ -180,6 +184,7 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
       ])
       setPresentations(Array.isArray(presData) ? presData : [])
       setTemplates(Array.isArray(tmplData) ? tmplData : [])
+      if (isCloud) api.getMe().then(setPlanInfo).catch(() => {})
     } catch (err) {
       console.error('Failed to load data', err)
       setPresentations([])
@@ -198,7 +203,8 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
       setForm({ title: '', theme: 'black', transition: 'slide', templateId: null })
       onOpen(pres.id)
     } catch (err) {
-      console.error('Failed to create presentation', err)
+      if (err.message.includes('limit')) alert(err.message)
+      else console.error('Failed to create presentation', err)
     } finally {
       setCreating(false)
     }
@@ -311,7 +317,8 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
           >
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
           </button>
-          <button className="btn btn-primary" onClick={handleOpenModal}>
+          <button className="btn btn-primary" onClick={handleOpenModal} disabled={atLimit}
+            title={atLimit ? 'Presentation limit reached' : ''}>
             <Plus size={16} />
             New Presentation
           </button>
@@ -320,6 +327,16 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
       </div>
 
       <div className="home-content">
+        {atLimit && (
+          <div style={{
+            background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
+            borderRadius: 8, padding: '10px 16px', marginBottom: 16, fontSize: 13, color: 'var(--text-secondary)',
+          }}>
+            You've reached the {planInfo.limits.maxPresentations}-presentation limit on the Free plan.
+            {planInfo.limits.expirationDays && ` Presentations expire after ${planInfo.limits.expirationDays} days.`}
+            {' '}Upgrade to Pro for unlimited presentations.
+          </div>
+        )}
         <h2>My Presentations</h2>
         {loading ? (
           <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px' }}>Loading...</div>

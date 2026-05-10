@@ -43,4 +43,10 @@ function authStack() {
   return [attachUserId]
 }
 
-module.exports = { authStack, requireUser, IS_CLOUD }
+const PLAN_LIMITS = {
+  free: { maxPresentations: 3, expirationDays: 30 },
+  pro:  { maxPresentations: Infinity, expirationDays: null },
+  team: { maxPresentations: Infinity, expirationDays: null },
+}
+
+module.exports = { authStack, requireUser, IS_CLOUD, PLAN_LIMITS }

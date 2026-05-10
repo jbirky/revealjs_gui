@@ -17,7 +17,7 @@ const PLANS = [
     name: 'Free',
     price: '$0',
     period: '/mo',
-    features: ['5 presentations', 'Basic themes', '100 MB storage', 'Community support'],
+    features: ['3 presentations', 'Basic themes', '100 MB storage', '30-day expiration'],
     cta: 'Get Started',
     highlighted: false,
   },
