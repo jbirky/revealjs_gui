@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Jessica Birky
+
 import { shapeSvgString } from './shapeUtils'
 import { pointsToPath } from './drawingUtils'
 
@@ -56,15 +59,28 @@ export function generateRevealHTML(presentation) {
   const footerMode = presentation.footerMode || 'basic'
   const sequenceSections = presentation.sequenceSections || []
   const footerInactiveColor = presentation.footerInactiveColor || 'rgba(255,255,255,0.25)'
-  // Compute page numbers: only count slides where showPageNumber !== false
-  const totalNumberedSlides = (presentation.slides || []).filter(s => s.showPageNumber !== false).length
+  // Compute page numbers: grouped slides share the same number
+  const seenGroups = new Set()
+  const totalNumberedSlides = (presentation.slides || []).filter(s => {
+    if (s.showPageNumber === false) return false
+    if (s.slideGroup) {
+      if (seenGroups.has(s.slideGroup)) return false
+      seenGroups.add(s.slideGroup)
+    }
+    return true
+  }).length
   let pageCounter = 0
+  const pageGroupSeen = new Set()
 
   // Build per-slide section HTML (preserving pageCounter increment order via flat array)
   const slideSectionHtmlByIndex = new Map()
   presentation.slides.forEach((slide, slideIndex) => {
     const bgAttrs = getBackgroundAttrs(slide.background)
     const notes = slide.notes ? `<aside class="notes">${slide.notes}</aside>` : ''
+
+    const sideCitations = (slide.elements || [])
+      .filter(el => el.type === 'image' && (el.citationText || el.citationLink) && el.citationMode === 'side')
+      .map(el => ({ id: el.id, text: el.citationText, link: el.citationLink }))
 
     const elementsHtml = (slide.elements || [])
       .slice()
@@ -97,13 +113,29 @@ export function generateRevealHTML(presentation) {
           const expandAttr = el.clickToExpand ? ' data-expand="true"' : ''
           const popupAttr = el.popupText ? ` data-popup="${el.popupText.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}" data-popup-pos="${el.popupPosition || 'below'}" data-popup-fs="${el.popupFontSize || 15}"` : ''
           const interactiveCursor = (el.clickToExpand || el.popupText) ? 'cursor:pointer;' : ''
+          const hasCite = el.citationText || el.citationLink
+          const citeCaption = hasCite && (el.citationMode || 'caption') === 'caption'
+          const citeSide = hasCite && el.citationMode === 'side'
+          const cStyle = citeCaption ? style.replace('overflow:hidden;', 'overflow:visible;') : style
+          let capHtml = ''
+          if (citeCaption) {
+            const align = el.citationAlign || 'left'
+            const ct = (el.citationText || el.citationLink || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            capHtml = el.citationLink
+              ? `<div class="image-caption" style="text-align:${align};"><a href="${el.citationLink.replace(/"/g,'&quot;')}" target="_blank" rel="noopener">${ct}</a></div>`
+              : `<div class="image-caption" style="text-align:${align};">${ct}</div>`
+          }
+          const sIdx = citeSide ? sideCitations.findIndex(c => c.id === el.id) : -1
+          const sup = sIdx >= 0 ? `<span class="cite-sup">${sIdx + 1}</span>` : ''
+          const clipOpen = citeCaption ? `<div style="width:100%;height:100%;overflow:hidden;position:relative;${borderRadiusStyle}">` : ''
+          const clipClose = citeCaption ? '</div>' : ''
           if (el.imageW != null) {
             const offX = el.imageOffsetX ?? 0
             const offY = el.imageOffsetY ?? 0
             const imgStyle = `position:absolute;left:${offX}px;top:${offY}px;width:${el.imageW}px;height:${el.imageH}px;object-fit:${el.objectFit||'contain'};${filterStyle}`
-            return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs}${expandAttr}${popupAttr} style="${style}${interactiveCursor}"><img src="${src}" alt="${el.alt||''}" style="${imgStyle}" /></div>`
+            return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs}${expandAttr}${popupAttr} style="${cStyle}${interactiveCursor}">${clipOpen}<img src="${src}" alt="${el.alt||''}" style="${imgStyle}" />${clipClose}${capHtml}${sup}</div>`
           }
-          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs}${expandAttr}${popupAttr} style="${style}${interactiveCursor}"><img src="${src}" alt="${el.alt||''}" style="display:block;width:100%;height:100%;object-fit:${el.objectFit||'contain'};${filterStyle}" /></div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs}${expandAttr}${popupAttr} style="${cStyle}${interactiveCursor}">${clipOpen}<img src="${src}" alt="${el.alt||''}" style="display:block;width:100%;height:100%;object-fit:${el.objectFit||'contain'};${filterStyle}" />${clipClose}${capHtml}${sup}</div>`
         }
         if (el.type === 'shape') {
           const opacityStyle = el.opacity !== undefined && el.opacity !== 1 ? `opacity:${el.opacity};` : ''
@@ -260,15 +292,34 @@ export function generateRevealHTML(presentation) {
         return ''
       }).join('\n')
 
-    // Page numbering: increment counter only for slides with showPageNumber !== false
+    let sideCitationsHtml = ''
+    if (sideCitations.length > 0) {
+      const items = sideCitations.map((c, i) => {
+        const t = (c.text || c.link || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        const content = c.link
+          ? `<a href="${c.link.replace(/"/g,'&quot;')}" target="_blank" rel="noopener">${t}</a>`
+          : t
+        return `${i + 1}. ${content}`
+      }).join('&ensp;&middot;&ensp;')
+      sideCitationsHtml = `      <div class="slide-citations"><div class="slide-citations-text">${items}</div></div>`
+    }
+
+    // Page numbering: grouped slides share the same number
     const slideHasPageNum = slide.showPageNumber !== false
-    if (slideHasPageNum) pageCounter++
+    if (slideHasPageNum) {
+      if (slide.slideGroup && pageGroupSeen.has(slide.slideGroup)) {
+        // same group — reuse current counter value
+      } else {
+        pageCounter++
+        if (slide.slideGroup) pageGroupSeen.add(slide.slideGroup)
+      }
+    }
     const pageLabel = showPageNumbers && slideHasPageNum
       ? (pageNumberFormat === 'c/t' ? `${pageCounter} / ${totalNumberedSlides}` : `${pageCounter}`)
       : ''
 
     let footerHtml = ''
-    if (!slide.hideFooter) {
+    if (slide.showSlideFooter !== false && !slide.hideFooter) {
       const timeSpan = showTimeWidget ? `<span class="reveal-time-widget" style="flex-shrink:0;"></span>` : ''
       if (footerMode === 'sequence' && sequenceSections.length > 0 && (showFooter || showTimeWidget)) {
         const activeIdx = slide.activeSection
@@ -299,7 +350,7 @@ export function generateRevealHTML(presentation) {
     const perSlideTransition = slide.transition ? ` data-transition="${isCustomTrans ? 'none' : slide.transition}"` : ''
     const customTransAttr = isCustomTrans ? ` data-custom-transition="${slide.transition}"` : ''
     const perSlideSpeed = slide.transitionSpeed ? ` data-transition-speed="${slide.transitionSpeed}"` : ''
-    slideSectionHtmlByIndex.set(slideIndex, `    <section${bgAttrs}${autoAnimateAttr}${autoAnimateDurAttr}${autoAnimateEasingAttr}${perSlideTransition}${customTransAttr}${perSlideSpeed} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`)
+    slideSectionHtmlByIndex.set(slideIndex, `    <section${bgAttrs}${autoAnimateAttr}${autoAnimateDurAttr}${autoAnimateEasingAttr}${perSlideTransition}${customTransAttr}${perSlideSpeed} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n${sideCitationsHtml}\n      ${notes}\n    </section>`)
   })
 
   // Group into columns for 2D output
@@ -378,6 +429,12 @@ export function generateRevealHTML(presentation) {
     .image-popup.active { opacity:1; }
     [data-popup] { transition:box-shadow 0.2s, outline 0.2s; outline:2px solid transparent; outline-offset:2px; }
     [data-popup]:hover { outline-color:rgba(251,191,36,0.5); box-shadow:0 0 12px rgba(251,191,36,0.2); }
+    .image-caption { position:absolute;left:0;right:0;top:100%;font-size:10px;color:rgba(255,255,255,0.5);font-family:-apple-system,sans-serif;line-height:1.3;padding:3px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .image-caption a { color:rgba(255,255,255,0.5);text-decoration:underline;text-decoration-color:rgba(255,255,255,0.25); }
+    .cite-sup { position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.55);color:rgba(255,255,255,0.85);font-size:10px;font-weight:700;font-family:-apple-system,sans-serif;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px;pointer-events:none;line-height:1; }
+    .slide-citations { position:absolute;right:2px;top:0;bottom:0;z-index:890;display:flex;align-items:center;pointer-events:none; }
+    .slide-citations-text { writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;color:rgba(255,255,255,0.45);font-family:-apple-system,sans-serif;line-height:1.3;white-space:nowrap; }
+    .slide-citations-text a { color:rgba(255,255,255,0.45);text-decoration:underline; }
   </style>${presentation.customCSS ? `\n  <style>\n${presentation.customCSS}\n  </style>` : ''}
 </head>
 <body>
@@ -850,7 +907,7 @@ function generatePrintHTML(presentation) {
       : ''
 
     let footerHtml = ''
-    if (!slide.hideFooter) {
+    if (slide.showSlideFooter !== false && !slide.hideFooter) {
       const timeLabel = printTimeLabel
       if (footerMode === 'sequence' && sequenceSections.length > 0 && (showFooter || showTimeWidget)) {
         const activeIdx = slide.activeSection

@@ -1,6 +1,6 @@
 # LaTeX & Math
 
-Slides Editor provides first-class support for mathematical notation and diagrams through two complementary systems: **KaTeX** for inline and display math, and **TikZJax** for vector diagrams.
+Parallax provides first-class support for mathematical notation and diagrams through two complementary systems: **KaTeX** for inline and display math, and **TikZJax** for vector diagrams.
 
 ## Inserting a LaTeX block
 
@@ -54,7 +54,7 @@ KaTeX is used to render standard LaTeX math notation. Use `\[...\]` or the `equa
 
 ## TikZ diagrams
 
-For vector graphics and complex diagrams, Slides Editor supports **TikZJax** — a WebAssembly port of PGF/TikZ that runs entirely in the browser.
+For vector graphics and complex diagrams, Parallax supports **TikZJax** — a WebAssembly port of PGF/TikZ that runs entirely in the browser.
 
 ### Simple example
 

@@ -1,6 +1,6 @@
 # Text & Formatting
 
-Slides Editor uses [TipTap](https://tiptap.dev/) as its rich text engine, giving you full control over typography directly on the slide canvas.
+Parallax uses [TipTap](https://tiptap.dev/) as its rich text engine, giving you full control over typography directly on the slide canvas.
 
 ## Activating the text editor
 

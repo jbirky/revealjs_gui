@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'Slides Editor',
+  title: 'Parallax',
   description: 'A self-hostable WYSIWYG presentation editor powered by reveal.js',
   base: '/revealjs_gui/',
   ignoreDeadLinks: true,

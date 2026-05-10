@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Jessica Birky
+
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../utils/api'
 import {
@@ -27,8 +30,19 @@ import {
   Group,
   Ungroup,
   FileText,
+  HelpCircle,
 } from 'lucide-react'
 import { SHAPES } from '../utils/shapeUtils'
+
+const DOCS_BASE = '/revealjs_gui/tutorials/'
+const DocsLink = ({ page, onClose }) => (
+  <>
+    <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+    <a href={`${DOCS_BASE}${page}`} target="_blank" rel="noopener noreferrer" onClick={() => onClose?.()} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 12px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', textAlign: 'left', textDecoration: 'none' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}>
+      <HelpCircle size={12} /> How to use
+    </a>
+  </>
+)
 
 const COLOR_PALETTE = [
   '#ffffff','#e2e8f0','#94a3b8','#64748b','#334155','#1e293b','#0f172a','#000000',
@@ -53,11 +67,15 @@ const GRADIENT_PRESETS_BG = [
   'linear-gradient(135deg, #2c3e50, #3498db)'
 ]
 
-export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddTextPath, onAddImage, onAddImageUpload, onAddShape, onAddNonobjective, onAddModularGrid, onAddHtml, onAddKineticText, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, onAddManim, onAddP5, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers, guides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onImportPptx, drawTool, onSetDrawTool, onUndo, onRedo, canUndo, canRedo }) {
+export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddTextPath, onAddImage, onAddImageUpload, onAddShape, onAddNonobjective, onAddModularGrid, onAddHtml, onAddD3, onAddKineticText, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, onAddManim, onAddP5, onAddMathGrid, onAddAnime, onAddThree, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers, guides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onImportPptx, drawTool, onSetDrawTool, onUndo, onRedo, canUndo, canRedo }) {
+  const [showTextMenu, setShowTextMenu] = useState(false)
+  const [showImageMenu, setShowImageMenu] = useState(false)
+  const [showEmbedMenu, setShowEmbedMenu] = useState(false)
+  const [showMediaMenu, setShowMediaMenu] = useState(false)
   const [showShapeMenu, setShowShapeMenu] = useState(false)
+  const [showLayoutMenu, setShowLayoutMenu] = useState(false)
   const [showNonobjectiveMenu, setShowNonobjectiveMenu] = useState(false)
   const [showModularMenu, setShowModularMenu] = useState(false)
-  const [showTableMenu, setShowTableMenu] = useState(false)
   const [showColorPalette, setShowColorPalette] = useState(false)
   const [showHighlightPalette, setShowHighlightPalette] = useState(false)
   const [showBgMenu, setShowBgMenu] = useState(false)
@@ -232,292 +250,160 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
       <span className="toolbar-divider" />
 
       {/* Element tools — always active */}
-      <button className="btn-icon" title="Add Text Box" onClick={onAddText} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-        <TypeIcon size={14} /> Text
-      </button>
-      <button className="btn-icon" title="Add Text on Path — text that follows a slanted baseline" onClick={onAddTextPath} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-        <span style={{ fontSize: 13, fontStyle: 'italic', transform: 'rotate(-8deg)', display: 'inline-block', lineHeight: 1 }}>T/</span> Path
-      </button>
-      <div className="color-btn-wrapper" title="Add Image" style={{ position: 'relative' }}>
-        <button className="btn-icon" title="Add Image" onClick={onAddImage} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-          <ImageIcon size={14} /> Image
+      <div style={{ position: 'relative' }}>
+        <button className="btn-icon" title="Text tools" onClick={() => setShowTextMenu(v => !v)} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+          <TypeIcon size={14} /> Text <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.6 }}>&#9660;</span>
         </button>
+        {showTextMenu && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowTextMenu(false)} />
+            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, minWidth: 170, overflow: 'hidden', padding: '4px 0' }}>
+              <button onClick={() => { setShowTextMenu(false); onAddText() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                <TypeIcon size={14} /> Text
+              </button>
+              <button onClick={() => { setShowTextMenu(false); onAddTextPath() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                <span style={{ fontSize: 13, fontStyle: 'italic', transform: 'rotate(-8deg)', display: 'inline-block', lineHeight: 1, width: 14, textAlign: 'center' }}>T/</span> Text Path
+              </button>
+              <button onClick={() => { setShowTextMenu(false); onAddKineticText() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                <Type size={14} /> Kinetic Text
+              </button>
+              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+              <button onClick={() => { setShowTextMenu(false); onAddLatex() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                <span style={{ fontSize: 14, fontFamily: 'serif', fontWeight: 'bold', width: 14, textAlign: 'center' }}>T<sub style={{ fontSize: 9 }}>E</sub>X</span> LaTeX / TikZ
+              </button>
+              <button onClick={() => { setShowTextMenu(false); onAddMarkdown() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                <span style={{ fontSize: 13, fontWeight: 700, width: 14, textAlign: 'center' }}>M&#8595;</span> Markdown
+              </button>
+              <button onClick={() => { setShowTextMenu(false); onAddCode() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                <Code size={14} /> Code
+              </button>
+              <DocsLink page="text-typography" onClose={() => setShowTextMenu(false)} />
+            </div>
+          </>
+        )}
       </div>
-      <label className="btn-icon" title="Upload Image" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-        <Upload size={14} /> Upload
-        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { onAddImageUpload(f); e.target.value = '' } }} />
-      </label>
-      <label className="btn-icon" title="Import PDF pages as images" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: pdfLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', opacity: pdfLoading ? 0.6 : 1 }}>
-        <FileText size={14} /> {pdfLoading ? 'Loading…' : 'PDF'}
-        <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handlePdfUpload(f) }} disabled={pdfLoading} />
-      </label>
+      {/* Image tools dropdown */}
+      <div style={{ position: 'relative' }}>
+        <button className="btn-icon" onClick={() => setShowImageMenu(v => !v)} title="Image tools" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+          <ImageIcon size={14} /> Image <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.6 }}>&#9660;</span>
+        </button>
+        {showImageMenu && (<>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowImageMenu(false)} />
+          <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, minWidth: 190, overflow: 'hidden', padding: '4px 0' }}>
+            <button onClick={() => { setShowImageMenu(false); onAddImage() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <ImageIcon size={14} /> Image URL
+            </button>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <Upload size={14} /> Upload Image
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { onAddImageUpload(f); e.target.value = '' }; setShowImageMenu(false) }} />
+            </label>
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: pdfLoading ? 'wait' : 'pointer', textAlign: 'left', opacity: pdfLoading ? 0.6 : 1 }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <FileText size={14} /> {pdfLoading ? 'Loading…' : 'Import PDF'}
+              <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handlePdfUpload(f); setShowImageMenu(false) }} disabled={pdfLoading} />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: pptxLoading ? 'wait' : 'pointer', textAlign: 'left', opacity: pptxLoading ? 0.6 : 1 }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <FileText size={14} /> {pptxLoading ? 'Converting…' : 'Import PPTX'}
+              <input ref={pptxInputRef} type="file" accept=".pptx,.ppt,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint" style={{ display: 'none' }} disabled={pptxLoading}
+                onChange={async e => { const f = e.target.files?.[0]; if (!f || !onImportPptx) return; if (pptxInputRef.current) pptxInputRef.current.value = ''; setShowImageMenu(false); setPptxLoading(true); try { await onImportPptx(f) } catch (err) { alert('PPTX import failed: ' + err.message) } finally { setPptxLoading(false) } }} />
+            </label>
+            <DocsLink page="images" onClose={() => setShowImageMenu(false)} />
+          </div>
+        </>)}
+      </div>
 
-      <label
-        className="btn-icon"
-        title="Import PowerPoint — each slide becomes a new slide"
-        style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: pptxLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', opacity: pptxLoading ? 0.6 : 1 }}
-      >
-        <FileText size={14} /> {pptxLoading ? 'Converting…' : 'PPTX'}
-        <input
-          ref={pptxInputRef}
-          type="file"
-          accept=".pptx,.ppt,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
-          style={{ display: 'none' }}
-          disabled={pptxLoading}
-          onChange={async e => {
-            const f = e.target.files?.[0]
-            if (!f || !onImportPptx) return
-            if (pptxInputRef.current) pptxInputRef.current.value = ''
-            setPptxLoading(true)
-            try {
-              await onImportPptx(f)
-            } catch (err) {
-              alert('PPTX import failed: ' + err.message)
-            } finally {
-              setPptxLoading(false)
-            }
-          }}
-        />
-      </label>
+      {/* Embed tools dropdown */}
+      <div style={{ position: 'relative' }}>
+        <button className="btn-icon" onClick={() => setShowEmbedMenu(v => !v)} title="Embed tools" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+          <FileCode size={14} /> Embed <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.6 }}>&#9660;</span>
+        </button>
+        {showEmbedMenu && (<>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowEmbedMenu(false)} />
+          <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, minWidth: 160, overflow: 'hidden', padding: '4px 0' }}>
+            <button onClick={() => { setShowEmbedMenu(false); onAddHtml() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <FileCode size={14} /> HTML
+            </button>
+            <button onClick={() => { setShowEmbedMenu(false); onAddD3?.() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <FileCode size={14} /> D3.js
+            </button>
+            <button onClick={() => { setShowEmbedMenu(false); onAddP5() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <Code size={14} /> p5.js
+            </button>
+            <button onClick={() => { setShowEmbedMenu(false); onAddManim() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <span style={{ fontSize: 14, width: 14, textAlign: 'center' }}>🎬</span> Manim
+            </button>
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+            <button onClick={() => { setShowEmbedMenu(false); onAddAnime?.() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <span style={{ fontSize: 14, width: 14, textAlign: 'center' }}>&#x2728;</span> Anime.js
+            </button>
+            <button onClick={() => { setShowEmbedMenu(false); onAddThree?.() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <span style={{ fontSize: 14, width: 14, textAlign: 'center' }}>&#x25B2;</span> Three.js
+            </button>
+            <DocsLink page="html-embeds" onClose={() => setShowEmbedMenu(false)} />
+          </div>
+        </>)}
+      </div>
 
-      <button className="btn-icon" title="Insert HTML / D3 embed" onClick={onAddHtml} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-        <FileCode size={14} /> Embed
-      </button>
-      <button className="btn-icon" title="Insert kinetic text animation" onClick={onAddKineticText} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-        <Type size={14} /> Kinetic
-      </button>
-      <button className="btn-icon" title="Insert p5.js sketch" onClick={onAddP5} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-        <Code size={14} /> p5
-      </button>
-      <button className="btn-icon" title="Insert Code Block" onClick={onAddCode} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-        <Code size={14} /> Code
-      </button>
+      {/* Media dropdown */}
+      <div style={{ position: 'relative' }}>
+        <button className="btn-icon" onClick={() => setShowMediaMenu(v => !v)} title="Media" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+          <Video size={14} /> Media <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.6 }}>&#9660;</span>
+        </button>
+        {showMediaMenu && (<>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowMediaMenu(false)} />
+          <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, minWidth: 160, overflow: 'hidden', padding: '4px 0' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <Video size={14} /> Upload Video
+              <input type="file" accept="video/mp4,video/webm,video/ogg,video/*" style={{ display: 'none' }} onChange={async e => { const f = e.target.files?.[0]; if (!f) return; e.target.value = ''; setShowMediaMenu(false); if (onAddVideoUpload) onAddVideoUpload(f); else { const fd = new FormData(); fd.append('file', f); const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) onAddVideo?.(res.url) } }} />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <Music size={14} /> Upload Audio
+              <input type="file" accept="audio/*" style={{ display: 'none' }} onChange={async e => { const f = e.target.files?.[0]; if (!f) return; e.target.value = ''; setShowMediaMenu(false); const fd = new FormData(); fd.append('file', f); const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) onAddAudio?.(res.url) }} />
+            </label>
+            <DocsLink page="media" onClose={() => setShowMediaMenu(false)} />
+          </div>
+        </>)}
+      </div>
 
-      <button className="btn-icon" title="Insert LaTeX / TikZ block" onClick={onAddLatex} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center', fontFamily: 'serif', fontWeight: 'bold' }}>
-        <span style={{ fontSize: 14 }}>T<sub style={{ fontSize: 9 }}>E</sub>X</span>
-      </button>
-      <button className="btn-icon" title="Insert Markdown block" onClick={onAddMarkdown} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-        <span style={{ fontSize: 13, fontWeight: 700 }}>M↓</span>
-      </button>
       <button className="btn-icon" title="Insert Chart" onClick={onAddChart} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
         <span style={{ fontSize: 14 }}>&#9776;</span> Chart
       </button>
-      <button className="btn-icon" title="Insert Callout" onClick={() => onAddCallout?.()} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 700, lineHeight: 1 }}>1</span>
-      </button>
-
-      {/* Icon picker */}
-      <div style={{ position: 'relative' }}>
-        <button className={`btn-icon ${showIconPicker ? 'active' : ''}`} title="Insert Icon" onClick={() => setShowIconPicker(v => !v)} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-          <span style={{ fontSize: 14 }}>&#9733;</span> Icon
-        </button>
-        {showIconPicker && (
-          <div
-            onMouseDown={e => e.stopPropagation()}
-            style={{
-              position: 'absolute', top: '100%', left: 0, marginTop: 4,
-              background: 'var(--bg-card)', border: '1px solid var(--border)',
-              borderRadius: 8, padding: 8, zIndex: 1000, width: 240,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-            }}
-          >
-            <input
-              type="text" placeholder="Search icons..." value={iconSearch}
-              onChange={e => setIconSearch(e.target.value)}
-              style={{ width: '100%', padding: '5px 8px', background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4, fontSize: 12, marginBottom: 6, boxSizing: 'border-box' }}
-              autoFocus
-            />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 3, maxHeight: 180, overflow: 'auto' }}>
-              {['Star', 'Heart', 'Check', 'X', 'AlertTriangle', 'Info', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown',
-                'Zap', 'Target', 'Award', 'BookOpen', 'Briefcase', 'Calendar', 'Camera', 'Cloud', 'Coffee', 'Cpu',
-                'Database', 'Eye', 'Flag', 'Globe', 'Home', 'Key', 'Layers', 'Lock', 'Mail', 'Map',
-                'MessageCircle', 'Monitor', 'Moon', 'Music', 'Phone', 'Play', 'Search', 'Settings', 'Shield', 'Sun',
-                'ThumbsUp', 'ThumbsDown', 'Trash2', 'TrendingUp', 'TrendingDown', 'User', 'Users', 'Wifi', 'Wrench', 'Lightbulb',
-                'Rocket', 'Clock', 'Gift', 'Link', 'Clipboard', 'FileText', 'Folder', 'Image', 'PieChart', 'BarChart3',
-              ].filter(name => !iconSearch || name.toLowerCase().includes(iconSearch.toLowerCase()))
-                .map(name => (
-                  <button
-                    key={name}
-                    title={name}
-                    style={{ padding: 6, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontSize: 10, color: 'var(--text-primary)', textAlign: 'center' }}
-                    onClick={() => { onAddIcon?.(name); setShowIconPicker(false); setIconSearch('') }}
-                  >
-                    {name.slice(0, 3)}
-                  </button>
-                ))
-              }
-            </div>
-          </div>
-        )}
-      </div>
-
-      <label className="btn-icon" title="Upload Video (MP4)" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-        <Video size={14} /> Video
-        <input type="file" accept="video/mp4,video/webm,video/ogg,video/*" style={{ display: 'none' }} onChange={async e => {
-          const f = e.target.files?.[0]; if (!f) return; e.target.value = ''
-          if (onAddVideoUpload) onAddVideoUpload(f)
-          else { const fd = new FormData(); fd.append('file', f); const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) onAddVideo?.(res.url) }
-        }} />
-      </label>
-      <label className="btn-icon" title="Upload Audio" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-        <Music size={14} /> Audio
-        <input type="file" accept="audio/*" style={{ display: 'none' }} onChange={async e => {
-          const f = e.target.files?.[0]; if (!f) return; e.target.value = ''
-          const fd = new FormData(); fd.append('file', f)
-          const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json())
-          if (res.url) onAddAudio?.(res.url)
-        }} />
-      </label>
-      <button className="btn-icon" title="Add Table" onClick={() => {
-        const r = parseInt(window.prompt('Rows:', '3') || '3')
-        const c = parseInt(window.prompt('Columns:', '3') || '3')
-        if (r && c) onAddTable?.(r, c)
-      }} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+      <a href={`${DOCS_BASE}charts-tables`} target="_blank" rel="noopener noreferrer" title="Chart & Table docs" style={{ display: 'flex', alignItems: 'center', color: 'var(--text-muted)', opacity: 0.5, marginLeft: -4 }} onMouseEnter={e => e.currentTarget.style.opacity = '1'} onMouseLeave={e => e.currentTarget.style.opacity = '0.5'}><HelpCircle size={11} /></a>
+      <button className="btn-icon" title="Add Table" onClick={() => { const r = parseInt(window.prompt('Rows:', '3') || '3'); const c = parseInt(window.prompt('Columns:', '3') || '3'); if (r && c) onAddTable?.(r, c) }} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
         <Table2 size={14} /> Table
       </button>
-      <button className="btn-icon" title="Add Manim animation — renders Python/Manim scene to video" onClick={onAddManim} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-        🎬 Manim
-      </button>
 
-      {/* Shape picker dropdown */}
+      {/* Shape tools dropdown */}
       <div style={{ position: 'relative' }}>
-        <button
-          className="btn-icon"
-          style={{ width: 'auto', padding: '0 8px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
-          title="Add Shape"
-          onClick={() => setShowShapeMenu(v => !v)}
-        >
-          <Shapes size={14} /> Shape
+        <button className="btn-icon" onClick={() => setShowShapeMenu(v => !v)} title="Shape tools" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+          <Shapes size={14} /> Shape <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.6 }}>&#9660;</span>
         </button>
-        {showShapeMenu && (
-          <div style={{
-            position: 'absolute', top: '100%', left: 0, marginTop: 4,
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: 8, zIndex: 1000,
-            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, width: 180
-          }}
-          onMouseLeave={() => setShowShapeMenu(false)}
-          >
-            {SHAPES.map(s => (
-              <button
-                key={s.id}
-                title={s.name}
-                style={{ padding: '6px 4px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontSize: 18, color: 'var(--text-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}
-                onClick={() => { onAddShape(s.id); setShowShapeMenu(false) }}
-              >
-                <span>{s.icon}</span>
-                <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{s.name.split(' ')[0]}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Nonobjective Elements palette */}
-      <div style={{ position: 'relative', display: 'inline-flex' }}>
-        <button
-          className="btn-icon"
-          style={{ width: 'auto', padding: '0 8px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
-          title="Nonobjective elements (rules, circles, tone blocks)"
-          onClick={() => setShowNonobjectiveMenu(v => !v)}
-        >
-          <span style={{ fontSize: 16, lineHeight: 1 }}>|</span> Compose
-        </button>
-        {showNonobjectiveMenu && (
-          <div style={{
-            position: 'absolute', top: '100%', left: 0, marginTop: 4,
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: 10, zIndex: 1000, width: 240,
-          }}
-          onMouseLeave={() => setShowNonobjectiveMenu(false)}
-          >
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Rules</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginBottom: 10 }}>
-              {[
-                { id: 'rule-h-thin', label: 'H thin', icon: <div style={{width:28,height:1,background:'rgba(255,255,255,0.5)'}}/> },
-                { id: 'rule-h-medium', label: 'H med', icon: <div style={{width:28,height:3,background:'rgba(255,255,255,0.7)'}}/> },
-                { id: 'rule-h-heavy', label: 'H heavy', icon: <div style={{width:28,height:6,background:'#fff'}}/> },
-                { id: 'rule-diagonal', label: 'Diag', icon: <div style={{width:28,height:2,background:'#fff',transform:'rotate(-15deg)'}}/> },
-                { id: 'rule-v-thin', label: 'V thin', icon: <div style={{width:1,height:20,background:'rgba(255,255,255,0.5)'}}/> },
-                { id: 'rule-v-medium', label: 'V med', icon: <div style={{width:3,height:20,background:'rgba(255,255,255,0.7)'}}/> },
-                { id: 'rule-v-heavy', label: 'V heavy', icon: <div style={{width:6,height:20,background:'#fff'}}/> },
-              ].map(item => (
-                <button key={item.id} title={item.label}
-                  style={{ padding: '6px 4px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 36 }}
-                  onClick={() => { onAddNonobjective?.(item.id); setShowNonobjectiveMenu(false) }}
-                >{item.icon}<span style={{fontSize:7,color:'var(--text-muted)'}}>{item.label}</span></button>
-              ))}
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Circles</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginBottom: 10 }}>
-              {[
-                { id: 'circle-dot', label: 'Dot', icon: <div style={{width:10,height:10,borderRadius:'50%',background:'#fff'}}/> },
-                { id: 'circle-medium', label: 'Medium', icon: <div style={{width:20,height:20,borderRadius:'50%',background:'#6366f1'}}/> },
-                { id: 'circle-large', label: 'Large', icon: <div style={{width:28,height:28,borderRadius:'50%',background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.3)'}}/> },
-              ].map(item => (
-                <button key={item.id} title={item.label}
-                  style={{ padding: '6px 4px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 36 }}
-                  onClick={() => { onAddNonobjective?.(item.id); setShowNonobjectiveMenu(false) }}
-                >{item.icon}<span style={{fontSize:7,color:'var(--text-muted)'}}>{item.label}</span></button>
-              ))}
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Tone Blocks</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
-              {[
-                { id: 'tone-dark', label: 'Dark', color: '#0a0a14' },
-                { id: 'tone-medium', label: 'Mid', color: '#2d2d4e' },
-                { id: 'tone-light', label: 'Light', color: 'rgba(255,255,255,0.08)' },
-                { id: 'tone-accent', label: 'Accent', color: 'rgba(99,102,241,0.15)' },
-              ].map(item => (
-                <button key={item.id} title={item.label}
-                  style={{ padding: '6px 4px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 36 }}
-                  onClick={() => { onAddNonobjective?.(item.id); setShowNonobjectiveMenu(false) }}
-                >
-                  <div style={{width:28,height:18,background:item.color,borderRadius:2,border:'1px solid rgba(255,255,255,0.1)'}}/>
-                  <span style={{fontSize:7,color:'var(--text-muted)'}}>{item.label}</span>
+        {showShapeMenu && (<>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => { setShowShapeMenu(false); setIconSearch('') }} />
+          <div onMouseDown={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, width: 260, padding: 10 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Shapes</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginBottom: 8 }}>
+              {SHAPES.map(s => (
+                <button key={s.id} title={s.name} style={{ padding: '6px 4px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontSize: 18, color: 'var(--text-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }} onClick={() => { onAddShape(s.id); setShowShapeMenu(false) }}>
+                  <span>{s.icon}</span><span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{s.name.split(' ')[0]}</span>
                 </button>
               ))}
             </div>
+            <div style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
+            <button onClick={() => { onAddCallout?.(); setShowShapeMenu(false) }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 4px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left', borderRadius: 4 }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 700, lineHeight: 1 }}>1</span> Callout
+            </button>
+            <div style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Icons</div>
+            <input type="text" placeholder="Search icons..." value={iconSearch} onChange={e => setIconSearch(e.target.value)} style={{ width: '100%', padding: '5px 8px', background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4, fontSize: 12, marginBottom: 6, boxSizing: 'border-box' }} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 3, maxHeight: 140, overflow: 'auto' }}>
+              {['Star','Heart','Check','X','AlertTriangle','Info','ArrowRight','ArrowLeft','ArrowUp','ArrowDown','Zap','Target','Award','BookOpen','Briefcase','Calendar','Camera','Cloud','Coffee','Cpu','Database','Eye','Flag','Globe','Home','Key','Layers','Lock','Mail','Map','MessageCircle','Monitor','Moon','Music','Phone','Play','Search','Settings','Shield','Sun','ThumbsUp','ThumbsDown','Trash2','TrendingUp','TrendingDown','User','Users','Wifi','Wrench','Lightbulb','Rocket','Clock','Gift','Link','Clipboard','FileText','Folder','Image','PieChart','BarChart3'].filter(name => !iconSearch || name.toLowerCase().includes(iconSearch.toLowerCase())).map(name => (
+                <button key={name} title={name} style={{ padding: 6, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontSize: 10, color: 'var(--text-primary)', textAlign: 'center' }} onClick={() => { onAddIcon?.(name); setShowShapeMenu(false); setIconSearch('') }}>{name.slice(0, 3)}</button>
+              ))}
+            </div>
+            <DocsLink page="shapes-drawing" onClose={() => { setShowShapeMenu(false); setIconSearch('') }} />
           </div>
-        )}
-      </div>
-
-      {/* Modular Grid generator */}
-      <div style={{ position: 'relative', display: 'inline-flex' }}>
-        <button
-          className="btn-icon"
-          style={{ width: 'auto', padding: '0 8px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
-          title="Generate modular grid (standardized shape units)"
-          onClick={() => setShowModularMenu(v => !v)}
-        >
-          <span style={{ fontSize: 14, lineHeight: 1 }}>&#x25A3;</span> Modular
-        </button>
-        {showModularMenu && (
-          <div style={{
-            position: 'absolute', top: '100%', left: 0, marginTop: 4,
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: 10, zIndex: 1000, width: 200,
-          }}
-          onMouseLeave={() => setShowModularMenu(false)}
-          >
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600 }}>Generate Module Grid</div>
-            {[
-              { label: '2 x 2 Squares', shape: 'rect', cols: 2, rows: 2, gap: 16 },
-              { label: '3 x 2 Rectangles', shape: 'rect', cols: 3, rows: 2, gap: 12 },
-              { label: '4 x 3 Rectangles', shape: 'rect', cols: 4, rows: 3, gap: 8 },
-              { label: '3 x 3 Circles', shape: 'circle', cols: 3, rows: 3, gap: 12 },
-              { label: '4 x 2 Cards', shape: 'rounded-rect', cols: 4, rows: 2, gap: 10 },
-              { label: '6 x 1 Strip', shape: 'rect', cols: 6, rows: 1, gap: 8 },
-            ].map(preset => (
-              <button key={preset.label}
-                onClick={() => { onAddModularGrid?.(preset.shape, preset.cols, preset.rows, preset.gap); setShowModularMenu(false) }}
-                style={{ display: 'block', width: '100%', padding: '5px 8px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', color: 'var(--text-primary)', fontSize: 11, textAlign: 'left', marginBottom: 3 }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
-              >{preset.label}</button>
-            ))}
-          </div>
-        )}
+        </>)}
       </div>
 
       {/* Slide Background popup */}
@@ -650,122 +536,160 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
         )
       })()}
 
-      {/* Grid toggle */}
-      <button
-        className={`btn-icon ${showGrid ? 'active' : ''}`}
-        onClick={onToggleGrid}
-        title={showGrid ? 'Hide grid / disable snap' : 'Show grid + snap to grid'}
-      >
-        <Grid size={14} />
-      </button>
-      {showGrid && (
-        <input
-          type="number"
-          min="5"
-          max="200"
-          step="5"
-          value={gridSize}
-          onChange={e => onGridSizeChange(Math.max(5, Math.min(200, Number(e.target.value) || 40)))}
-          title="Grid size (px)"
-          style={{
-            width: 48, padding: '3px 6px', background: 'var(--bg-card)',
-            border: '1px solid var(--border)', color: 'var(--text-primary)',
-            borderRadius: 4, fontSize: 12, textAlign: 'center'
-          }}
-        />
-      )}
-
-      {/* Smart guides toggle */}
-      <button
-        className={`btn-icon ${smartGuidesEnabled ? 'active' : ''}`}
-        onClick={onToggleSmartGuides}
-        title={smartGuidesEnabled ? 'Disable smart guides' : 'Enable smart guides'}
-      >
-        <Magnet size={14} />
-      </button>
-
-      {/* Ruler / guide toggle */}
-      <button
-        className={`btn-icon ${showRulers ? 'active' : ''}`}
-        onClick={onToggleRulers}
-        title={showRulers ? 'Hide rulers & guides' : 'Show rulers — drag from ruler to add custom guides'}
-      >
-        <Ruler size={14} />
-      </button>
-
-      {/* Custom guide manager */}
-      {showRulers && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'var(--bg-hover)', borderRadius: 5, padding: '2px 5px', border: '1px solid var(--border)' }}>
-          <button
-            onClick={() => onAddGuide?.({ axis: 'y', position: 270 })}
-            title="Add horizontal guide"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#22d3ee', fontWeight: 700, fontSize: 11, padding: '1px 4px', borderRadius: 3, lineHeight: 1 }}
-          >+H</button>
-          <button
-            onClick={() => onAddGuide?.({ axis: 'x', position: 480 })}
-            title="Add vertical guide"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#22d3ee', fontWeight: 700, fontSize: 11, padding: '1px 4px', borderRadius: 3, lineHeight: 1 }}
-          >+V</button>
-          {guides.length > 0 && (
-            <>
-              <span style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 2px' }} />
-              {guides.map((g, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <span style={{ fontSize: 9, color: '#22d3ee', fontWeight: 700, minWidth: 10 }}>{g.axis === 'x' ? 'V' : 'H'}</span>
-                  <input
-                    type="number" min="0" max={g.axis === 'x' ? 960 : 540}
-                    value={g.position}
-                    onChange={e => onUpdateGuide?.(i, Math.max(0, Math.min(g.axis === 'x' ? 960 : 540, Number(e.target.value) || 0)))}
-                    style={{ width: 40, padding: '1px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 3, fontSize: 11, textAlign: 'center' }}
-                  />
-                  <button
-                    onClick={() => onRemoveGuide?.(i)}
-                    title="Remove guide"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, padding: '0 2px', lineHeight: 1 }}
-                  >×</button>
+      {/* Layout tools dropdown */}
+      <div style={{ position: 'relative' }}>
+        <button className="btn-icon" onClick={() => setShowLayoutMenu(v => !v)} title="Layout & grid tools" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+          <Grid size={14} /> Layout <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.6 }}>&#9660;</span>
+        </button>
+        {showLayoutMenu && (<>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowLayoutMenu(false)} />
+          <div onMouseDown={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, width: 300, padding: 12, maxHeight: '70vh', overflowY: 'auto' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Grid &amp; Guides</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={showGrid} onChange={onToggleGrid} style={{ accentColor: 'var(--accent)' }} />
+                Snap grid
+                {showGrid && <input type="number" min="5" max="200" step="5" value={gridSize} onChange={e => onGridSizeChange(Math.max(5, Math.min(200, Number(e.target.value) || 40)))} style={{ width: 44, padding: '2px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4, fontSize: 11, textAlign: 'center', marginLeft: 'auto' }} title="Grid size (px)" />}
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={smartGuidesEnabled} onChange={onToggleSmartGuides} style={{ accentColor: 'var(--accent)' }} />
+                Smart guides
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={showRulers} onChange={onToggleRulers} style={{ accentColor: 'var(--accent)' }} />
+                Rulers &amp; guides
+              </label>
+              {showRulers && (
+                <div style={{ marginLeft: 26, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                  <button onClick={() => onAddGuide?.({ axis: 'y', position: 270 })} title="Add horizontal guide" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', cursor: 'pointer', color: '#22d3ee', fontWeight: 700, fontSize: 11, padding: '2px 6px', borderRadius: 4 }}>+H</button>
+                  <button onClick={() => onAddGuide?.({ axis: 'x', position: 480 })} title="Add vertical guide" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', cursor: 'pointer', color: '#22d3ee', fontWeight: 700, fontSize: 11, padding: '2px 6px', borderRadius: 4 }}>+V</button>
+                  {guides.map((g, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <span style={{ fontSize: 9, color: '#22d3ee', fontWeight: 700 }}>{g.axis === 'x' ? 'V' : 'H'}</span>
+                      <input type="number" min="0" max={g.axis === 'x' ? 960 : 540} value={g.position} onChange={e => onUpdateGuide?.(i, Math.max(0, Math.min(g.axis === 'x' ? 960 : 540, Number(e.target.value) || 0)))} style={{ width: 38, padding: '1px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 3, fontSize: 11, textAlign: 'center' }} />
+                      <button onClick={() => onRemoveGuide?.(i)} title="Remove" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </>
-          )}
-        </div>
-      )}
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer', flex: 1 }}>
+                  <input type="checkbox" checked={!!slide?.layoutGrid?.enabled} onChange={() => { const lg = slide?.layoutGrid || {}; onUpdateSlide({ layoutGrid: { columns: 3, rows: 0, gutter: 20, marginX: 40, marginY: 40, snap: true, ...lg, enabled: !lg.enabled } }) }} style={{ accentColor: 'var(--accent)' }} />
+                  Layout grid
+                </label>
+                {slide?.layoutGrid?.enabled && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>C</span>
+                    <input type="number" min="1" max="12" value={slide.layoutGrid?.columns ?? 3} onChange={e => onUpdateSlide({ layoutGrid: { ...slide.layoutGrid, columns: Math.max(1, Math.min(12, Number(e.target.value) || 3)) } })} style={{ width: 30, padding: '1px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 3, fontSize: 11, textAlign: 'center' }} title="Columns" />
+                    <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>G</span>
+                    <input type="number" min="0" max="100" value={slide.layoutGrid?.gutter ?? 20} onChange={e => onUpdateSlide({ layoutGrid: { ...slide.layoutGrid, gutter: Math.max(0, Math.min(100, Number(e.target.value) || 0)) } })} style={{ width: 30, padding: '1px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 3, fontSize: 11, textAlign: 'center' }} title="Gutter" />
+                  </div>
+                )}
+              </div>
+              <button onClick={() => { const existing = slide?.axisLines || []; const id = crypto.randomUUID(); const axis = existing.length % 2 === 0 ? 'x' : 'y'; const position = axis === 'x' ? Math.round(960 / 3) : 270; onUpdateSlide({ axisLines: [...existing, { id, axis, position, visible: true, snap: true }] }) }} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.color = 'var(--accent)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-primary)'}>
+                <Minus size={14} style={{ transform: 'rotate(90deg)' }} /> Add axis line
+              </button>
+            </div>
 
-      {/* Layout Grid toggle */}
-      <button
-        className={`btn-icon ${slide?.layoutGrid?.enabled ? 'active' : ''}`}
-        onClick={() => {
-          const lg = slide?.layoutGrid || {}
-          onUpdateSlide({ layoutGrid: { columns: 3, rows: 0, gutter: 20, marginX: 40, marginY: 40, snap: true, ...lg, enabled: !lg.enabled } })
-        }}
-        title={slide?.layoutGrid?.enabled ? 'Hide layout grid' : 'Show layout grid (columns/rows)'}
-      >
-        <Columns3 size={14} />
-      </button>
-      {slide?.layoutGrid?.enabled && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'var(--bg-hover)', borderRadius: 5, padding: '2px 5px', border: '1px solid var(--border)' }}>
-          <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>C</span>
-          <input type="number" min="1" max="12" value={slide.layoutGrid?.columns ?? 3}
-            onChange={e => onUpdateSlide({ layoutGrid: { ...slide.layoutGrid, columns: Math.max(1, Math.min(12, Number(e.target.value) || 3)) } })}
-            style={{ width: 32, padding: '1px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 3, fontSize: 11, textAlign: 'center' }}
-            title="Columns"
-          />
-          <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>G</span>
-          <input type="number" min="0" max="100" value={slide.layoutGrid?.gutter ?? 20}
-            onChange={e => onUpdateSlide({ layoutGrid: { ...slide.layoutGrid, gutter: Math.max(0, Math.min(100, Number(e.target.value) || 0)) } })}
-            style={{ width: 32, padding: '1px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 3, fontSize: 11, textAlign: 'center' }}
-            title="Gutter (px)"
-          />
-          <label style={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
-            <input type="checkbox" checked={slide.layoutGrid?.snap !== false}
-              onChange={e => onUpdateSlide({ layoutGrid: { ...slide.layoutGrid, snap: e.target.checked } })}
-              style={{ accentColor: 'var(--accent)', width: 12, height: 12 }}
-            />
-            <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>Snap</span>
-          </label>
-        </div>
-      )}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Composition</div>
+              <div style={{ marginBottom: 6 }}>
+                <button onClick={() => setShowNonobjectiveMenu(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', fontSize: 13, color: 'var(--text-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', textAlign: 'left' }}>
+                  <span style={{ fontSize: 16, lineHeight: 1, width: 14, textAlign: 'center' }}>|</span> Compose <span style={{ marginLeft: 'auto', fontSize: 10, opacity: 0.5 }}>{showNonobjectiveMenu ? '▾' : '▸'}</span>
+                </button>
+                {showNonobjectiveMenu && (
+                  <div style={{ marginTop: 6, padding: 8, background: 'var(--bg-hover)', borderRadius: 6 }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Rules</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginBottom: 8 }}>
+                      {[
+                        { id: 'rule-h-thin', label: 'H thin', icon: <div style={{width:28,height:1,background:'rgba(255,255,255,0.5)'}}/> },
+                        { id: 'rule-h-medium', label: 'H med', icon: <div style={{width:28,height:3,background:'rgba(255,255,255,0.7)'}}/> },
+                        { id: 'rule-h-heavy', label: 'H heavy', icon: <div style={{width:28,height:6,background:'#fff'}}/> },
+                        { id: 'rule-diagonal', label: 'Diag', icon: <div style={{width:28,height:2,background:'#fff',transform:'rotate(-15deg)'}}/> },
+                        { id: 'rule-v-thin', label: 'V thin', icon: <div style={{width:1,height:20,background:'rgba(255,255,255,0.5)'}}/> },
+                        { id: 'rule-v-medium', label: 'V med', icon: <div style={{width:3,height:20,background:'rgba(255,255,255,0.7)'}}/> },
+                        { id: 'rule-v-heavy', label: 'V heavy', icon: <div style={{width:6,height:20,background:'#fff'}}/> },
+                      ].map(item => (
+                        <button key={item.id} title={item.label} style={{ padding: '6px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 36 }} onClick={() => { onAddNonobjective?.(item.id); setShowLayoutMenu(false) }}>{item.icon}<span style={{fontSize:7,color:'var(--text-muted)'}}>{item.label}</span></button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Circles</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginBottom: 8 }}>
+                      {[
+                        { id: 'circle-dot', label: 'Dot', icon: <div style={{width:10,height:10,borderRadius:'50%',background:'#fff'}}/> },
+                        { id: 'circle-medium', label: 'Medium', icon: <div style={{width:20,height:20,borderRadius:'50%',background:'#6366f1'}}/> },
+                        { id: 'circle-large', label: 'Large', icon: <div style={{width:28,height:28,borderRadius:'50%',background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.3)'}}/> },
+                      ].map(item => (
+                        <button key={item.id} title={item.label} style={{ padding: '6px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 36 }} onClick={() => { onAddNonobjective?.(item.id); setShowLayoutMenu(false) }}>{item.icon}<span style={{fontSize:7,color:'var(--text-muted)'}}>{item.label}</span></button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Tone Blocks</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+                      {[
+                        { id: 'tone-dark', label: 'Dark', color: '#0a0a14' },
+                        { id: 'tone-medium', label: 'Mid', color: '#2d2d4e' },
+                        { id: 'tone-light', label: 'Light', color: 'rgba(255,255,255,0.08)' },
+                        { id: 'tone-accent', label: 'Accent', color: 'rgba(99,102,241,0.15)' },
+                      ].map(item => (
+                        <button key={item.id} title={item.label} style={{ padding: '6px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 36 }} onClick={() => { onAddNonobjective?.(item.id); setShowLayoutMenu(false) }}>
+                          <div style={{width:28,height:18,background:item.color,borderRadius:2,border:'1px solid rgba(255,255,255,0.1)'}}/>
+                          <span style={{fontSize:7,color:'var(--text-muted)'}}>{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div>
+                <button onClick={() => setShowModularMenu(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', fontSize: 13, color: 'var(--text-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', textAlign: 'left' }}>
+                  <span style={{ fontSize: 14, lineHeight: 1, width: 14, textAlign: 'center' }}>&#x25A3;</span> Modular Grid <span style={{ marginLeft: 'auto', fontSize: 10, opacity: 0.5 }}>{showModularMenu ? '▾' : '▸'}</span>
+                </button>
+                {showModularMenu && (
+                  <div style={{ marginTop: 6, padding: 8, background: 'var(--bg-hover)', borderRadius: 6 }}>
+                    {[
+                      { label: '2 × 2 Squares', shape: 'rect', cols: 2, rows: 2, gap: 16 },
+                      { label: '3 × 2 Rectangles', shape: 'rect', cols: 3, rows: 2, gap: 12 },
+                      { label: '4 × 3 Rectangles', shape: 'rect', cols: 4, rows: 3, gap: 8 },
+                      { label: '3 × 3 Circles', shape: 'circle', cols: 3, rows: 3, gap: 12 },
+                      { label: '4 × 2 Cards', shape: 'rounded-rect', cols: 4, rows: 2, gap: 10 },
+                      { label: '6 × 1 Strip', shape: 'rect', cols: 6, rows: 1, gap: 8 },
+                    ].map(preset => (
+                      <button key={preset.label} onClick={() => { onAddModularGrid?.(preset.shape, preset.cols, preset.rows, preset.gap); setShowLayoutMenu(false) }} style={{ display: 'block', width: '100%', padding: '5px 8px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', color: 'var(--text-primary)', fontSize: 11, textAlign: 'left', marginBottom: 3 }} onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'} onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>{preset.label}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button onClick={() => { setShowLayoutMenu(false); onAddMathGrid?.() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', fontSize: 13, color: 'var(--text-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', textAlign: 'left', marginTop: 4 }} onMouseEnter={e => e.currentTarget.style.color = 'var(--accent)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-primary)'}>
+                <span style={{ fontSize: 14, lineHeight: 1, width: 14, textAlign: 'center' }}>&#x222E;</span> Math Grid
+              </button>
+            </div>
 
-      {/* Add Axis Line */}
+            {selectedCount >= 2 && (
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Align ({selectedCount} selected)</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 8 }}>
+                  {[['left','←L','Align left'],['center-h','↔','Center H'],['right','R→','Align right'],['top','↑T','Align top'],['center-v','↕','Center V'],['bottom','B↓','Align bottom'],['distribute-h','⇔','Distribute H'],['distribute-v','⇕','Distribute V']].map(([type, label, title]) => (
+                    <button key={type} className="btn-icon" title={title} style={{ fontSize: 11, padding: '3px 6px', width: 'auto', fontFamily: 'monospace' }} onClick={() => onAlignElements(type)}>{label}</button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button className="btn-icon" title="Group" onClick={onGroupElements} style={{ flex: 1, fontSize: 11, justifyContent: 'center', gap: 4 }}><Group size={13} /> Group</button>
+                  <button className="btn-icon" title="Ungroup" onClick={onUngroupElements} style={{ flex: 1, fontSize: 11, justifyContent: 'center', gap: 4 }}><Ungroup size={13} /> Ungroup</button>
+                </div>
+              </div>
+            )}
+            <div style={{ height: 1, background: 'var(--border)', margin: '8px 0 4px' }} />
+            <a href={`${DOCS_BASE}animations`} target="_blank" rel="noopener noreferrer" onClick={() => setShowLayoutMenu(false)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '4px 0', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', textDecoration: 'none', background: 'none', border: 'none' }} onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
+              <HelpCircle size={12} /> How to use
+            </a>
+          </div>
+        </>)}
+      </div>
+
+      {/* Chart docs */}
+      {/* Table docs - handled inline */}
+
+      {/* Add Axis Line - legacy, now in Layout dropdown */}
       <button
         className="btn-icon"
         onClick={() => {

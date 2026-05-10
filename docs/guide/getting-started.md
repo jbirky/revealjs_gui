@@ -1,10 +1,10 @@
 # Getting Started
 
-## What is Slides Editor?
+## What is Parallax?
 
-Slides Editor is a self-hostable, browser-based WYSIWYG presentation editor built on top of [reveal.js](https://revealjs.com/). It gives you the visual polish of modern slide tools without requiring a cloud account — run it on your laptop, a home server, or a Docker container.
+Parallax is a self-hostable, browser-based WYSIWYG presentation editor built on top of [reveal.js](https://revealjs.com/). It gives you the visual polish of modern slide tools without requiring a cloud account — run it on your laptop, a home server, or a Docker container.
 
-Unlike editing raw Markdown or HTML reveal.js files, Slides Editor lets you:
+Unlike editing raw Markdown or HTML reveal.js files, Parallax lets you:
 
 - **Click and type** directly on slide elements with rich formatting
 - **Drag, resize, and rotate** text boxes, images, shapes, and code blocks visually
@@ -24,7 +24,7 @@ Unlike editing raw Markdown or HTML reveal.js files, Slides Editor lets you:
 
 ## Choose your installation method
 
-Slides Editor can be run in three ways:
+Parallax can be run in three ways:
 
 | Method | Best for |
 |--------|----------|

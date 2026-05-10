@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Jessica Birky
+
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -13,7 +16,7 @@ import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
-import { ChevronLeft, Play, Download, MessageSquare, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Play, Download, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup } from 'lucide-react'
 import { api } from '../utils/api'
 import { generateLatexIframeHtml } from '../utils/latexRenderer'
 import { downloadHTML, downloadSlideHTML, presentInWindow, previewSlideInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
@@ -28,6 +31,9 @@ import FindReplaceBar from '../components/FindReplaceBar'
 import TransitionPreview from '../components/TransitionPreview'
 import AnimationTimeline from '../components/AnimationTimeline'
 import KineticTextModal from '../components/KineticTextModal'
+import MathGridModal from '../components/MathGridModal'
+import AnimeModal from '../components/AnimeModal'
+import ThreeModal from '../components/ThreeModal'
 import { MathNode } from '../extensions/MathExtension'
 import { FontSize } from '../extensions/FontSize'
 import { FontFamily } from '../extensions/FontFamily'
@@ -237,7 +243,12 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [smartGuidesEnabled, setSmartGuidesEnabled] = useState(true)
   const [showMasterPanel, setShowMasterPanel] = useState(false)
   const [showSyncModal, setShowSyncModal] = useState(false)
+  const [showSyncDropdown, setShowSyncDropdown] = useState(false)
+  const [showDefaultSettings, setShowDefaultSettings] = useState(false)
   const [showKineticModal, setShowKineticModal] = useState(false)
+  const [showMathGridModal, setShowMathGridModal] = useState(false)
+  const [showAnimeModal, setShowAnimeModal] = useState(false)
+  const [showThreeModal, setShowThreeModal] = useState(false)
   const [syncStatus, setSyncStatus] = useState(null) // { installed, remotes, hasConfig }
   const [syncConfig, setSyncConfig] = useState({ username: '', password: '', remoteName: 'protondrive' })
   const [syncResult, setSyncResult] = useState(null) // { type, message }
@@ -469,6 +480,9 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const updateCurrentSlide = useCallback((updates) => {
     setPresentation(prev => {
       if (!prev) return prev
+      if (updates.__replaceAllSlides) {
+        return { ...prev, slides: updates.__replaceAllSlides }
+      }
       return {
         ...prev,
         slides: prev.slides.map((s, i) =>
@@ -589,7 +603,13 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
     setSelectedElementIds([newEl.id])
   }, [])
 
-  const DEFAULT_HTML = `<script src="https://cdn.jsdelivr.net/npm/d3@7"><\/script>
+  const DEFAULT_HTML = `<style>* { box-sizing: border-box; margin: 0; } body { background: transparent; overflow: hidden; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: white; font-family: sans-serif; }</style>
+<div style="text-align:center;padding:20px;">
+  <h2>HTML Embed</h2>
+  <p>Edit this content</p>
+</div>`
+
+  const DEFAULT_D3 = `<script src="https://cdn.jsdelivr.net/npm/d3@7"><\/script>
 <style>* { box-sizing: border-box; margin: 0; } body { background: transparent; overflow: hidden; }</style>
 <svg id="viz" width="100%" height="100%" style="display:block;"></svg>
 <script>
@@ -620,6 +640,26 @@ svg.selectAll('circle').data(data).join('circle')
     setSelectedElementIds([newEl.id])
     setHtmlEditorState({ elementId: newEl.id, content: DEFAULT_HTML })
   }, [DEFAULT_HTML])
+
+  const addD3Element = useCallback(() => {
+    const newEl = {
+      id: crypto.randomUUID(),
+      type: 'html',
+      x: 0, y: 0, width: slideW, height: slideH, zIndex: 2,
+      content: DEFAULT_D3
+    }
+    setPresentation(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        slides: prev.slides.map((s, i) =>
+          i === currentSlideIndexRef.current ? { ...s, elements: [...(s.elements || []), newEl] } : s
+        )
+      }
+    })
+    setSelectedElementIds([newEl.id])
+    setHtmlEditorState({ elementId: newEl.id, content: DEFAULT_D3 })
+  }, [DEFAULT_D3])
 
   const insertKineticText = useCallback((html) => {
     const newEl = {
@@ -1634,203 +1674,14 @@ class MyScene(Scene):
             </span>
           )}
 
-          <span style={{ fontSize: 11, color: '#a0a0b0', userSelect: 'none' }}>Font</span>
-          <select
-            className="select-sm"
-            value={presentation.globalFont || ''}
-            onChange={e => setPresentation(prev => ({ ...prev, globalFont: e.target.value || null }))}
-            title="Global font — applies to all text elements that haven't set their own font"
-            style={{ minWidth: 110 }}
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowDefaultSettings(true)}
+            title="Default slide settings"
           >
-            <option value="">— Default —</option>
-            <optgroup label="Sans-serif">
-              <option value="Arial, sans-serif">Arial</option>
-              <option value="'Helvetica Neue', sans-serif">Helvetica</option>
-              <option value="Inter, sans-serif">Inter</option>
-              <option value="'Inter Tight', sans-serif">Inter Tight</option>
-              <option value="Roboto, sans-serif">Roboto</option>
-              <option value="'Open Sans', sans-serif">Open Sans</option>
-              <option value="'Source Sans 3', sans-serif">Source Sans 3</option>
-              <option value="'Fira Sans', sans-serif">Fira Sans</option>
-              <option value="'IBM Plex Sans', sans-serif">IBM Plex Sans</option>
-              <option value="Manrope, sans-serif">Manrope</option>
-              <option value="Geist, sans-serif">Geist</option>
-              <option value="Figtree, sans-serif">Figtree</option>
-              <option value="Ubuntu, sans-serif">Ubuntu</option>
-              <option value="Rubik, sans-serif">Rubik</option>
-              <option value="'PT Sans', sans-serif">PT Sans</option>
-              <option value="'Didact Gothic', sans-serif">Didact Gothic</option>
-              <option value="Questrial, sans-serif">Questrial</option>
-              <option value="Barlow, sans-serif">Barlow</option>
-            </optgroup>
-            <optgroup label="Rounded">
-              <option value="Comfortaa, sans-serif">Comfortaa</option>
-              <option value="Nunito, sans-serif">Nunito</option>
-              <option value="'Nunito Sans', sans-serif">Nunito Sans</option>
-              <option value="Quicksand, sans-serif">Quicksand</option>
-              <option value="Dosis, sans-serif">Dosis</option>
-              <option value="'M PLUS Rounded 1c', sans-serif">M PLUS Rounded 1c</option>
-              <option value="Jura, sans-serif">Jura</option>
-            </optgroup>
-            <optgroup label="Condensed">
-              <option value="'Barlow Condensed', sans-serif">Barlow Condensed</option>
-              <option value="'Asap Condensed', sans-serif">Asap Condensed</option>
-              <option value="'Roboto Condensed', sans-serif">Roboto Condensed</option>
-            </optgroup>
-            <optgroup label="Serif">
-              <option value="Georgia, serif">Georgia</option>
-              <option value="'Times New Roman', serif">Times New Roman</option>
-              <option value="'Playfair Display', serif">Playfair Display</option>
-              <option value="Merriweather, serif">Merriweather</option>
-            </optgroup>
-            <optgroup label="Monospace">
-              <option value="'Courier New', monospace">Courier New</option>
-              <option value="'Fira Code', monospace">Fira Code</option>
-              <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-              <option value="Inconsolata, monospace">Inconsolata</option>
-              <option value="'Roboto Mono', monospace">Roboto Mono</option>
-              <option value="'Space Mono', monospace">Space Mono</option>
-            </optgroup>
-            <optgroup label="Display">
-              <option value="Impact, sans-serif">Impact</option>
-              <option value="'Bebas Neue', sans-serif">Bebas Neue</option>
-              <option value="Codystar, sans-serif">Codystar</option>
-              <option value="'National Park', sans-serif">National Park</option>
-              <option value="'Futura PT', Futura, 'Century Gothic', sans-serif">Futura</option>
-              <option value="'Bauhaus 93', Impact, sans-serif">Bauhaus 93</option>
-            </optgroup>
-          </select>
-
-          <span style={{ fontSize: 11, color: '#a0a0b0', userSelect: 'none' }}>Background</span>
-          <select
-            className="select-sm"
-            value={presentation.theme || 'black'}
-            onChange={e => setPresentation(prev => ({ ...prev, theme: e.target.value }))}
-            title="Presentation background theme"
-          >
-            {THEMES.map(t => (
-              <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-            ))}
-          </select>
-
-          <span style={{ fontSize: 11, color: '#a0a0b0', userSelect: 'none' }}>Transition</span>
-          <select
-            className="select-sm"
-            value={presentation.transition || 'slide'}
-            onChange={e => setPresentation(prev => ({ ...prev, transition: e.target.value }))}
-            title="Slide transition"
-          >
-            {TRANSITIONS.map(t => (
-              <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-            ))}
-          </select>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#a0a0b0', cursor: 'pointer', userSelect: 'none' }}>
-            <input type="checkbox" checked={presentation.showPresentGrid || false}
-              onChange={e => setPresentation(prev => ({ ...prev, showPresentGrid: e.target.checked }))}
-              style={{ accentColor: 'var(--accent)' }} />
-            Grid
-          </label>
-
-          {/* Slide Size */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <select
-              className="select-sm"
-              value={(() => {
-                const w = presentation.slideWidth || 960
-                const h = presentation.slideHeight || 540
-                if (w === 960 && h === 540) return '960x540'
-                if (w === 1280 && h === 720) return '1280x720'
-                if (w === 960 && h === 600) return '960x600'
-                if (w === 960 && h === 720) return '960x720'
-                if (w === 540 && h === 960) return '540x960'
-                return 'custom'
-              })()}
-              onChange={e => {
-                const presets = { '960x540': [960,540], '1280x720': [1280,720], '960x600': [960,600], '960x720': [960,720], '540x960': [540,960] }
-                if (presets[e.target.value]) {
-                  const [w, h] = presets[e.target.value]
-                  setPresentation(prev => ({ ...prev, slideWidth: w, slideHeight: h }))
-                }
-              }}
-              title="Slide size"
-              style={{ minWidth: 90 }}
-            >
-              <option value="960x540">16:9</option>
-              <option value="1280x720">16:9 HD</option>
-              <option value="960x600">16:10</option>
-              <option value="960x720">4:3</option>
-              <option value="540x960">9:16</option>
-              <option value="custom">Custom</option>
-            </select>
-            {(presentation.slideWidth || presentation.slideHeight) && !(
-              [[960,540],[1280,720],[960,600],[960,720],[540,960]].some(([w,h]) => (presentation.slideWidth||960)===w && (presentation.slideHeight||540)===h)
-            ) && (
-              <>
-                <input type="number" className="prop-input" style={{ width: 52, fontSize: 11, padding: '2px 4px' }}
-                  value={presentation.slideWidth || 960}
-                  onChange={e => setPresentation(prev => ({ ...prev, slideWidth: Number(e.target.value) || 960 }))}
-                  min={200} max={3840} />
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>×</span>
-                <input type="number" className="prop-input" style={{ width: 52, fontSize: 11, padding: '2px 4px' }}
-                  value={presentation.slideHeight || 540}
-                  onChange={e => setPresentation(prev => ({ ...prev, slideHeight: Number(e.target.value) || 540 }))}
-                  min={200} max={3840} />
-              </>
-            )}
-          </div>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#a0a0b0', cursor: 'pointer', userSelect: 'none' }}>
-            <input type="checkbox" checked={presentation.showFooter || false}
-              onChange={e => setPresentation(prev => ({ ...prev, showFooter: e.target.checked }))}
-              style={{ accentColor: 'var(--accent)' }} />
-            Footer
-          </label>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#a0a0b0', cursor: 'pointer', userSelect: 'none' }}>
-            <input type="checkbox" checked={presentation.showPageNumbers || false}
-              onChange={e => setPresentation(prev => ({ ...prev, showPageNumbers: e.target.checked }))}
-              style={{ accentColor: 'var(--accent)' }} />
-            Page #
-          </label>
-
-          <select
-            className="select-sm"
-            value={presentation.footerTimeMode || 'none'}
-            onChange={e => setPresentation(prev => ({ ...prev, footerTimeMode: e.target.value }))}
-            title="Clock / Timer"
-            style={{ fontSize: 11 }}
-          >
-            <option value="none">No Clock</option>
-            <option value="clock12">Clock 12h</option>
-            <option value="clock24">Clock 24h</option>
-            <option value="timer-up">Timer ↑</option>
-            <option value="timer-down">Timer ↓</option>
-          </select>
-
-          {presentation.footerTimeMode === 'timer-down' && (
-            <input
-              type="number"
-              className="prop-input"
-              value={presentation.timerDuration ?? 20}
-              onChange={e => setPresentation(prev => ({ ...prev, timerDuration: Math.max(1, Number(e.target.value) || 1) }))}
-              title="Countdown duration (minutes)"
-              min={1}
-              style={{ width: 42, fontSize: 11, padding: '2px 4px' }}
-            />
-          )}
-
-          {presentation.showPageNumbers && (
-            <select
-              className="select-sm"
-              value={presentation.pageNumberFormat || 'c/t'}
-              onChange={e => setPresentation(prev => ({ ...prev, pageNumberFormat: e.target.value }))}
-              title="Page number format"
-            >
-              <option value="c">1</option>
-              <option value="c/t">1 / 10</option>
-            </select>
-          )}
+            <Settings size={14} />
+            Settings
+          </button>
 
 
           <button
@@ -1912,36 +1763,47 @@ class MyScene(Scene):
             <History size={14} />
           </button>
 
-          <button
-            className="btn btn-secondary"
-            onClick={() => presentInWindow(presentation)}
-            title="Present then press S for speaker notes view"
-          >
-            <MessageSquare size={14} />
-            Speaker
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowGithubModal(true)}
-            title="Save to GitHub"
-          >
-            <Github size={14} />
-            GitHub
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={async () => {
-              try { const s = await api.getRcloneStatus(); setSyncStatus(s) } catch { setSyncStatus({ installed: false }) }
-              setSyncResult(null)
-              setShowSyncModal(true)
-            }}
-            title="Sync to Proton Drive"
-          >
-            <CloudUpload size={14} />
-            Sync
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowSyncDropdown(v => !v)}
+              title="Sync options"
+            >
+              <CloudUpload size={14} />
+              Sync
+              <ChevronDown size={12} style={{ marginLeft: 2 }} />
+            </button>
+            {showSyncDropdown && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowSyncDropdown(false)} />
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, minWidth: 150, overflow: 'hidden' }}>
+                  <button
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    onClick={() => { setShowSyncDropdown(false); setShowGithubModal(true) }}
+                  >
+                    <Github size={14} />
+                    GitHub
+                  </button>
+                  <button
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    onClick={async () => {
+                      setShowSyncDropdown(false)
+                      try { const s = await api.getRcloneStatus(); setSyncStatus(s) } catch { setSyncStatus({ installed: false }) }
+                      setSyncResult(null)
+                      setShowSyncModal(true)
+                    }}
+                  >
+                    <CloudUpload size={14} />
+                    Proton Drive
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
 
           <button
             className="btn btn-primary"
@@ -1953,6 +1815,307 @@ class MyScene(Scene):
           </button>
         </div>
       </div>
+
+      {/* Default Settings Modal */}
+      {showDefaultSettings && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowDefaultSettings(false) }}>
+          <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 520, maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>Default Settings</h2>
+              <button onClick={() => setShowDefaultSettings(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '2px 6px' }}>&times;</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 20px' }}>
+              {/* Font */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500 }}>Font</div>
+                <select className="prop-input" value={presentation.globalFont || ''}
+                  onChange={e => setPresentation(prev => ({ ...prev, globalFont: e.target.value || null }))}
+                  style={{ width: '100%', padding: '6px 8px' }}>
+                  <option value="">— Default —</option>
+                  <optgroup label="Sans-serif">
+                    <option value="Arial, sans-serif">Arial</option>
+                    <option value="'Helvetica Neue', sans-serif">Helvetica</option>
+                    <option value="Inter, sans-serif">Inter</option>
+                    <option value="'Inter Tight', sans-serif">Inter Tight</option>
+                    <option value="Roboto, sans-serif">Roboto</option>
+                    <option value="'Open Sans', sans-serif">Open Sans</option>
+                    <option value="'Source Sans 3', sans-serif">Source Sans 3</option>
+                    <option value="'Fira Sans', sans-serif">Fira Sans</option>
+                    <option value="'IBM Plex Sans', sans-serif">IBM Plex Sans</option>
+                    <option value="Manrope, sans-serif">Manrope</option>
+                    <option value="Geist, sans-serif">Geist</option>
+                    <option value="Figtree, sans-serif">Figtree</option>
+                    <option value="Ubuntu, sans-serif">Ubuntu</option>
+                    <option value="Rubik, sans-serif">Rubik</option>
+                    <option value="'PT Sans', sans-serif">PT Sans</option>
+                    <option value="'Didact Gothic', sans-serif">Didact Gothic</option>
+                    <option value="Questrial, sans-serif">Questrial</option>
+                    <option value="Barlow, sans-serif">Barlow</option>
+                  </optgroup>
+                  <optgroup label="Rounded">
+                    <option value="Comfortaa, sans-serif">Comfortaa</option>
+                    <option value="Nunito, sans-serif">Nunito</option>
+                    <option value="'Nunito Sans', sans-serif">Nunito Sans</option>
+                    <option value="Quicksand, sans-serif">Quicksand</option>
+                    <option value="Dosis, sans-serif">Dosis</option>
+                    <option value="'M PLUS Rounded 1c', sans-serif">M PLUS Rounded 1c</option>
+                    <option value="Jura, sans-serif">Jura</option>
+                  </optgroup>
+                  <optgroup label="Condensed">
+                    <option value="'Barlow Condensed', sans-serif">Barlow Condensed</option>
+                    <option value="'Asap Condensed', sans-serif">Asap Condensed</option>
+                    <option value="'Roboto Condensed', sans-serif">Roboto Condensed</option>
+                  </optgroup>
+                  <optgroup label="Serif">
+                    <option value="Georgia, serif">Georgia</option>
+                    <option value="'Times New Roman', serif">Times New Roman</option>
+                    <option value="'Playfair Display', serif">Playfair Display</option>
+                    <option value="Merriweather, serif">Merriweather</option>
+                  </optgroup>
+                  <optgroup label="Monospace">
+                    <option value="'Courier New', monospace">Courier New</option>
+                    <option value="'Fira Code', monospace">Fira Code</option>
+                    <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                    <option value="Inconsolata, monospace">Inconsolata</option>
+                    <option value="'Roboto Mono', monospace">Roboto Mono</option>
+                    <option value="'Space Mono', monospace">Space Mono</option>
+                  </optgroup>
+                  <optgroup label="Display">
+                    <option value="Impact, sans-serif">Impact</option>
+                    <option value="'Bebas Neue', sans-serif">Bebas Neue</option>
+                    <option value="Codystar, sans-serif">Codystar</option>
+                    <option value="'National Park', sans-serif">National Park</option>
+                    <option value="'Futura PT', Futura, 'Century Gothic', sans-serif">Futura</option>
+                    <option value="'Bauhaus 93', Impact, sans-serif">Bauhaus 93</option>
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* Theme */}
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500 }}>Background</div>
+                <select className="prop-input" value={presentation.theme || 'black'}
+                  onChange={e => setPresentation(prev => ({ ...prev, theme: e.target.value }))}
+                  style={{ width: '100%', padding: '6px 8px' }}>
+                  {THEMES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                </select>
+              </div>
+
+              {/* Transition */}
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500 }}>Transition</div>
+                <select className="prop-input" value={presentation.transition || 'slide'}
+                  onChange={e => setPresentation(prev => ({ ...prev, transition: e.target.value }))}
+                  style={{ width: '100%', padding: '6px 8px' }}>
+                  {TRANSITIONS.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                </select>
+              </div>
+
+              {/* Resolution */}
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500 }}>Resolution</div>
+                <select className="prop-input"
+                  value={(() => {
+                    const w = presentation.slideWidth || 960, h = presentation.slideHeight || 540
+                    if (w === 960 && h === 540) return '960x540'
+                    if (w === 1280 && h === 720) return '1280x720'
+                    if (w === 960 && h === 600) return '960x600'
+                    if (w === 960 && h === 720) return '960x720'
+                    if (w === 540 && h === 960) return '540x960'
+                    return 'custom'
+                  })()}
+                  onChange={e => {
+                    const presets = { '960x540': [960,540], '1280x720': [1280,720], '960x600': [960,600], '960x720': [960,720], '540x960': [540,960] }
+                    if (presets[e.target.value]) {
+                      const [w, h] = presets[e.target.value]
+                      setPresentation(prev => ({ ...prev, slideWidth: w, slideHeight: h }))
+                    }
+                  }}
+                  style={{ width: '100%', padding: '6px 8px' }}>
+                  <option value="960x540">16:9 (960 x 540)</option>
+                  <option value="1280x720">16:9 HD (1280 x 720)</option>
+                  <option value="960x600">16:10 (960 x 600)</option>
+                  <option value="960x720">4:3 (960 x 720)</option>
+                  <option value="540x960">9:16 (540 x 960)</option>
+                  <option value="custom">Custom</option>
+                </select>
+                {!([ [960,540],[1280,720],[960,600],[960,720],[540,960] ].some(([w,h]) => (presentation.slideWidth||960)===w && (presentation.slideHeight||540)===h)) && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6 }}>
+                    <input type="number" className="prop-input" style={{ flex: 1, padding: '4px 6px' }}
+                      value={presentation.slideWidth || 960}
+                      onChange={e => setPresentation(prev => ({ ...prev, slideWidth: Number(e.target.value) || 960 }))}
+                      min={200} max={3840} />
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>&times;</span>
+                    <input type="number" className="prop-input" style={{ flex: 1, padding: '4px 6px' }}
+                      value={presentation.slideHeight || 540}
+                      onChange={e => setPresentation(prev => ({ ...prev, slideHeight: Number(e.target.value) || 540 }))}
+                      min={200} max={3840} />
+                  </div>
+                )}
+              </div>
+
+              {/* Grid */}
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500 }}>Grid</div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={presentation.showPresentGrid || false}
+                    onChange={e => setPresentation(prev => ({ ...prev, showPresentGrid: e.target.checked }))}
+                    style={{ accentColor: 'var(--accent)' }} />
+                  Show grid in present mode
+                </label>
+              </div>
+
+              {/* Footer */}
+              <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 10, fontWeight: 600 }}>Footer &amp; Page Numbers</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={presentation.showFooter || false}
+                      onChange={e => setPresentation(prev => ({ ...prev, showFooter: e.target.checked }))}
+                      style={{ accentColor: 'var(--accent)' }} />
+                    Show footer
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={presentation.showPageNumbers || false}
+                      onChange={e => setPresentation(prev => ({ ...prev, showPageNumbers: e.target.checked }))}
+                      style={{ accentColor: 'var(--accent)' }} />
+                    Show page numbers
+                  </label>
+                  {presentation.showPageNumbers && (
+                    <div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Page number format</div>
+                      <select className="prop-input" value={presentation.pageNumberFormat || 'c/t'}
+                        onChange={e => setPresentation(prev => ({ ...prev, pageNumberFormat: e.target.value }))}
+                        style={{ width: '100%', padding: '6px 8px' }}>
+                        <option value="c">1</option>
+                        <option value="c/t">1 / 10</option>
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Clock / Timer</div>
+                    <select className="prop-input" value={presentation.footerTimeMode || 'none'}
+                      onChange={e => setPresentation(prev => ({ ...prev, footerTimeMode: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 8px' }}>
+                      <option value="none">No Clock</option>
+                      <option value="clock12">Clock 12h</option>
+                      <option value="clock24">Clock 24h</option>
+                      <option value="timer-up">Timer &uarr;</option>
+                      <option value="timer-down">Timer &darr;</option>
+                    </select>
+                  </div>
+                  {presentation.footerTimeMode === 'timer-down' && (
+                    <div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Countdown (minutes)</div>
+                      <input type="number" className="prop-input"
+                        value={presentation.timerDuration ?? 20}
+                        onChange={e => setPresentation(prev => ({ ...prev, timerDuration: Math.max(1, Number(e.target.value) || 1) }))}
+                        min={1} style={{ width: '100%', padding: '6px 8px' }} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Style */}
+                {(presentation.showFooter || presentation.showPageNumbers) && (
+                  <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Footer Style</div>
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+                      {[['basic', 'Basic'], ['sequence', 'Sequence']].map(([mode, label]) => (
+                        <button key={mode}
+                          onClick={() => setPresentation(prev => ({ ...prev, footerMode: mode }))}
+                          style={{ flex: 1, padding: '5px 0', fontSize: 12, borderRadius: 4, cursor: 'pointer', border: '1px solid var(--border)', background: (presentation.footerMode || 'basic') === mode ? 'var(--accent)' : 'var(--bg-hover)', color: (presentation.footerMode || 'basic') === mode ? 'white' : 'var(--text-secondary)' }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {presentation.footerMode === 'sequence' && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Section Titles</div>
+                        {(presentation.sequenceSections || []).map((sec, i) => {
+                          const secLabel = typeof sec === 'string' ? sec : (sec?.label || '')
+                          const secColor = typeof sec === 'object' && sec?.color ? sec.color : ''
+                          const updateSec = patch => {
+                            const sections = [...(presentation.sequenceSections || [])]
+                            sections[i] = { label: secLabel, color: secColor, ...patch }
+                            setPresentation(prev => ({ ...prev, sequenceSections: sections }))
+                          }
+                          return (
+                            <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 3, alignItems: 'center' }}>
+                              <input className="prop-input" type="text" value={secLabel}
+                                onChange={e => updateSec({ label: e.target.value })}
+                                placeholder={`Section ${i + 1}`}
+                                style={{ flex: 1, fontSize: 12, padding: '4px 6px' }} />
+                              <input type="color" title="Active color override"
+                                value={secColor || (presentation.footerColor || '#a8b4c8')}
+                                onChange={e => updateSec({ color: e.target.value })}
+                                style={{ width: 26, height: 26, padding: 1, background: 'var(--bg-card)', border: secColor ? '2px solid var(--accent)' : '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', flexShrink: 0 }} />
+                              <button onClick={() => { const sections = [...(presentation.sequenceSections || [])]; sections.splice(i, 1); setPresentation(prev => ({ ...prev, sequenceSections: sections })) }}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: '0 4px', lineHeight: 1 }}>×</button>
+                            </div>
+                          )
+                        })}
+                        <button onClick={() => setPresentation(prev => ({ ...prev, sequenceSections: [...(prev.sequenceSections || []), { label: '', color: '' }] }))}
+                          style={{ width: '100%', padding: '4px 0', fontSize: 12, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', marginTop: 2 }}>
+                          + Add Section
+                        </button>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 36px', gap: 8, alignItems: 'end' }}>
+                      <div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Font</div>
+                        <select className="prop-input" value={presentation.footerFontFamily || '-apple-system,sans-serif'}
+                          onChange={e => setPresentation(prev => ({ ...prev, footerFontFamily: e.target.value }))}
+                          style={{ width: '100%', padding: '6px 8px' }}>
+                          <optgroup label="Sans-serif">
+                            <option value="-apple-system,sans-serif">System</option>
+                            <option value="Inter,sans-serif">Inter</option>
+                            <option value="Roboto,sans-serif">Roboto</option>
+                            <option value="'Open Sans',sans-serif">Open Sans</option>
+                            <option value="'Source Sans Pro',sans-serif">Source Sans Pro</option>
+                          </optgroup>
+                          <optgroup label="Serif">
+                            <option value="'Playfair Display',serif">Playfair Display</option>
+                            <option value="Merriweather,serif">Merriweather</option>
+                          </optgroup>
+                          <optgroup label="Monospace">
+                            <option value="'Fira Code',monospace">Fira Code</option>
+                            <option value="'JetBrains Mono',monospace">JetBrains Mono</option>
+                          </optgroup>
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Size</div>
+                        <input className="prop-input" type="number" min="8" max="32" step="1"
+                          value={presentation.footerFontSize || 14}
+                          onChange={e => setPresentation(prev => ({ ...prev, footerFontSize: Math.max(8, Math.min(32, Number(e.target.value) || 14)) }))}
+                          style={{ width: '100%', padding: '6px 8px' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Color</div>
+                        <input type="color" value={presentation.footerColor || '#a8b4c8'}
+                          onChange={e => setPresentation(prev => ({ ...prev, footerColor: e.target.value }))}
+                          style={{ width: 32, height: 32, padding: 2, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }} />
+                      </div>
+                    </div>
+                    {presentation.footerMode === 'sequence' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Inactive color</div>
+                        <input type="color" value={presentation.footerInactiveColor || '#404060'}
+                          onChange={e => setPresentation(prev => ({ ...prev, footerInactiveColor: e.target.value }))}
+                          style={{ width: 28, height: 28, padding: 2, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }} />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* GitHub Modal */}
       {showGithubModal && (
@@ -2318,7 +2481,11 @@ class MyScene(Scene):
             onAddNonobjective={addNonobjectiveElement}
             onAddModularGrid={addModularGrid}
             onAddHtml={addHtmlElement}
+            onAddD3={addD3Element}
             onAddKineticText={() => setShowKineticModal(true)}
+            onAddMathGrid={() => setShowMathGridModal(true)}
+            onAddAnime={() => setShowAnimeModal(true)}
+            onAddThree={() => setShowThreeModal(true)}
             onAddP5={addP5Element}
             onAddCode={addCodeElement}
             onAddLatex={addLatexElement}
@@ -2827,6 +2994,55 @@ class MyScene(Scene):
         <KineticTextModal
           onInsert={insertKineticText}
           onClose={() => setShowKineticModal(false)}
+          slideW={slideW}
+          slideH={slideH}
+        />
+      )}
+
+      {showMathGridModal && (
+        <MathGridModal
+          onInsert={(html) => {
+            const newEl = { id: crypto.randomUUID(), type: 'html', x: 40, y: 40, width: slideW - 80, height: slideH - 80, zIndex: 2, content: html }
+            setPresentation(prev => {
+              if (!prev) return prev
+              return { ...prev, slides: prev.slides.map((s, i) => i === currentSlideIndex ? { ...s, elements: [...(s.elements || []), newEl] } : s) }
+            })
+            setSelectedElementIds([newEl.id])
+            setShowMathGridModal(false)
+          }}
+          onClose={() => setShowMathGridModal(false)}
+        />
+      )}
+
+      {showAnimeModal && (
+        <AnimeModal
+          onInsert={(html) => {
+            const newEl = { id: crypto.randomUUID(), type: 'html', x: 0, y: 0, width: slideW, height: slideH, zIndex: 2, content: html }
+            setPresentation(prev => {
+              if (!prev) return prev
+              return { ...prev, slides: prev.slides.map((s, i) => i === currentSlideIndex ? { ...s, elements: [...(s.elements || []), newEl] } : s) }
+            })
+            setSelectedElementIds([newEl.id])
+            setShowAnimeModal(false)
+          }}
+          onClose={() => setShowAnimeModal(false)}
+          slideW={slideW}
+          slideH={slideH}
+        />
+      )}
+
+      {showThreeModal && (
+        <ThreeModal
+          onInsert={(html) => {
+            const newEl = { id: crypto.randomUUID(), type: 'html', x: 0, y: 0, width: slideW, height: slideH, zIndex: 2, content: html }
+            setPresentation(prev => {
+              if (!prev) return prev
+              return { ...prev, slides: prev.slides.map((s, i) => i === currentSlideIndex ? { ...s, elements: [...(s.elements || []), newEl] } : s) }
+            })
+            setSelectedElementIds([newEl.id])
+            setShowThreeModal(false)
+          }}
+          onClose={() => setShowThreeModal(false)}
           slideW={slideW}
           slideH={slideH}
         />

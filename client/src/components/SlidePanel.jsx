@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Jessica Birky
+
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Plus, Copy, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Trash2 } from 'lucide-react'
 import { shapeSvgString } from '../utils/shapeUtils'
@@ -198,12 +201,20 @@ export default function SlidePanel({ slides, currentIndex, onSelect, onAdd, onAd
           onKeyDown={handleKeyDown}
           style={{ outline: 'none' }}
         >
-          {slides.map((slide, index) => (
+          {slides.map((slide, index) => {
+            const gid = slide.slideGroup
+            const prevSameGroup = gid && index > 0 && slides[index - 1].slideGroup === gid
+            const nextSameGroup = gid && index < slides.length - 1 && slides[index + 1].slideGroup === gid
+            const isGrouped = prevSameGroup || nextSameGroup
+            return (
             <div
               key={slide.id || index}
               ref={el => { itemRefs.current[index] = el }}
               className={`slide-item ${index === currentIndex ? 'active' : ''}`}
-              style={dragOverInfo?.flatIndex === index ? { outline: '2px solid var(--accent)', outlineOffset: '-2px' } : undefined}
+              style={{
+                ...(dragOverInfo?.flatIndex === index ? { outline: '2px solid var(--accent)', outlineOffset: '-2px' } : undefined),
+                ...(isGrouped ? { marginTop: prevSameGroup ? 1 : undefined, marginBottom: nextSameGroup ? 1 : undefined } : undefined),
+              }}
               draggable
               onDragStart={() => { dragSrcRef.current = { flatIndex: index } }}
               onDragOver={e => { e.preventDefault(); setDragOverInfo({ flatIndex: index }) }}
@@ -218,6 +229,9 @@ export default function SlidePanel({ slides, currentIndex, onSelect, onAdd, onAd
               onDragEnd={() => { setDragOverInfo(null); dragSrcRef.current = null }}
               onClick={() => { onSelect(index); listRef.current?.focus() }}
             >
+              {isGrouped && (
+                <div style={{ position: 'absolute', left: 0, top: prevSameGroup ? -1 : '50%', bottom: nextSameGroup ? -1 : '50%', width: 3, background: 'var(--accent)', borderRadius: prevSameGroup && nextSameGroup ? 0 : prevSameGroup ? '0 0 2px 2px' : '2px 2px 0 0', zIndex: 15 }} />
+              )}
               <span className="slide-number">{index + 1}</span>
               <SlideThumbnail slide={slide} slideW={slideW} slideH={slideH} />
               {slide.autoAnimate && (
@@ -235,7 +249,8 @@ export default function SlidePanel({ slides, currentIndex, onSelect, onAdd, onAd
                 <button className="slide-action-btn" title="Delete" onClick={e => { e.stopPropagation(); if (slides.length > 1) onDelete(index) }} style={{ color: slides.length > 1 ? 'white' : 'rgba(255,255,255,0.3)' }}><Trash2 size={10} /></button>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
 
         <div className="slide-panel-footer" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

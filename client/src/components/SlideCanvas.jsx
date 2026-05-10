@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Jessica Birky
+
 import { useRef, useEffect, useState, useCallback } from 'react'
 
 function buildHtmlEmbed(userHtml, embedW, embedH) {
@@ -1319,8 +1322,9 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
           (element.filterContrast != null && element.filterContrast !== 100) ? `contrast(${element.filterContrast}%)` : '',
           element.filterGrayscale ? `grayscale(${element.filterGrayscale}%)` : '',
         ].filter(Boolean).join(' ') || undefined
+        const hasCiteText = element.citationText || element.citationLink
         return (
-        <div style={{ position: 'relative', width: '100%', height: '100%', overflow: isCropping ? 'visible' : 'hidden' }}>
+        <div style={{ position: 'relative', width: '100%', height: '100%', overflow: (isCropping || hasCiteText) ? 'visible' : 'hidden' }}>
           <img
             src={element.src} alt={element.alt || ''}
             style={element.imageW != null ? {
@@ -1341,8 +1345,14 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
             }}
             draggable={false}
           />
-          {(element.clickToExpand || element.popupText) && (
+          {(element.clickToExpand || element.popupText || element.citationText || element.citationLink) && (
             <div style={{ position: 'absolute', bottom: 3, right: 3, zIndex: 20, display: 'flex', gap: 3, pointerEvents: 'none' }}>
+              {(element.citationText || element.citationLink) && (
+                <div style={{ background: 'rgba(34,197,94,0.85)', color: 'white', fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 3, letterSpacing: '0.04em', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 21H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h3"/><path d="M15 3h3a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-3"/><path d="M6 7v14"/><path d="M15 3v14"/></svg>
+                  CITE
+                </div>
+              )}
               {element.popupText && (
                 <div style={{ background: 'rgba(251,191,36,0.9)', color: '#000', fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 3, letterSpacing: '0.04em', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
                   <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -1355,6 +1365,11 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
                   EXPAND
                 </div>
               )}
+            </div>
+          )}
+          {hasCiteText && (
+            <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', fontSize: 10, color: 'rgba(255,255,255,0.5)', fontFamily: '-apple-system,sans-serif', lineHeight: 1.3, padding: '3px 2px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none', textAlign: element.citationAlign || 'left' }}>
+              {element.citationText || element.citationLink}
             </div>
           )}
           {isCropping && cropState && (
