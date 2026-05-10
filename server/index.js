@@ -281,6 +281,9 @@ function generateRevealHTML(presentation) {
   const showPresentGrid = presentation.showPresentGrid || false
   const presentGridSize = presentation.gridSize || 40
   const codeTheme = presentation.codeTheme || 'monokai'
+  const footerTimeMode = presentation.footerTimeMode || 'none'
+  const timerDuration = presentation.timerDuration ?? 20
+  const showTimeWidget = footerTimeMode !== 'none'
 
   const slidesHtml = (presentation.slides || []).map((slide, slideIndex) => {
     const bgAttrs = getBackgroundAttrs(slide.background)
@@ -467,30 +470,38 @@ function generateRevealHTML(presentation) {
       : ''
 
     let footerHtml = ''
-    if (footerMode === 'sequence' && sequenceSections.length > 0 && showFooter) {
-      const activeIdx = slide.activeSection
-      const seqSpans = sequenceSections.map((sec, i) => {
-        const isActive = activeIdx === i
-        const secLabel = typeof sec === 'object' ? (sec.label || 'Section ' + (i+1)) : (sec || 'Section ' + (i+1))
-        const secColor = typeof sec === 'object' && sec.color ? sec.color : null
-        const color = isActive ? (secColor || footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor
-        const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
-        return `<span style="color:${color};${weight}">${escapeHtml(secLabel)}</span>`
-      }).join('')
-      const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
-      footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;"><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
-    } else {
-      const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
-      footerHtml = (sectionLabel || pageLabel) ? `      <div class="reveal-footer" style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;pointer-events:none;box-sizing:border-box;"><span>${sectionLabel}</span><span>${pageLabel}</span></div>` : ''
+    if (slide.showSlideFooter !== false && !slide.hideFooter) {
+      const timeSpan = showTimeWidget ? '<span class="reveal-time-widget" style="flex-shrink:0;"></span>' : ''
+      if (footerMode === 'sequence' && sequenceSections.length > 0 && (showFooter || showTimeWidget)) {
+        const activeIdx = slide.activeSection
+        const seqSpans = sequenceSections.map((sec, i) => {
+          const isActive = activeIdx === i
+          const secLabel = typeof sec === 'object' ? (sec.label || 'Section ' + (i+1)) : (sec || 'Section ' + (i+1))
+          const secColor = typeof sec === 'object' && sec.color ? sec.color : null
+          const color = isActive ? (secColor || footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor
+          const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
+          return `<span style="color:${color};${weight}">${escapeHtml(secLabel)}</span>`
+        }).join('')
+        const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
+        footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;">${timeSpan}<div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
+      } else {
+        const sectionLabel = showFooter && slide.section ? escapeHtml(slide.section) : ''
+        const leftContent = [timeSpan, sectionLabel].filter(Boolean).join(' &mdash; ')
+        footerHtml = (leftContent || pageLabel) ? `      <div class="reveal-footer" style="position:absolute;bottom:8px;left:16px;right:16px;z-index:900;display:flex;justify-content:space-between;align-items:center;pointer-events:none;box-sizing:border-box;"><span>${leftContent}</span><span>${pageLabel}</span></div>` : ''
+      }
     }
-    const gridHtml = showPresentGrid ? `      <div style="position:absolute;inset:0;z-index:950;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,0.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.12) 1px,transparent 1px);background-size:${presentGridSize}px ${presentGridSize}px;"></div>` : ''
+    const slideShowGrid = slide.showPresentGrid != null ? slide.showPresentGrid : showPresentGrid
+    const gridHtml = slideShowGrid ? `      <div style="position:absolute;inset:0;z-index:950;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,0.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.12) 1px,transparent 1px);background-size:${presentGridSize}px ${presentGridSize}px;"></div>` : ''
 
+    const autoAnimateAttr = slide.autoAnimate ? ' data-auto-animate' : ''
+    const autoAnimateDurAttr = slide.autoAnimate && slide.autoAnimateDuration ? ` data-auto-animate-duration="${slide.autoAnimateDuration}"` : ''
+    const autoAnimateEasingAttr = slide.autoAnimate && slide.autoAnimateEasing ? ` data-auto-animate-easing="${slide.autoAnimateEasing}"` : ''
     const _customTrans = ['differential-rotation']
     const _isCustom = _customTrans.includes(slide.transition)
     const perSlideTransition = slide.transition ? ` data-transition="${_isCustom ? 'none' : slide.transition}"` : ''
     const customTransAttr = _isCustom ? ` data-custom-transition="${slide.transition}"` : ''
     const perSlideSpeed = slide.transitionSpeed ? ` data-transition-speed="${slide.transitionSpeed}"` : ''
-    return `    <section${bgAttrs}${perSlideTransition}${customTransAttr}${perSlideSpeed} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n${sideCitationsHtml}\n      ${notes}\n    </section>`
+    return `    <section${bgAttrs}${autoAnimateAttr}${autoAnimateDurAttr}${autoAnimateEasingAttr}${perSlideTransition}${customTransAttr}${perSlideSpeed} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n${sideCitationsHtml}\n      ${notes}\n    </section>`
   }).join('\n')
 
   return `<!doctype html>
@@ -719,6 +730,25 @@ ${slidesHtml}
       });
       document.addEventListener('keydown', function(e) { if (e.key === 'Escape') dismissAll(); });
     })();
+${showTimeWidget ? `
+    (function() {
+      var mode = '${footerTimeMode}';
+      var timerDur = ${timerDuration} * 60;
+      var timerStart = Date.now();
+      function pad(n) { return n < 10 ? '0' + n : '' + n; }
+      function fmt() {
+        if (mode === 'clock12') return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        if (mode === 'clock24') return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        var elapsed = Math.floor((Date.now() - timerStart) / 1000);
+        var secs = mode === 'timer-down' ? Math.max(0, timerDur - elapsed) : elapsed;
+        var h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+        return h > 0 ? h + ':' + pad(m) + ':' + pad(s) : pad(m) + ':' + pad(s);
+      }
+      function update() { document.querySelectorAll('.reveal-time-widget').forEach(function(el) { el.textContent = fmt(); }); }
+      update();
+      setInterval(update, 1000);
+    })();
+` : ''}
   </script>
 </body>
 </html>`
