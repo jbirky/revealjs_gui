@@ -10,3 +10,5 @@ plans/
 .env
 .env.*
 !.env.example
+docs/.vitepress/cache/
+client/dist/
