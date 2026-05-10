@@ -30,7 +30,8 @@ const TEMPLATES = [
 function generateHTML(templateId, params) {
   const { text, fontFamily, fontSize, color, duration, background } = params
   const font = fontFamily || "'Barlow', sans-serif"
-  const size = fontSize || 48
+  const scale = 2
+  const size = (fontSize || 48) * scale
   const col = color || '#ffffff'
   const dur = duration || 2
   const bg = background || 'transparent'
@@ -42,7 +43,7 @@ function generateHTML(templateId, params) {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;600;700&family=Inter:wght@400;600;700&family=Roboto:wght@400;700&family=Playfair+Display:wght@400;700&family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=Space+Mono:wght@400;700&family=Source+Sans+3:wght@400;600;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:${bg}}
+html,body{width:${scale*100}%;height:${scale*100}%;overflow:hidden;background:${bg};transform:scale(${1/scale});transform-origin:0 0}
 body{display:flex;align-items:center;justify-content:center;font-family:${font};color:${col}}
 </style>`
 
