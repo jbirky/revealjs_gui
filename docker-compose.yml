@@ -1,6 +1,7 @@
 services:
-  revealjs-editor:
-    build: .
+  parallax-stable:
+    build:
+      context: https://github.com/jbirky/revealjs_gui.git#main
     ports:
       - "127.0.0.1:3002:3002"
     volumes:
@@ -8,6 +9,40 @@ services:
       - revealjs-uploads:/app/server/uploads
     restart: unless-stopped
 
+  parallax-dev:
+    build:
+      context: https://github.com/jbirky/revealjs_gui.git#saas-migration
+      args:
+        - VITE_PARALLAX_MODE=cloud
+        - VITE_CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
+    ports:
+      - "127.0.0.1:3003:3002"
+    volumes:
+      - parallax-dev-data:/app/server/data
+      - parallax-dev-uploads:/app/server/uploads
+    env_file:
+      - .env
+    environment:
+      - PARALLAX_MODE=cloud
+      - PARALLAX_DB=postgres
+      - NODE_ENV=production
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - /home/jbirky/.cloudflared:/etc/cloudflared:ro
+    depends_on:
+      - parallax-stable
+    restart: unless-stopped
+
 volumes:
   revealjs-data:
+    external: true
+    name: revealjs_gui_revealjs-data
   revealjs-uploads:
+    external: true
+    name: revealjs_gui_revealjs-uploads
+  parallax-dev-data:
+  parallax-dev-uploads:

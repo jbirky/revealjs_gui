@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, Presentation, Copy, Sun, Moon, Layout } from 'lucide-react'
 import { api } from '../utils/api'
 
+import { UserButton } from '@clerk/clerk-react'
+const isCloud = import.meta.env.VITE_PARALLAX_MODE === 'cloud'
+
 const THEMES = ['black', 'white', 'league', 'beige', 'sky', 'night', 'serif', 'simple', 'solarized', 'moon', 'dracula']
 const TRANSITIONS = ['none', 'fade', 'slide', 'convex', 'concave', 'zoom']
 
@@ -309,6 +312,7 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
             <Plus size={16} />
             New Presentation
           </button>
+          {isCloud && <UserButton appearance={{ elements: { avatarBox: { width: 32, height: 32 } } }} />}
         </div>
       </div>
 
