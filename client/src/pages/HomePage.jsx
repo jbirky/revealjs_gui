@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Jessica Birky
+
 import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, Presentation, Copy, Sun, Moon, Layout } from 'lucide-react'
 import { api } from '../utils/api'
@@ -295,7 +298,7 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
   return (
     <div className="home-page">
       <div className="home-header">
-        <h1><span>S</span>lides Editor</h1>
+        <h1><span>P</span>arallax</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             className="btn btn-secondary"

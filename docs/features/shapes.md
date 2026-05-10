@@ -1,6 +1,6 @@
 # Shapes & Elements
 
-Slides Editor includes a set of built-in vector shapes that you can place, style, and animate on any slide.
+Parallax includes a set of built-in vector shapes that you can place, style, and animate on any slide.
 
 ## Inserting a shape
 

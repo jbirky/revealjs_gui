@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { X, Play, RotateCcw } from 'lucide-react'
 
-const TRANSITIONS = ['none', 'fade', 'slide', 'convex', 'concave', 'zoom']
+const TRANSITIONS = ['none', 'fade', 'slide', 'convex', 'concave', 'zoom', 'differential-rotation']
 
 export default function TransitionPreview({ presentation, fromIndex, onClose, slideW: slideWProp, slideH: slideHProp }) {
   const slideW = slideWProp || presentation.slideWidth || 960
@@ -56,11 +56,33 @@ export default function TransitionPreview({ presentation, fromIndex, onClose, sl
 </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"><\/script>
 <script>
+var _ct=['differential-rotation'],_gt='${transition}',_gc=_ct.indexOf(_gt)!==-1;
 Reveal.initialize({
   hash:false,width:${slideW},height:${slideH},margin:0,minScale:0,maxScale:10,center:false,
-  transition:'${transition}',controls:false,progress:false,
+  transition:_gc?'none':'${transition}',controls:false,progress:false,
   keyboard:true,overview:false
+});
+Reveal.on('slidechanged',function(){
+  if(_gt==='differential-rotation'){
+    var N=16,vw=window.innerWidth,vh=window.innerHeight,bh=vh/N;
+    var C=['#CC0000','#003399','#FFCC00'];
+    var o=document.createElement('div');
+    o.style.cssText='position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9998;pointer-events:none;overflow:hidden;';
+    var p=N;
+    for(var i=0;i<N;i++){
+      var b=document.createElement('div');
+      b.style.cssText='position:absolute;left:0;width:100%;background:#000;box-sizing:border-box;';
+      b.style.top=(i*bh)+'px';b.style.height=(bh+0.5)+'px';
+      if(i<N-1)b.style.borderBottom='1.5px solid '+C[i%3];
+      o.appendChild(b);
+      var lat=Math.PI*((i+0.5)/N-0.5),c2=Math.cos(lat);c2*=c2;
+      gsap.to(b,{x:vw+20,duration:0.4+1.0*(1-c2),ease:'none',
+        onComplete:function(){p--;if(p<=0)o.remove();}});
+    }
+    document.body.appendChild(o);
+  }
 });
 setTimeout(()=>Reveal.next(),800);
 <\/script>

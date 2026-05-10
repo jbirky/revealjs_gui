@@ -1,10 +1,10 @@
 # Feature Overview
 
-A high-level tour of everything Slides Editor can do.
+A high-level tour of everything Parallax can do.
 
 ## Editing
 
-Slides Editor is built around a drag-and-drop canvas. Every element on a slide — text boxes, images, shapes, code blocks, LaTeX blocks, charts — can be:
+Parallax is built around a drag-and-drop canvas. Every element on a slide — text boxes, images, shapes, code blocks, LaTeX blocks, charts — can be:
 
 - **Clicked to select** and dragged to reposition
 - **Resized** by dragging corner or edge handles (hold `Shift` to lock aspect ratio)
@@ -80,7 +80,7 @@ Sync your presentations folder to a remote storage provider using [rclone](https
 
 ## Version History
 
-Slides Editor maintains a local version history for each presentation:
+Parallax maintains a local version history for each presentation:
 
 - Automatic snapshots on save
 - Browse and restore any previous version

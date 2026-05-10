@@ -1,6 +1,6 @@
 # Charts
 
-Slides Editor includes a built-in chart editor powered by [Chart.js](https://www.chartjs.org/), letting you create data visualizations directly on your slides without any external tools.
+Parallax includes a built-in chart editor powered by [Chart.js](https://www.chartjs.org/), letting you create data visualizations directly on your slides without any external tools.
 
 ## Inserting a chart
 
@@ -56,4 +56,4 @@ Q3      63         52
 Q4      71         60
 ```
 
-Paste this directly into the data grid, and Slides Editor will parse the labels and series automatically.
+Paste this directly into the data grid, and Parallax will parse the labels and series automatically.

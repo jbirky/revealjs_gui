@@ -1,6 +1,6 @@
 # Export & Sharing
 
-Slides Editor supports multiple export formats so you can share your presentation in any context — live on the web, offline at a conference, or embedded in a document.
+Parallax supports multiple export formats so you can share your presentation in any context — live on the web, offline at a conference, or embedded in a document.
 
 ## HTML export (standalone)
 
@@ -57,7 +57,7 @@ Generate a **shareable URL** that others can open to view (or edit) your present
 - Copy and share the URL.
 
 ::: tip
-Shareable links require your Slides Editor instance to be accessible from the internet (or your local network). If running locally behind a firewall, share the exported HTML file instead.
+Shareable links require your Parallax instance to be accessible from the internet (or your local network). If running locally behind a firewall, share the exported HTML file instead.
 :::
 
 ## GitHub push

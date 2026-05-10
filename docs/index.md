@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: "Slides Editor"
+  name: "Parallax"
   text: "Build beautiful presentations — self-hosted"
   tagline: "WYSIWYG slides powered by reveal.js. Run it yourself — no account, no cloud, no tracking."
   actions:

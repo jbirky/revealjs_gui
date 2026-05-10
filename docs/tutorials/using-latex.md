@@ -1,6 +1,6 @@
 # Using LaTeX & Math
 
-This tutorial is a deep dive into writing mathematical notation and diagrams in Slides Editor — from simple inline expressions to complex TikZ figures.
+This tutorial is a deep dive into writing mathematical notation and diagrams in Parallax — from simple inline expressions to complex TikZ figures.
 
 ## 1. Inserting a LaTeX block
 

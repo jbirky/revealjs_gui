@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Jessica Birky
+
 const express = require('express')
 const cors = require('cors')
 const path = require('path')
@@ -11,48 +14,21 @@ const app = express()
 const PORT = process.env.PORT || 3002
 
 // Support custom data directory (used by Electron to write to user's app data folder)
+const createStorage = require('./storage')
+const storage = createStorage()
+
 const DATA_DIR = process.env.SLIDES_DATA_DIR || path.join(__dirname, 'data')
 const UPLOADS_BASE = process.env.SLIDES_UPLOADS_DIR || path.join(__dirname, 'uploads')
-
-const DATA_FILE = path.join(DATA_DIR, 'presentations.json')
-const GITHUB_CONFIG_FILE = path.join(DATA_DIR, 'github-config.json')
 const UPLOADS_DIR = UPLOADS_BASE
-const SHARE_FILE = path.join(DATA_DIR, 'share-tokens.json')
-const TEMPLATES_FILE = path.join(DATA_DIR, 'templates.json')
 const RCLONE_CONFIG_FILE = path.join(DATA_DIR, 'rclone.conf')
 const SYNC_DIR = path.join(DATA_DIR, 'sync-export')
-const HISTORY_DIR = path.join(DATA_DIR, 'history')
 
 // Ensure directories exist
 fs.ensureDirSync(DATA_DIR)
 fs.ensureDirSync(UPLOADS_DIR)
 
-// Initialize share tokens file if missing
-if (!fs.existsSync(SHARE_FILE)) {
-  fs.writeJsonSync(SHARE_FILE, {})
-}
-
-// Initialize templates file if missing
-if (!fs.existsSync(TEMPLATES_FILE)) {
-  fs.writeJsonSync(TEMPLATES_FILE, [])
-}
-
-// Helper: read/write templates
-async function readTemplates() { return fs.readJson(TEMPLATES_FILE) }
-async function writeTemplates(data) { return fs.writeJson(TEMPLATES_FILE, data, { spaces: 2 }) }
-
-// Initialize data file if missing
-if (!fs.existsSync(DATA_FILE)) {
-  fs.writeJsonSync(DATA_FILE, [])
-}
-
-// Initialize GitHub config if missing
-if (!fs.existsSync(GITHUB_CONFIG_FILE)) {
-  fs.writeJsonSync(GITHUB_CONFIG_FILE, { token: '', owner: '', repo: '' })
-}
-
 // Multer storage config — destination is per-presentation when req.params.id is present
-const storage = multer.diskStorage({
+const multerStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = req.params.id ? path.join(UPLOADS_DIR, req.params.id) : UPLOADS_DIR
     fs.ensureDirSync(dir)
@@ -63,7 +39,7 @@ const storage = multer.diskStorage({
     cb(null, `${uuidv4()}${ext}`)
   }
 })
-const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } }) // 500MB limit for video
+const upload = multer({ storage: multerStorage, limits: { fileSize: 500 * 1024 * 1024 } }) // 500MB limit for video
 
 app.use(cors())
 app.use(express.json({ limit: '50mb' }))
@@ -101,15 +77,7 @@ function transcodeVideoIfNeeded(filePath) {
   }
 }
 
-// Helper: read all presentations
-async function readPresentations() {
-  return fs.readJson(DATA_FILE)
-}
 
-// Helper: write all presentations
-async function writePresentations(data) {
-  return fs.writeJson(DATA_FILE, data, { spaces: 2 })
-}
 
 // Shape SVG rendering helper (mirrors client/src/utils/shapeUtils.js)
 function shapeSvgString(el) {
@@ -163,8 +131,17 @@ function generateRevealHTML(presentation) {
   const footerMode = presentation.footerMode || 'basic'
   const sequenceSections = presentation.sequenceSections || []
   const footerInactiveColor = presentation.footerInactiveColor || 'rgba(255,255,255,0.25)'
-  const totalNumberedSlides = (presentation.slides || []).filter(s => s.showPageNumber !== false).length
+  const _seenGroups = new Set()
+  const totalNumberedSlides = (presentation.slides || []).filter(s => {
+    if (s.showPageNumber === false) return false
+    if (s.slideGroup) {
+      if (_seenGroups.has(s.slideGroup)) return false
+      _seenGroups.add(s.slideGroup)
+    }
+    return true
+  }).length
   let pageCounter = 0
+  const pageGroupSeen = new Set()
   const footerColor = presentation.footerColor || 'rgba(255,255,255,0.65)'
   const showPresentGrid = presentation.showPresentGrid || false
   const presentGridSize = presentation.gridSize || 40
@@ -173,6 +150,10 @@ function generateRevealHTML(presentation) {
   const slidesHtml = (presentation.slides || []).map((slide, slideIndex) => {
     const bgAttrs = getBackgroundAttrs(slide.background)
     const notes = slide.notes ? `<aside class="notes">${slide.notes}</aside>` : ''
+
+    const sideCitations = (slide.elements || [])
+      .filter(el => el.type === 'image' && (el.citationText || el.citationLink) && el.citationMode === 'side')
+      .map(el => ({ id: el.id, text: el.citationText, link: el.citationLink }))
 
     const elementsHtml = (slide.elements || [])
       .slice()
@@ -198,13 +179,32 @@ function generateRevealHTML(presentation) {
             el.filterGrayscale ? `grayscale(${el.filterGrayscale}%)` : '',
           ].filter(Boolean).join(' ')
           const filterStyle = imgFilterParts ? `filter:${imgFilterParts};` : ''
+          const expandAttr = el.clickToExpand ? ' data-expand="true"' : ''
+          const popupAttr = el.popupText ? ` data-popup="${el.popupText.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}" data-popup-pos="${el.popupPosition || 'below'}" data-popup-fs="${el.popupFontSize || 15}"` : ''
+          const interactiveCursor = (el.clickToExpand || el.popupText) ? 'cursor:pointer;' : ''
+          const hasCite = el.citationText || el.citationLink
+          const citeCaption = hasCite && (el.citationMode || 'caption') === 'caption'
+          const citeSide = hasCite && el.citationMode === 'side'
+          const cStyle = citeCaption ? style.replace('overflow:hidden;', 'overflow:visible;') : style
+          let capHtml = ''
+          if (citeCaption) {
+            const align = el.citationAlign || 'left'
+            const ct = (el.citationText || el.citationLink || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            capHtml = el.citationLink
+              ? `<div class="image-caption" style="text-align:${align};"><a href="${el.citationLink.replace(/"/g,'&quot;')}" target="_blank" rel="noopener">${ct}</a></div>`
+              : `<div class="image-caption" style="text-align:${align};">${ct}</div>`
+          }
+          const sIdx = citeSide ? sideCitations.findIndex(c => c.id === el.id) : -1
+          const sup = sIdx >= 0 ? `<span class="cite-sup">${sIdx + 1}</span>` : ''
+          const clipOpen = citeCaption ? `<div style="width:100%;height:100%;overflow:hidden;position:relative;${borderRadiusStyle}">` : ''
+          const clipClose = citeCaption ? '</div>' : ''
           if (el.imageW != null) {
             const offX = el.imageOffsetX ?? 0
             const offY = el.imageOffsetY ?? 0
             const imgStyle = `position:absolute;left:${offX}px;top:${offY}px;width:${el.imageW}px;height:${el.imageH}px;object-fit:${el.objectFit||'contain'};${filterStyle}`
-            return `<div${fragClass}${fragIdx} style="${style}"><img src="${el.src}" alt="${el.alt||''}" style="${imgStyle}" /></div>`
+            return `<div${fragClass}${fragIdx}${expandAttr}${popupAttr} style="${cStyle}${interactiveCursor}">${clipOpen}<img src="${el.src}" alt="${el.alt||''}" style="${imgStyle}" />${clipClose}${capHtml}${sup}</div>`
           }
-          return `<div${fragClass}${fragIdx} style="${style}"><img src="${el.src}" alt="${el.alt||''}" style="display:block;width:100%;height:100%;object-fit:${el.objectFit||'contain'};${filterStyle}" /></div>`
+          return `<div${fragClass}${fragIdx}${expandAttr}${popupAttr} style="${cStyle}${interactiveCursor}">${clipOpen}<img src="${el.src}" alt="${el.alt||''}" style="display:block;width:100%;height:100%;object-fit:${el.objectFit||'contain'};${filterStyle}" />${clipClose}${capHtml}${sup}</div>`
         }
         if (el.type === 'shape') {
           const opacityStyle = el.opacity !== undefined && el.opacity !== 1 ? `opacity:${el.opacity};` : ''
@@ -305,9 +305,28 @@ function generateRevealHTML(presentation) {
         return ''
       }).join('\n')
 
-    // Per-slide page numbering
+    let sideCitationsHtml = ''
+    if (sideCitations.length > 0) {
+      const items = sideCitations.map((c, i) => {
+        const t = (c.text || c.link || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        const content = c.link
+          ? `<a href="${c.link.replace(/"/g,'&quot;')}" target="_blank" rel="noopener">${t}</a>`
+          : t
+        return `${i + 1}. ${content}`
+      }).join('&ensp;&middot;&ensp;')
+      sideCitationsHtml = `      <div class="slide-citations"><div class="slide-citations-text">${items}</div></div>`
+    }
+
+    // Per-slide page numbering: grouped slides share the same number
     const slideHasPageNum = slide.showPageNumber !== false
-    if (slideHasPageNum) pageCounter++
+    if (slideHasPageNum) {
+      if (slide.slideGroup && pageGroupSeen.has(slide.slideGroup)) {
+        // same group — reuse current counter value
+      } else {
+        pageCounter++
+        if (slide.slideGroup) pageGroupSeen.add(slide.slideGroup)
+      }
+    }
     const pageLabel = showPageNumbers && slideHasPageNum
       ? (pageNumberFormat === 'c/t' ? `${pageCounter} / ${totalNumberedSlides}` : `${pageCounter}`)
       : ''
@@ -329,7 +348,12 @@ function generateRevealHTML(presentation) {
     }
     const gridHtml = showPresentGrid ? `      <div style="position:absolute;inset:0;z-index:950;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,0.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.12) 1px,transparent 1px);background-size:${presentGridSize}px ${presentGridSize}px;"></div>` : ''
 
-    return `    <section${bgAttrs} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n      ${notes}\n    </section>`
+    const _customTrans = ['differential-rotation']
+    const _isCustom = _customTrans.includes(slide.transition)
+    const perSlideTransition = slide.transition ? ` data-transition="${_isCustom ? 'none' : slide.transition}"` : ''
+    const customTransAttr = _isCustom ? ` data-custom-transition="${slide.transition}"` : ''
+    const perSlideSpeed = slide.transitionSpeed ? ` data-transition-speed="${slide.transitionSpeed}"` : ''
+    return `    <section${bgAttrs}${perSlideTransition}${customTransAttr}${perSlideSpeed} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n${sideCitationsHtml}\n      ${notes}\n    </section>`
   }).join('\n')
 
   return `<!doctype html>
@@ -379,6 +403,21 @@ function generateRevealHTML(presentation) {
     }
     #fs-btn:hover { background: rgba(0,0,0,0.75); }
     :fullscreen #fs-btn, :-webkit-full-screen #fs-btn { display: none; }
+    [data-expand] { transition:box-shadow 0.2s, outline 0.2s; outline:2px solid transparent; outline-offset:2px; }
+    [data-expand]:hover { outline-color:rgba(99,102,241,0.6); box-shadow:0 0 16px rgba(99,102,241,0.25); }
+    .expand-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.92);z-index:10000;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity 0.2s; }
+    .expand-overlay.active { opacity:1; }
+    .expand-overlay img { max-width:90vw;max-height:90vh;object-fit:contain;cursor:default;border-radius:4px; }
+    .image-popup { position:fixed;z-index:10001;background:rgba(20,20,30,0.95);color:#fff;padding:12px 18px;border-radius:8px;font-family:-apple-system,sans-serif;font-size:15px;line-height:1.5;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);opacity:0;transition:opacity 0.2s;white-space:pre-wrap;pointer-events:auto; }
+    .image-popup.active { opacity:1; }
+    [data-popup] { transition:box-shadow 0.2s, outline 0.2s; outline:2px solid transparent; outline-offset:2px; }
+    [data-popup]:hover { outline-color:rgba(251,191,36,0.5); box-shadow:0 0 12px rgba(251,191,36,0.2); }
+    .image-caption { position:absolute;left:0;right:0;top:100%;font-size:10px;color:rgba(255,255,255,0.5);font-family:-apple-system,sans-serif;line-height:1.3;padding:3px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .image-caption a { color:rgba(255,255,255,0.5);text-decoration:underline;text-decoration-color:rgba(255,255,255,0.25); }
+    .cite-sup { position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.55);color:rgba(255,255,255,0.85);font-size:10px;font-weight:700;font-family:-apple-system,sans-serif;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px;pointer-events:none;line-height:1; }
+    .slide-citations { position:absolute;right:2px;top:0;bottom:0;z-index:890;display:flex;align-items:center;pointer-events:none; }
+    .slide-citations-text { writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;color:rgba(255,255,255,0.45);font-family:-apple-system,sans-serif;line-height:1.3;white-space:nowrap; }
+    .slide-citations-text a { color:rgba(255,255,255,0.45);text-decoration:underline; }
   </style>${presentation.customCSS ? `\n  <style>\n${presentation.customCSS}\n  </style>` : ''}
 </head>
 <body>
@@ -392,7 +431,11 @@ ${slidesHtml}
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
   <script>
+    var _customTransitions = ['differential-rotation'];
+    var _globalTransition = '${transition}';
+    var _isGlobalCustom = _customTransitions.indexOf(_globalTransition) !== -1;
     Reveal.initialize({
       hash: true,
       width: ${slideW},
@@ -401,7 +444,7 @@ ${slidesHtml}
       minScale: 0,
       maxScale: 10,
       center: false,
-      transition: '${transition}',
+      transition: _isGlobalCustom ? 'none' : _globalTransition,
       plugins: [ RevealNotes, RevealHighlight ]
     });
     Reveal.on('ready', function() {
@@ -414,6 +457,126 @@ ${slidesHtml}
         } catch(e) {}
       });
     });
+    // ── Custom transitions (differential rotation) ───────────────────────
+    (function() {
+      var prevH = 0, prevV = 0;
+      Reveal.on('ready', function(e) { prevH = e.indexh || 0; prevV = e.indexv || 0; });
+      Reveal.on('slidechanged', function(e) {
+        var prev = e.previousSlide;
+        var transName = null;
+        if (prev && prev.getAttribute('data-custom-transition'))
+          transName = prev.getAttribute('data-custom-transition');
+        else if (_isGlobalCustom)
+          transName = _globalTransition;
+        var dir = 1;
+        if ((e.indexh || 0) < prevH || ((e.indexh || 0) === prevH && (e.indexv || 0) < prevV)) dir = -1;
+        prevH = e.indexh || 0;
+        prevV = e.indexv || 0;
+        if (transName === 'differential-rotation') drTransition(dir);
+      });
+      function drTransition(dir) {
+        var N = 16;
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var bh = vh / N;
+        var BAUHAUS = ['#CC0000', '#003399', '#FFCC00'];
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9998;pointer-events:none;overflow:hidden;';
+        var pending = N;
+        for (var i = 0; i < N; i++) {
+          var band = document.createElement('div');
+          band.style.cssText = 'position:absolute;left:0;width:100%;background:#000;box-sizing:border-box;';
+          band.style.top = (i * bh) + 'px';
+          band.style.height = (bh + 0.5) + 'px';
+          if (i < N - 1) {
+            band.style.borderBottom = '1.5px solid ' + BAUHAUS[i % 3];
+          }
+          overlay.appendChild(band);
+          var lat = Math.PI * ((i + 0.5) / N - 0.5);
+          var cos2 = Math.cos(lat); cos2 = cos2 * cos2;
+          var dur = 0.4 + 1.0 * (1 - cos2);
+          gsap.to(band, {
+            x: dir * (vw + 20),
+            duration: dur,
+            ease: 'none',
+            onComplete: function() { pending--; if (pending <= 0) overlay.remove(); }
+          });
+        }
+        document.body.appendChild(overlay);
+      }
+    })();
+
+    // ── Image click interactions (popup + expand) ─────────────────────
+    (function() {
+      function dismissAll() {
+        var p = document.querySelector('.image-popup');
+        if (p) { p.classList.remove('active'); setTimeout(function() { p.remove(); }, 200); }
+        var ov = document.querySelector('.expand-overlay');
+        if (ov) { ov.classList.remove('active'); setTimeout(function() { ov.remove(); }, 200); }
+      }
+      function showPopup(el, anchor) {
+        var old = document.querySelector('.image-popup');
+        if (old) old.remove();
+        var text = el.getAttribute('data-popup');
+        var pos = el.getAttribute('data-popup-pos') || 'below';
+        var fs = el.getAttribute('data-popup-fs') || '15';
+        var rect = anchor.getBoundingClientRect();
+        var p = document.createElement('div');
+        p.className = 'image-popup';
+        p.textContent = text;
+        p.style.fontSize = fs + 'px';
+        if (pos === 'center') {
+          p.style.left = (rect.left + rect.width/2) + 'px';
+          p.style.top = (rect.top + rect.height/2) + 'px';
+          p.style.transform = 'translate(-50%,-50%)';
+        } else if (pos === 'side') {
+          p.style.top = (rect.top + rect.height/2) + 'px';
+          if (rect.right + 320 < window.innerWidth) {
+            p.style.left = (rect.right + 12) + 'px';
+            p.style.transform = 'translateY(-50%)';
+          } else {
+            p.style.left = (rect.left - 12) + 'px';
+            p.style.transform = 'translate(-100%,-50%)';
+          }
+        } else {
+          p.style.left = (rect.left + rect.width/2) + 'px';
+          p.style.top = (rect.bottom + 12) + 'px';
+          p.style.transform = 'translateX(-50%)';
+        }
+        document.body.appendChild(p);
+        requestAnimationFrame(function() { p.classList.add('active'); });
+      }
+      document.addEventListener('click', function(e) {
+        if (e.target.closest('.image-popup')) return;
+        var ov = e.target.closest('.expand-overlay');
+        if (ov) {
+          if (e.target.tagName === 'IMG') return;
+          dismissAll(); return;
+        }
+        var el = e.target.closest('[data-popup],[data-expand]');
+        if (!el) { dismissAll(); return; }
+        e.stopPropagation();
+        dismissAll();
+        var hasPopup = el.hasAttribute('data-popup');
+        var hasExpand = el.hasAttribute('data-expand');
+        var img = el.querySelector('img');
+        if (hasExpand && img) {
+          var overlay = document.createElement('div');
+          overlay.className = 'expand-overlay';
+          var big = document.createElement('img');
+          big.src = img.src;
+          big.onclick = function(ev) { ev.stopPropagation(); };
+          overlay.appendChild(big);
+          document.body.appendChild(overlay);
+          requestAnimationFrame(function() {
+            overlay.classList.add('active');
+            if (hasPopup) showPopup(el, big);
+          });
+        } else if (hasPopup) {
+          showPopup(el, el);
+        }
+      });
+      document.addEventListener('keydown', function(e) { if (e.key === 'Escape') dismissAll(); });
+    })();
   </script>
 </body>
 </html>`
@@ -438,17 +601,7 @@ function escapeHtml(str) {
 // GET /api/presentations - list summaries
 app.get('/api/presentations', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const summaries = presentations.map(p => ({
-      id: p.id,
-      title: p.title,
-      theme: p.theme,
-      transition: p.transition,
-      slideCount: (p.slides || []).length,
-      updatedAt: p.updatedAt,
-      createdAt: p.createdAt,
-      thumbnail: (p.slides && p.slides[0]) ? p.slides[0].background : null
-    }))
+    const summaries = await storage.listPresentations()
     res.json(summaries)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -483,8 +636,7 @@ app.post('/api/presentations', async (req, res) => {
       delete presentation.thumbnail
     } else if (templateId) {
       // Create from template
-      const templates = await readTemplates()
-      const template = templates.find(t => t.id === templateId)
+      const template = await storage.getTemplate(templateId)
       if (template) {
         const cloned = JSON.parse(JSON.stringify(template))
         presentation = {
@@ -528,10 +680,8 @@ app.post('/api/presentations', async (req, res) => {
       }
     }
 
-    const presentations = await readPresentations()
-    presentations.push(presentation)
-    await writePresentations(presentations)
-    res.status(201).json(presentation)
+    const created = await storage.createPresentation(presentation)
+    res.status(201).json(created)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -542,18 +692,7 @@ app.post('/api/presentations', async (req, res) => {
 // GET /api/templates
 app.get('/api/templates', async (req, res) => {
   try {
-    const templates = await readTemplates()
-    const summaries = templates.map(t => ({
-      id: t.id,
-      title: t.title,
-      theme: t.theme,
-      transition: t.transition,
-      slideCount: (t.slides || []).length,
-      updatedAt: t.updatedAt,
-      createdAt: t.createdAt,
-      thumbnail: (t.slides && t.slides[0]) ? t.slides[0].background : null
-    }))
-    res.json(summaries)
+    res.json(await storage.listTemplates())
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -562,17 +701,7 @@ app.get('/api/templates', async (req, res) => {
 // POST /api/templates - create new template
 app.post('/api/templates', async (req, res) => {
   try {
-    const now = new Date().toISOString()
-    const template = {
-      ...req.body,
-      id: uuidv4(),
-      isTemplate: true,
-      createdAt: now,
-      updatedAt: now
-    }
-    const templates = await readTemplates()
-    templates.push(template)
-    await writeTemplates(templates)
+    const template = await storage.createTemplate(req.body)
     res.status(201).json(template)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -582,8 +711,7 @@ app.post('/api/templates', async (req, res) => {
 // GET /api/templates/:id
 app.get('/api/templates/:id', async (req, res) => {
   try {
-    const templates = await readTemplates()
-    const template = templates.find(t => t.id === req.params.id)
+    const template = await storage.getTemplate(req.params.id)
     if (!template) return res.status(404).json({ error: 'Not found' })
     res.json(template)
   } catch (err) {
@@ -594,12 +722,9 @@ app.get('/api/templates/:id', async (req, res) => {
 // PUT /api/templates/:id
 app.put('/api/templates/:id', async (req, res) => {
   try {
-    const templates = await readTemplates()
-    const index = templates.findIndex(t => t.id === req.params.id)
-    if (index === -1) return res.status(404).json({ error: 'Not found' })
-    templates[index] = { ...templates[index], ...req.body, id: req.params.id, updatedAt: new Date().toISOString() }
-    await writeTemplates(templates)
-    res.json(templates[index])
+    const updated = await storage.updateTemplate(req.params.id, req.body)
+    if (!updated) return res.status(404).json({ error: 'Not found' })
+    res.json(updated)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -608,11 +733,8 @@ app.put('/api/templates/:id', async (req, res) => {
 // DELETE /api/templates/:id
 app.delete('/api/templates/:id', async (req, res) => {
   try {
-    const templates = await readTemplates()
-    const index = templates.findIndex(t => t.id === req.params.id)
-    if (index === -1) return res.status(404).json({ error: 'Not found' })
-    templates.splice(index, 1)
-    await writeTemplates(templates)
+    const deleted = await storage.deleteTemplate(req.params.id)
+    if (!deleted) return res.status(404).json({ error: 'Not found' })
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -622,21 +744,8 @@ app.delete('/api/templates/:id', async (req, res) => {
 // POST /api/presentations/:id/save-as-template
 app.post('/api/presentations/:id/save-as-template', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const pres = presentations.find(p => p.id === req.params.id)
-    if (!pres) return res.status(404).json({ error: 'Not found' })
-    const now = new Date().toISOString()
-    const template = {
-      ...JSON.parse(JSON.stringify(pres)),
-      id: uuidv4(),
-      title: (req.body.title || pres.title || 'Untitled') + ' (template)',
-      isTemplate: true,
-      createdAt: now,
-      updatedAt: now
-    }
-    const templates = await readTemplates()
-    templates.push(template)
-    await writeTemplates(templates)
+    const template = await storage.saveAsTemplate(req.params.id, req.body.title)
+    if (!template) return res.status(404).json({ error: 'Not found' })
     res.status(201).json(template)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -646,8 +755,7 @@ app.post('/api/presentations/:id/save-as-template', async (req, res) => {
 // GET /api/presentations/:id - get full presentation
 app.get('/api/presentations/:id', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === req.params.id)
+    const presentation = await storage.getPresentation(req.params.id)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
     res.json(presentation)
   } catch (err) {
@@ -658,17 +766,9 @@ app.get('/api/presentations/:id', async (req, res) => {
 // PUT /api/presentations/:id - update
 app.put('/api/presentations/:id', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const index = presentations.findIndex(p => p.id === req.params.id)
-    if (index === -1) return res.status(404).json({ error: 'Not found' })
-    presentations[index] = {
-      ...presentations[index],
-      ...req.body,
-      id: req.params.id,
-      updatedAt: new Date().toISOString()
-    }
-    await writePresentations(presentations)
-    res.json(presentations[index])
+    const updated = await storage.updatePresentation(req.params.id, req.body)
+    if (!updated) return res.status(404).json({ error: 'Not found' })
+    res.json(updated)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -677,11 +777,8 @@ app.put('/api/presentations/:id', async (req, res) => {
 // DELETE /api/presentations/:id
 app.delete('/api/presentations/:id', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const index = presentations.findIndex(p => p.id === req.params.id)
-    if (index === -1) return res.status(404).json({ error: 'Not found' })
-    presentations.splice(index, 1)
-    await writePresentations(presentations)
+    const deleted = await storage.deletePresentation(req.params.id)
+    if (!deleted) return res.status(404).json({ error: 'Not found' })
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -691,17 +788,8 @@ app.delete('/api/presentations/:id', async (req, res) => {
 // POST /api/presentations/:id/duplicate
 app.post('/api/presentations/:id/duplicate', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const original = presentations.find(p => p.id === req.params.id)
-    if (!original) return res.status(404).json({ error: 'Not found' })
-    const now = new Date().toISOString()
-    const copy = JSON.parse(JSON.stringify(original))
-    copy.id = uuidv4()
-    copy.title = (copy.title || 'Untitled') + ' (copy)'
-    copy.createdAt = now
-    copy.updatedAt = now
-    presentations.push(copy)
-    await writePresentations(presentations)
+    const copy = await storage.duplicatePresentation(req.params.id)
+    if (!copy) return res.status(404).json({ error: 'Not found' })
     res.status(201).json(copy)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -805,8 +893,7 @@ app.post('/api/render-manim', express.json(), async (req, res) => {
 // GET /api/presentations/:id/export - download HTML
 app.get('/api/presentations/:id/export', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === req.params.id)
+    const presentation = await storage.getPresentation(req.params.id)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
     const html = generateRevealHTML(presentation)
     const filename = `${(presentation.title || 'presentation').replace(/[^a-z0-9]/gi, '_')}.html`
@@ -821,8 +908,7 @@ app.get('/api/presentations/:id/export', async (req, res) => {
 // GET /api/presentations/:id/present - serve in browser
 app.get('/api/presentations/:id/present', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === req.params.id)
+    const presentation = await storage.getPresentation(req.params.id)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
     const html = generateRevealHTML(presentation)
     res.setHeader('Content-Type', 'text/html')
@@ -835,25 +921,14 @@ app.get('/api/presentations/:id/present', async (req, res) => {
 // --- Share Links ---
 
 // Helper: read/write share tokens
-async function readShareTokens() { return fs.readJson(SHARE_FILE) }
-async function writeShareTokens(data) { return fs.writeJson(SHARE_FILE, data, { spaces: 2 }) }
+
 
 // POST /api/presentations/:id/share - enable sharing, return token
 app.post('/api/presentations/:id/share', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === req.params.id)
-    if (!presentation) return res.status(404).json({ error: 'Not found' })
-
-    const tokens = await readShareTokens()
-    // Check if already shared
-    let token = Object.entries(tokens).find(([t, id]) => id === req.params.id)?.[0]
-    if (!token) {
-      token = uuidv4()
-      tokens[token] = req.params.id
-      await writeShareTokens(tokens)
-    }
-    res.json({ token, shared: true })
+    const result = await storage.createShareToken(req.params.id)
+    if (!result) return res.status(404).json({ error: 'Not found' })
+    res.json(result)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -862,12 +937,7 @@ app.post('/api/presentations/:id/share', async (req, res) => {
 // DELETE /api/presentations/:id/share - disable sharing
 app.delete('/api/presentations/:id/share', async (req, res) => {
   try {
-    const tokens = await readShareTokens()
-    for (const [token, id] of Object.entries(tokens)) {
-      if (id === req.params.id) delete tokens[token]
-    }
-    await writeShareTokens(tokens)
-    res.json({ shared: false })
+    res.json(await storage.deleteShareToken(req.params.id))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -876,9 +946,7 @@ app.delete('/api/presentations/:id/share', async (req, res) => {
 // GET /api/presentations/:id/share - get share status
 app.get('/api/presentations/:id/share', async (req, res) => {
   try {
-    const tokens = await readShareTokens()
-    const entry = Object.entries(tokens).find(([t, id]) => id === req.params.id)
-    res.json({ shared: !!entry, token: entry ? entry[0] : null })
+    res.json(await storage.getShareStatus(req.params.id))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -887,14 +955,8 @@ app.get('/api/presentations/:id/share', async (req, res) => {
 // GET /share/:token - public view of shared presentation
 app.get('/share/:token', async (req, res) => {
   try {
-    const tokens = await readShareTokens()
-    const presentationId = tokens[req.params.token]
-    if (!presentationId) return res.status(404).send('Presentation not found or sharing disabled')
-
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === presentationId)
-    if (!presentation) return res.status(404).send('Presentation not found')
-
+    const presentation = await storage.getSharedPresentation(req.params.token)
+    if (!presentation) return res.status(404).send('Presentation not found or sharing disabled')
     const html = generateRevealHTML(presentation)
     res.setHeader('Content-Type', 'text/html')
     res.send(html)
@@ -905,59 +967,35 @@ app.get('/share/:token', async (req, res) => {
 
 // --- Version History ---
 
-fs.ensureDirSync(HISTORY_DIR)
-
 // POST /api/presentations/:id/snapshot - save named snapshot
 app.post('/api/presentations/:id/snapshot', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const pres = presentations.find(p => p.id === req.params.id)
-    if (!pres) return res.status(404).json({ error: 'Not found' })
-    const name = req.body.name || new Date().toISOString()
-    const presDir = path.join(HISTORY_DIR, req.params.id)
-    fs.ensureDirSync(presDir)
-    const snapshotId = uuidv4()
-    const snapshot = { id: snapshotId, name, createdAt: new Date().toISOString(), data: JSON.parse(JSON.stringify(pres)) }
-    fs.writeJsonSync(path.join(presDir, `${snapshotId}.json`), snapshot, { spaces: 2 })
-    res.json({ id: snapshotId, name, createdAt: snapshot.createdAt })
+    const result = await storage.createSnapshot(req.params.id, req.body.name)
+    if (!result) return res.status(404).json({ error: 'Not found' })
+    res.json(result)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // GET /api/presentations/:id/snapshots - list snapshots
 app.get('/api/presentations/:id/snapshots', async (req, res) => {
   try {
-    const presDir = path.join(HISTORY_DIR, req.params.id)
-    if (!fs.existsSync(presDir)) return res.json([])
-    const files = fs.readdirSync(presDir).filter(f => f.endsWith('.json')).sort()
-    const snapshots = files.map(f => {
-      const s = fs.readJsonSync(path.join(presDir, f))
-      return { id: s.id, name: s.name, createdAt: s.createdAt, slideCount: (s.data?.slides || []).length }
-    }).reverse()
-    res.json(snapshots)
+    res.json(await storage.listSnapshots(req.params.id))
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // POST /api/presentations/:id/restore/:snapshotId - restore a snapshot
 app.post('/api/presentations/:id/restore/:snapshotId', async (req, res) => {
   try {
-    const presDir = path.join(HISTORY_DIR, req.params.id)
-    const snapFile = path.join(presDir, `${req.params.snapshotId}.json`)
-    if (!fs.existsSync(snapFile)) return res.status(404).json({ error: 'Snapshot not found' })
-    const snapshot = fs.readJsonSync(snapFile)
-    const presentations = await readPresentations()
-    const index = presentations.findIndex(p => p.id === req.params.id)
-    if (index === -1) return res.status(404).json({ error: 'Presentation not found' })
-    presentations[index] = { ...snapshot.data, id: req.params.id, updatedAt: new Date().toISOString() }
-    await writePresentations(presentations)
-    res.json(presentations[index])
+    const restored = await storage.restoreSnapshot(req.params.id, req.params.snapshotId)
+    if (!restored) return res.status(404).json({ error: 'Snapshot or presentation not found' })
+    res.json(restored)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // DELETE /api/presentations/:id/snapshots/:snapshotId
 app.delete('/api/presentations/:id/snapshots/:snapshotId', async (req, res) => {
   try {
-    const snapFile = path.join(HISTORY_DIR, req.params.id, `${req.params.snapshotId}.json`)
-    if (fs.existsSync(snapFile)) fs.removeSync(snapFile)
+    await storage.deleteSnapshot(req.params.id, req.params.snapshotId)
     res.json({ success: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -1035,7 +1073,9 @@ app.post('/api/rclone/sync', async (req, res) => {
     // Clean sync dir
     fs.emptyDirSync(SYNC_DIR)
 
-    const presentations = await readPresentations()
+    const allSummaries = await storage.listPresentations()
+    const presentations = []
+    for (const s of allSummaries) { const p = await storage.getPresentation(s.id); if (p) presentations.push(p) }
     for (const pres of presentations) {
       const folderName = (pres.title || 'untitled').replace(/[^a-z0-9_-]/gi, '_').toLowerCase()
       const folder = path.join(SYNC_DIR, folderName)
@@ -1075,8 +1115,7 @@ app.post('/api/rclone/sync-single', async (req, res) => {
     if (!remote || !presentationId) return res.status(400).json({ error: 'Remote and presentationId required' })
     const dest = remotePath || '/slides-backup'
 
-    const presentations = await readPresentations()
-    const pres = presentations.find(p => p.id === presentationId)
+    const pres = await storage.getPresentation(presentationId)
     if (!pres) return res.status(404).json({ error: 'Presentation not found' })
 
     fs.ensureDirSync(SYNC_DIR)
@@ -1104,12 +1143,8 @@ app.post('/api/rclone/sync-single', async (req, res) => {
 // GET /api/github/config - get saved config (token is masked)
 app.get('/api/github/config', async (req, res) => {
   try {
-    const config = await fs.readJson(GITHUB_CONFIG_FILE)
-    res.json({
-      owner: config.owner || '',
-      repo: config.repo || '',
-      hasToken: !!(config.token),
-    })
+    const config = await storage.getGithubConfig()
+    res.json({ owner: config.owner || '', repo: config.repo || '', hasToken: !!config.token })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1118,14 +1153,8 @@ app.get('/api/github/config', async (req, res) => {
 // POST /api/github/config - save config
 app.post('/api/github/config', async (req, res) => {
   try {
-    const existing = await fs.readJson(GITHUB_CONFIG_FILE)
-    const updated = {
-      token: req.body.token !== undefined ? req.body.token : existing.token,
-      owner: req.body.owner !== undefined ? req.body.owner : existing.owner,
-      repo: req.body.repo !== undefined ? req.body.repo : existing.repo,
-    }
-    await fs.writeJson(GITHUB_CONFIG_FILE, updated, { spaces: 2 })
-    res.json({ owner: updated.owner, repo: updated.repo, hasToken: !!updated.token })
+    const updated = await storage.setGithubConfig(req.body)
+    res.json({ owner: updated.owner || '', repo: updated.repo || '', hasToken: !!updated.token })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1134,13 +1163,12 @@ app.post('/api/github/config', async (req, res) => {
 // POST /api/presentations/:id/github/push - push presentation to GitHub
 app.post('/api/presentations/:id/github/push', async (req, res) => {
   try {
-    const config = await fs.readJson(GITHUB_CONFIG_FILE)
+    const config = await storage.getGithubConfig()
     if (!config.token || !config.owner || !config.repo) {
       return res.status(400).json({ error: 'GitHub not configured. Set token, owner, and repo first.' })
     }
 
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === req.params.id)
+    const presentation = await storage.getPresentation(req.params.id)
     if (!presentation) return res.status(404).json({ error: 'Presentation not found' })
 
     const { token, owner, repo } = config

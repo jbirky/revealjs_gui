@@ -1,5 +1,5 @@
-appId: com.slides-editor.app
-productName: SlidesEditor
+appId: com.parallax.app
+productName: Parallax
 directories:
   output: dist-electron
 
@@ -28,6 +28,6 @@ linux:
     - AppImage
     - deb
   category: Office
-  executableName: slides-editor
+  executableName: parallax
   executableArgs:
     - "--no-sandbox"

@@ -1,6 +1,6 @@
 # Keyboard Shortcuts
 
-A complete reference for keyboard shortcuts available in Slides Editor.
+A complete reference for keyboard shortcuts available in Parallax.
 
 ## Editing shortcuts
 
