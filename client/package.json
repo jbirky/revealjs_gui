@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.61.3",
     "@tiptap/extension-color": "^2.6.6",
     "@tiptap/extension-font-family": "^2.6.6",
     "@tiptap/extension-highlight": "^3.20.4",

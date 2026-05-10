@@ -24,253 +24,156 @@ class FileStorage extends StorageInterface {
     if (!fs.existsSync(this.githubConfigFile)) fs.writeJsonSync(this.githubConfigFile, { token: '', owner: '', repo: '' })
   }
 
-  // --- internal helpers ---
-  async _readPresentations() { return fs.readJson(this.dataFile) }
-  async _writePresentations(data) { return fs.writeJson(this.dataFile, data, { spaces: 2 }) }
+  async _readAll() { return fs.readJson(this.dataFile) }
+  async _writeAll(data) { return fs.writeJson(this.dataFile, data, { spaces: 2 }) }
   async _readTemplates() { return fs.readJson(this.templatesFile) }
   async _writeTemplates(data) { return fs.writeJson(this.templatesFile, data, { spaces: 2 }) }
-  async _readShareTokens() { return fs.readJson(this.shareFile) }
-  async _writeShareTokens(data) { return fs.writeJson(this.shareFile, data, { spaces: 2 }) }
+  async _readTokens() { return fs.readJson(this.shareFile) }
+  async _writeTokens(data) { return fs.writeJson(this.shareFile, data, { spaces: 2 }) }
 
-  // --- Presentations ---
-
-  async listPresentations(_userId) {
-    const presentations = await this._readPresentations()
-    return presentations.map(p => ({
-      id: p.id,
-      title: p.title,
-      theme: p.theme,
-      transition: p.transition,
-      slideCount: (p.slides || []).length,
-      updatedAt: p.updatedAt,
-      createdAt: p.createdAt,
-      thumbnail: (p.slides && p.slides[0]) ? p.slides[0].background : null
-    }))
+  _summary(p) {
+    return { id: p.id, title: p.title, theme: p.theme, transition: p.transition, slideCount: (p.slides || []).length, updatedAt: p.updatedAt, createdAt: p.createdAt, thumbnail: (p.slides && p.slides[0]) ? p.slides[0].background : null }
   }
 
-  async getPresentation(id, _userId) {
-    const presentations = await this._readPresentations()
-    return presentations.find(p => p.id === id) || null
+  async listPresentations() {
+    return (await this._readAll()).map(p => this._summary(p))
   }
-
-  async createPresentation(data, _userId) {
+  async getPresentation(id) {
+    return (await this._readAll()).find(p => p.id === id) || null
+  }
+  async createPresentation(data) {
     const now = new Date().toISOString()
-    const presentation = {
-      ...data,
-      id: data.id || uuidv4(),
-      createdAt: now,
-      updatedAt: now
-    }
-    const presentations = await this._readPresentations()
-    presentations.push(presentation)
-    await this._writePresentations(presentations)
-    return presentation
+    const pres = { ...data, id: data.id || uuidv4(), createdAt: now, updatedAt: now }
+    const all = await this._readAll()
+    all.push(pres)
+    await this._writeAll(all)
+    return pres
   }
-
-  async updatePresentation(id, data, _userId) {
-    const presentations = await this._readPresentations()
-    const index = presentations.findIndex(p => p.id === id)
-    if (index === -1) return null
-    presentations[index] = {
-      ...presentations[index],
-      ...data,
-      id,
-      updatedAt: new Date().toISOString()
-    }
-    await this._writePresentations(presentations)
-    return presentations[index]
+  async updatePresentation(id, data) {
+    const all = await this._readAll()
+    const i = all.findIndex(p => p.id === id)
+    if (i === -1) return null
+    all[i] = { ...all[i], ...data, id, updatedAt: new Date().toISOString() }
+    await this._writeAll(all)
+    return all[i]
   }
-
-  async deletePresentation(id, _userId) {
-    const presentations = await this._readPresentations()
-    const index = presentations.findIndex(p => p.id === id)
-    if (index === -1) return false
-    presentations.splice(index, 1)
-    await this._writePresentations(presentations)
+  async deletePresentation(id) {
+    const all = await this._readAll()
+    const i = all.findIndex(p => p.id === id)
+    if (i === -1) return false
+    all.splice(i, 1)
+    await this._writeAll(all)
     return true
   }
-
-  async duplicatePresentation(id, _userId) {
-    const presentations = await this._readPresentations()
-    const original = presentations.find(p => p.id === id)
-    if (!original) return null
+  async duplicatePresentation(id) {
+    const all = await this._readAll()
+    const orig = all.find(p => p.id === id)
+    if (!orig) return null
     const now = new Date().toISOString()
-    const copy = JSON.parse(JSON.stringify(original))
-    copy.id = uuidv4()
-    copy.title = (copy.title || 'Untitled') + ' (copy)'
-    copy.createdAt = now
-    copy.updatedAt = now
-    presentations.push(copy)
-    await this._writePresentations(presentations)
+    const copy = { ...JSON.parse(JSON.stringify(orig)), id: uuidv4(), title: (orig.title || 'Untitled') + ' (copy)', createdAt: now, updatedAt: now }
+    all.push(copy)
+    await this._writeAll(all)
     return copy
   }
 
-  // --- Templates ---
-
-  async listTemplates(_userId) {
-    const templates = await this._readTemplates()
-    return templates.map(t => ({
-      id: t.id,
-      title: t.title,
-      theme: t.theme,
-      transition: t.transition,
-      slideCount: (t.slides || []).length,
-      updatedAt: t.updatedAt,
-      createdAt: t.createdAt,
-      thumbnail: (t.slides && t.slides[0]) ? t.slides[0].background : null
-    }))
+  async listTemplates() {
+    return (await this._readTemplates()).map(t => this._summary(t))
   }
-
-  async getTemplate(id, _userId) {
-    const templates = await this._readTemplates()
-    return templates.find(t => t.id === id) || null
+  async getTemplate(id) {
+    return (await this._readTemplates()).find(t => t.id === id) || null
   }
-
-  async createTemplate(data, _userId) {
+  async createTemplate(data) {
     const now = new Date().toISOString()
-    const template = {
-      ...data,
-      id: uuidv4(),
-      isTemplate: true,
-      createdAt: now,
-      updatedAt: now
-    }
-    const templates = await this._readTemplates()
-    templates.push(template)
-    await this._writeTemplates(templates)
-    return template
+    const tmpl = { ...data, id: uuidv4(), isTemplate: true, createdAt: now, updatedAt: now }
+    const all = await this._readTemplates()
+    all.push(tmpl)
+    await this._writeTemplates(all)
+    return tmpl
   }
-
-  async updateTemplate(id, data, _userId) {
-    const templates = await this._readTemplates()
-    const index = templates.findIndex(t => t.id === id)
-    if (index === -1) return null
-    templates[index] = { ...templates[index], ...data, id, updatedAt: new Date().toISOString() }
-    await this._writeTemplates(templates)
-    return templates[index]
+  async updateTemplate(id, data) {
+    const all = await this._readTemplates()
+    const i = all.findIndex(t => t.id === id)
+    if (i === -1) return null
+    all[i] = { ...all[i], ...data, id, updatedAt: new Date().toISOString() }
+    await this._writeTemplates(all)
+    return all[i]
   }
-
-  async deleteTemplate(id, _userId) {
-    const templates = await this._readTemplates()
-    const index = templates.findIndex(t => t.id === id)
-    if (index === -1) return false
-    templates.splice(index, 1)
-    await this._writeTemplates(templates)
+  async deleteTemplate(id) {
+    const all = await this._readTemplates()
+    const i = all.findIndex(t => t.id === id)
+    if (i === -1) return false
+    all.splice(i, 1)
+    await this._writeTemplates(all)
     return true
   }
-
-  async saveAsTemplate(presentationId, title, _userId) {
-    const presentations = await this._readPresentations()
-    const pres = presentations.find(p => p.id === presentationId)
+  async saveAsTemplate(presentationId, title) {
+    const pres = await this.getPresentation(presentationId)
     if (!pres) return null
     const now = new Date().toISOString()
-    const template = {
-      ...JSON.parse(JSON.stringify(pres)),
-      id: uuidv4(),
-      title: (title || pres.title || 'Untitled') + ' (template)',
-      isTemplate: true,
-      createdAt: now,
-      updatedAt: now
-    }
-    const templates = await this._readTemplates()
-    templates.push(template)
-    await this._writeTemplates(templates)
-    return template
+    const tmpl = { ...JSON.parse(JSON.stringify(pres)), id: uuidv4(), title: (title || pres.title || 'Untitled') + ' (template)', isTemplate: true, createdAt: now, updatedAt: now }
+    const all = await this._readTemplates()
+    all.push(tmpl)
+    await this._writeTemplates(all)
+    return tmpl
   }
 
-  // --- Sharing ---
-
-  async createShareToken(presentationId, _userId) {
-    const presentations = await this._readPresentations()
-    if (!presentations.find(p => p.id === presentationId)) return null
-    const tokens = await this._readShareTokens()
-    let token = Object.entries(tokens).find(([_t, id]) => id === presentationId)?.[0]
-    if (!token) {
-      token = uuidv4()
-      tokens[token] = presentationId
-      await this._writeShareTokens(tokens)
-    }
+  async createShareToken(presentationId) {
+    if (!(await this.getPresentation(presentationId))) return null
+    const tokens = await this._readTokens()
+    let token = Object.entries(tokens).find(([, id]) => id === presentationId)?.[0]
+    if (!token) { token = uuidv4(); tokens[token] = presentationId; await this._writeTokens(tokens) }
     return { token, shared: true }
   }
-
-  async deleteShareToken(presentationId, _userId) {
-    const tokens = await this._readShareTokens()
-    for (const [token, id] of Object.entries(tokens)) {
-      if (id === presentationId) delete tokens[token]
-    }
-    await this._writeShareTokens(tokens)
+  async deleteShareToken(presentationId) {
+    const tokens = await this._readTokens()
+    for (const [t, id] of Object.entries(tokens)) { if (id === presentationId) delete tokens[t] }
+    await this._writeTokens(tokens)
     return { shared: false }
   }
-
-  async getShareStatus(presentationId, _userId) {
-    const tokens = await this._readShareTokens()
-    const entry = Object.entries(tokens).find(([_t, id]) => id === presentationId)
+  async getShareStatus(presentationId) {
+    const tokens = await this._readTokens()
+    const entry = Object.entries(tokens).find(([, id]) => id === presentationId)
     return { shared: !!entry, token: entry ? entry[0] : null }
   }
-
   async getSharedPresentation(token) {
-    const tokens = await this._readShareTokens()
-    const presentationId = tokens[token]
-    if (!presentationId) return null
-    const presentations = await this._readPresentations()
-    return presentations.find(p => p.id === presentationId) || null
+    const tokens = await this._readTokens()
+    const pid = tokens[token]
+    if (!pid) return null
+    return this.getPresentation(pid)
   }
 
-  // --- Snapshots ---
-
-  async createSnapshot(presentationId, name, _userId) {
-    const presentations = await this._readPresentations()
-    const pres = presentations.find(p => p.id === presentationId)
+  async createSnapshot(presentationId, name) {
+    const pres = await this.getPresentation(presentationId)
     if (!pres) return null
-    const presDir = path.join(this.historyDir, presentationId)
-    fs.ensureDirSync(presDir)
-    const snapshotId = uuidv4()
-    const snapshot = {
-      id: snapshotId,
-      name: name || new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      data: JSON.parse(JSON.stringify(pres))
-    }
-    fs.writeJsonSync(path.join(presDir, `${snapshotId}.json`), snapshot, { spaces: 2 })
-    return { id: snapshotId, name: snapshot.name, createdAt: snapshot.createdAt }
+    const dir = path.join(this.historyDir, presentationId)
+    fs.ensureDirSync(dir)
+    const id = uuidv4()
+    const snap = { id, name: name || new Date().toISOString(), createdAt: new Date().toISOString(), data: JSON.parse(JSON.stringify(pres)) }
+    fs.writeJsonSync(path.join(dir, `${id}.json`), snap, { spaces: 2 })
+    return { id, name: snap.name, createdAt: snap.createdAt }
   }
-
-  async listSnapshots(presentationId, _userId) {
-    const presDir = path.join(this.historyDir, presentationId)
-    if (!fs.existsSync(presDir)) return []
-    const files = fs.readdirSync(presDir).filter(f => f.endsWith('.json')).sort()
-    return files.map(f => {
-      const s = fs.readJsonSync(path.join(presDir, f))
+  async listSnapshots(presentationId) {
+    const dir = path.join(this.historyDir, presentationId)
+    if (!fs.existsSync(dir)) return []
+    return fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort().map(f => {
+      const s = fs.readJsonSync(path.join(dir, f))
       return { id: s.id, name: s.name, createdAt: s.createdAt, slideCount: (s.data?.slides || []).length }
     }).reverse()
   }
-
-  async restoreSnapshot(presentationId, snapshotId, _userId) {
-    const presDir = path.join(this.historyDir, presentationId)
-    const snapFile = path.join(presDir, `${snapshotId}.json`)
-    if (!fs.existsSync(snapFile)) return null
-    const snapshot = fs.readJsonSync(snapFile)
-    const presentations = await this._readPresentations()
-    const index = presentations.findIndex(p => p.id === presentationId)
-    if (index === -1) return null
-    presentations[index] = { ...snapshot.data, id: presentationId, updatedAt: new Date().toISOString() }
-    await this._writePresentations(presentations)
-    return presentations[index]
+  async restoreSnapshot(presentationId, snapshotId) {
+    const file = path.join(this.historyDir, presentationId, `${snapshotId}.json`)
+    if (!fs.existsSync(file)) return null
+    const snap = fs.readJsonSync(file)
+    return this.updatePresentation(presentationId, snap.data)
   }
-
-  async deleteSnapshot(presentationId, snapshotId, _userId) {
-    const snapFile = path.join(this.historyDir, presentationId, `${snapshotId}.json`)
-    if (fs.existsSync(snapFile)) fs.removeSync(snapFile)
+  async deleteSnapshot(presentationId, snapshotId) {
+    const file = path.join(this.historyDir, presentationId, `${snapshotId}.json`)
+    if (fs.existsSync(file)) fs.removeSync(file)
     return true
   }
 
-  // --- GitHub config ---
-
-  async getGithubConfig(_userId) {
-    return fs.readJson(this.githubConfigFile)
-  }
-
-  async setGithubConfig(config, _userId) {
+  async getGithubConfig() { return fs.readJson(this.githubConfigFile) }
+  async setGithubConfig(config) {
     const existing = await this.getGithubConfig()
     const updated = { ...existing, ...config }
     await fs.writeJson(this.githubConfigFile, updated, { spaces: 2 })

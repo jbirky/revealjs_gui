@@ -12,6 +12,12 @@ RUN npm ci
 # Copy source and build the client
 COPY client/ ./client/
 COPY server/ ./server/
+
+ARG VITE_PARALLAX_MODE=selfhosted
+ARG VITE_CLERK_PUBLISHABLE_KEY=
+ENV VITE_PARALLAX_MODE=$VITE_PARALLAX_MODE
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
+
 RUN npm run build
 
 # Production stage

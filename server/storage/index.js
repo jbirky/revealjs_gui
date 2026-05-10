@@ -7,18 +7,15 @@ const FileStorage = require('./file-storage')
 function createStorage() {
   const backend = process.env.PARALLAX_DB || 'file'
 
-  if (backend === 'file') {
-    const dataDir = process.env.SLIDES_DATA_DIR || path.join(__dirname, '..', 'data')
-    return new FileStorage(dataDir)
+  if (backend === 'postgres') {
+    const PgStorage = require('./pg-storage')
+    const url = process.env.DATABASE_URL
+    if (!url) throw new Error('PARALLAX_DB=postgres but DATABASE_URL is not set')
+    return new PgStorage(url)
   }
 
-  // Future: postgres backend
-  // if (backend === 'postgres') {
-  //   const PgStorage = require('./pg-storage')
-  //   return new PgStorage(process.env.DATABASE_URL)
-  // }
-
-  throw new Error(`Unknown storage backend: ${backend}`)
+  const dataDir = process.env.SLIDES_DATA_DIR || path.join(__dirname, '..', 'data')
+  return new FileStorage(dataDir)
 }
 
 module.exports = createStorage

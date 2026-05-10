@@ -1,6 +1,50 @@
 import { useState, useEffect } from 'react'
+import { useAuth, SignIn, SignedIn, SignedOut } from '@clerk/clerk-react'
 import HomePage from './pages/HomePage'
 import EditorPage from './pages/EditorPage'
+import { setTokenGetter } from './utils/api'
+
+const isCloud = import.meta.env.VITE_PARALLAX_MODE === 'cloud'
+
+function TokenBridge() {
+  const { getToken } = useAuth()
+  useEffect(() => { setTokenGetter(() => getToken()) }, [getToken])
+  return null
+}
+
+function AuthGateCloud({ children }) {
+  return (
+    <>
+      <TokenBridge />
+      <SignedOut>
+        <div style={{
+          minHeight: '100vh', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 32,
+          background: 'var(--bg-primary, #0f0f1a)',
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <h1 style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-primary, #fff)', margin: 0 }}>
+              <span style={{ color: 'var(--accent, #6366f1)' }}>P</span>arallax
+            </h1>
+            <p style={{ color: 'var(--text-muted, #888)', marginTop: 8, fontSize: 15 }}>
+              Sign in to create and manage presentations
+            </p>
+          </div>
+          <SignIn routing="hash" appearance={{
+            variables: { colorPrimary: '#6366f1', colorBackground: '#1e1e2e', colorText: '#e0e0e0', colorInputBackground: '#2a2a3e', colorInputText: '#e0e0e0' },
+          }} />
+        </div>
+      </SignedOut>
+      <SignedIn>{children}</SignedIn>
+    </>
+  )
+}
+
+function AuthGateSelfHosted({ children }) {
+  return children
+}
+
+const AuthGate = isCloud ? AuthGateCloud : AuthGateSelfHosted
 
 export default function App() {
   const [page, setPage] = useState('home')
@@ -16,7 +60,12 @@ export default function App() {
   const openEditor = (id, template = false) => { setPresentationId(id); setIsTemplate(template); setPage('editor') }
   const goHome = () => { setPage('home'); setPresentationId(null); setIsTemplate(false) }
 
-  return page === 'home'
-    ? <HomePage onOpen={openEditor} theme={theme} onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} />
-    : <EditorPage presentationId={presentationId} isTemplate={isTemplate} onGoHome={goHome} />
+  return (
+    <AuthGate>
+      {page === 'home'
+        ? <HomePage onOpen={openEditor} theme={theme} onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} />
+        : <EditorPage presentationId={presentationId} isTemplate={isTemplate} onGoHome={goHome} />
+      }
+    </AuthGate>
+  )
 }

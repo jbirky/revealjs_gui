@@ -5,3 +5,8 @@ server/data/
 server/uploads/
 plans/
 *.log
+
+# Environment secrets
+.env
+.env.*
+!.env.example

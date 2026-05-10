@@ -14,8 +14,12 @@ const app = express()
 const PORT = process.env.PORT || 3002
 
 // Support custom data directory (used by Electron to write to user's app data folder)
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
 const createStorage = require('./storage')
 const storage = createStorage()
+const { authStack, requireUser, IS_CLOUD } = require('./middleware/auth')
+const { isR2Enabled, streamFromR2 } = require('./services/r2')
+const { handleUpload: r2Upload, deleteUploadsForPresentation } = require('./services/upload-service')
 
 const DATA_DIR = process.env.SLIDES_DATA_DIR || path.join(__dirname, 'data')
 const UPLOADS_BASE = process.env.SLIDES_UPLOADS_DIR || path.join(__dirname, 'uploads')
@@ -23,16 +27,21 @@ const UPLOADS_DIR = UPLOADS_BASE
 const RCLONE_CONFIG_FILE = path.join(DATA_DIR, 'rclone.conf')
 const SYNC_DIR = path.join(DATA_DIR, 'sync-export')
 
-// Ensure directories exist
 fs.ensureDirSync(DATA_DIR)
 fs.ensureDirSync(UPLOADS_DIR)
 
-// Multer storage config — destination is per-presentation when req.params.id is present
+// Multer storage config
 const multerStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = req.params.id ? path.join(UPLOADS_DIR, req.params.id) : UPLOADS_DIR
-    fs.ensureDirSync(dir)
-    cb(null, dir)
+    if (isR2Enabled()) {
+      const tmpDir = path.join(os.tmpdir(), 'parallax-uploads')
+      fs.ensureDirSync(tmpDir)
+      cb(null, tmpDir)
+    } else {
+      const dir = req.params.id ? path.join(UPLOADS_DIR, req.params.id) : UPLOADS_DIR
+      fs.ensureDirSync(dir)
+      cb(null, dir)
+    }
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname)
@@ -43,7 +52,86 @@ const upload = multer({ storage: multerStorage, limits: { fileSize: 500 * 1024 *
 
 app.use(cors())
 app.use(express.json({ limit: '50mb' }))
-app.use('/uploads', express.static(UPLOADS_DIR))
+if (isR2Enabled()) {
+  app.get('/uploads/*', async (req, res) => {
+    const urlPath = req.path.replace(/^\/uploads\//, '')
+    try {
+      const { rows } = await storage.query(
+        'SELECT storage_key, content_type FROM uploads WHERE filename = $1',
+        [urlPath]
+      )
+      if (!rows.length) return res.status(404).send('Not found')
+      const { body, contentType, contentLength } = await streamFromR2(rows[0].storage_key)
+      res.setHeader('Content-Type', contentType || rows[0].content_type || 'application/octet-stream')
+      if (contentLength) res.setHeader('Content-Length', contentLength)
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      body.pipe(res)
+    } catch (err) {
+      console.error('R2 proxy error:', err.message)
+      res.status(500).send('Storage error')
+    }
+  })
+} else {
+  app.use('/uploads', express.static(UPLOADS_DIR))
+}
+
+// Auth: in cloud mode, parses Clerk session and attaches req.userId
+// In self-hosted mode, sets req.userId = null (no-op)
+authStack().forEach(mw => app.use(mw))
+
+// User provisioning (cloud mode only): maps Clerk auth ID → internal UUID.
+// On first authenticated request, creates a row in the users table.
+if (IS_CLOUD) {
+  const provisionCache = new Map()
+  let clerkClient = null
+  try { clerkClient = require('@clerk/express').clerkClient } catch {}
+
+  app.use(async (req, res, next) => {
+    if (!req.userId) return next()
+    const clerkId = req.userId
+
+    if (provisionCache.has(clerkId)) {
+      req.userId = provisionCache.get(clerkId)
+      return next()
+    }
+
+    try {
+      const { rows } = await storage.query('SELECT id FROM users WHERE auth_id = $1', [clerkId])
+      if (rows.length) {
+        provisionCache.set(clerkId, rows[0].id)
+        req.userId = rows[0].id
+        return next()
+      }
+
+      let email = `${clerkId}@auth.local`
+      let name = ''
+      let avatarUrl = ''
+      if (clerkClient) {
+        try {
+          const cu = await clerkClient.users.getUser(clerkId)
+          email = cu.emailAddresses?.[0]?.emailAddress || email
+          name = [cu.firstName, cu.lastName].filter(Boolean).join(' ')
+          avatarUrl = cu.imageUrl || ''
+        } catch (e) { console.error('Clerk user fetch failed:', e.message) }
+      }
+
+      const id = uuidv4()
+      await storage.query(
+        'INSERT INTO users (id, email, name, avatar_url, auth_provider, auth_id) VALUES ($1, $2, $3, $4, $5, $6)',
+        [id, email, name, avatarUrl, 'clerk', clerkId]
+      )
+      provisionCache.set(clerkId, id)
+      req.userId = id
+    } catch (err) {
+      console.error('User provisioning error:', err.message)
+      return res.status(500).json({ error: 'User provisioning failed' })
+    }
+    next()
+  })
+}
+
+// Protect all /api routes in cloud mode
+app.use('/api', requireUser)
 
 // Transcode a video file to H.264 MP4 if its codec isn't web-compatible.
 // Returns the (possibly new) filename. Deletes the original on success.
@@ -601,8 +689,7 @@ function escapeHtml(str) {
 // GET /api/presentations - list summaries
 app.get('/api/presentations', async (req, res) => {
   try {
-    const summaries = await storage.listPresentations()
-    res.json(summaries)
+    res.json(await storage.listPresentations(req.userId))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -636,7 +723,7 @@ app.post('/api/presentations', async (req, res) => {
       delete presentation.thumbnail
     } else if (templateId) {
       // Create from template
-      const template = await storage.getTemplate(templateId)
+      const template = await storage.getTemplate(templateId, req.userId)
       if (template) {
         const cloned = JSON.parse(JSON.stringify(template))
         presentation = {
@@ -680,7 +767,7 @@ app.post('/api/presentations', async (req, res) => {
       }
     }
 
-    const created = await storage.createPresentation(presentation)
+    const created = await storage.createPresentation(presentation, req.userId)
     res.status(201).json(created)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -692,7 +779,7 @@ app.post('/api/presentations', async (req, res) => {
 // GET /api/templates
 app.get('/api/templates', async (req, res) => {
   try {
-    res.json(await storage.listTemplates())
+    res.json(await storage.listTemplates(req.userId))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -701,7 +788,7 @@ app.get('/api/templates', async (req, res) => {
 // POST /api/templates - create new template
 app.post('/api/templates', async (req, res) => {
   try {
-    const template = await storage.createTemplate(req.body)
+    const template = await storage.createTemplate(req.body, req.userId)
     res.status(201).json(template)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -711,7 +798,7 @@ app.post('/api/templates', async (req, res) => {
 // GET /api/templates/:id
 app.get('/api/templates/:id', async (req, res) => {
   try {
-    const template = await storage.getTemplate(req.params.id)
+    const template = await storage.getTemplate(req.params.id, req.userId)
     if (!template) return res.status(404).json({ error: 'Not found' })
     res.json(template)
   } catch (err) {
@@ -722,7 +809,7 @@ app.get('/api/templates/:id', async (req, res) => {
 // PUT /api/templates/:id
 app.put('/api/templates/:id', async (req, res) => {
   try {
-    const updated = await storage.updateTemplate(req.params.id, req.body)
+    const updated = await storage.updateTemplate(req.params.id, req.body, req.userId)
     if (!updated) return res.status(404).json({ error: 'Not found' })
     res.json(updated)
   } catch (err) {
@@ -733,7 +820,7 @@ app.put('/api/templates/:id', async (req, res) => {
 // DELETE /api/templates/:id
 app.delete('/api/templates/:id', async (req, res) => {
   try {
-    const deleted = await storage.deleteTemplate(req.params.id)
+    const deleted = await storage.deleteTemplate(req.params.id, req.userId)
     if (!deleted) return res.status(404).json({ error: 'Not found' })
     res.json({ success: true })
   } catch (err) {
@@ -744,7 +831,7 @@ app.delete('/api/templates/:id', async (req, res) => {
 // POST /api/presentations/:id/save-as-template
 app.post('/api/presentations/:id/save-as-template', async (req, res) => {
   try {
-    const template = await storage.saveAsTemplate(req.params.id, req.body.title)
+    const template = await storage.saveAsTemplate(req.params.id, req.body.title, req.userId)
     if (!template) return res.status(404).json({ error: 'Not found' })
     res.status(201).json(template)
   } catch (err) {
@@ -755,7 +842,7 @@ app.post('/api/presentations/:id/save-as-template', async (req, res) => {
 // GET /api/presentations/:id - get full presentation
 app.get('/api/presentations/:id', async (req, res) => {
   try {
-    const presentation = await storage.getPresentation(req.params.id)
+    const presentation = await storage.getPresentation(req.params.id, req.userId)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
     res.json(presentation)
   } catch (err) {
@@ -766,7 +853,7 @@ app.get('/api/presentations/:id', async (req, res) => {
 // PUT /api/presentations/:id - update
 app.put('/api/presentations/:id', async (req, res) => {
   try {
-    const updated = await storage.updatePresentation(req.params.id, req.body)
+    const updated = await storage.updatePresentation(req.params.id, req.body, req.userId)
     if (!updated) return res.status(404).json({ error: 'Not found' })
     res.json(updated)
   } catch (err) {
@@ -777,7 +864,10 @@ app.put('/api/presentations/:id', async (req, res) => {
 // DELETE /api/presentations/:id
 app.delete('/api/presentations/:id', async (req, res) => {
   try {
-    const deleted = await storage.deletePresentation(req.params.id)
+    if (isR2Enabled()) {
+      await deleteUploadsForPresentation(req.params.id, storage)
+    }
+    const deleted = await storage.deletePresentation(req.params.id, req.userId)
     if (!deleted) return res.status(404).json({ error: 'Not found' })
     res.json({ success: true })
   } catch (err) {
@@ -788,7 +878,7 @@ app.delete('/api/presentations/:id', async (req, res) => {
 // POST /api/presentations/:id/duplicate
 app.post('/api/presentations/:id/duplicate', async (req, res) => {
   try {
-    const copy = await storage.duplicatePresentation(req.params.id)
+    const copy = await storage.duplicatePresentation(req.params.id, req.userId)
     if (!copy) return res.status(404).json({ error: 'Not found' })
     res.status(201).json(copy)
   } catch (err) {
@@ -797,25 +887,43 @@ app.post('/api/presentations/:id/duplicate', async (req, res) => {
 })
 
 // POST /api/upload (legacy global upload)
-app.post('/api/upload', upload.single('file'), (req, res) => {
+app.post('/api/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
-  let filename = req.file.filename
-  if (req.file.mimetype.startsWith('video/')) {
-    const finalPath = transcodeVideoIfNeeded(req.file.path)
-    filename = path.basename(finalPath)
+  try {
+    let filePath = req.file.path
+    if (req.file.mimetype.startsWith('video/')) {
+      filePath = transcodeVideoIfNeeded(filePath)
+    }
+    if (isR2Enabled()) {
+      const result = await r2Upload(filePath, req.file.originalname, req.file.mimetype, {
+        presentationId: null, userId: req.userId, storage,
+      })
+      return res.json(result)
+    }
+    res.json({ url: `/uploads/${path.basename(filePath)}` })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
-  res.json({ url: `/uploads/${filename}` })
 })
 
 // POST /api/presentations/:id/upload (per-presentation upload)
-app.post('/api/presentations/:id/upload', upload.single('file'), (req, res) => {
+app.post('/api/presentations/:id/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
-  let filename = req.file.filename
-  if (req.file.mimetype.startsWith('video/')) {
-    const finalPath = transcodeVideoIfNeeded(req.file.path)
-    filename = path.basename(finalPath)
+  try {
+    let filePath = req.file.path
+    if (req.file.mimetype.startsWith('video/')) {
+      filePath = transcodeVideoIfNeeded(filePath)
+    }
+    if (isR2Enabled()) {
+      const result = await r2Upload(filePath, req.file.originalname, req.file.mimetype, {
+        presentationId: req.params.id, userId: req.userId, storage,
+      })
+      return res.json(result)
+    }
+    res.json({ url: `/uploads/${req.params.id}/${path.basename(filePath)}` })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
-  res.json({ url: `/uploads/${req.params.id}/${filename}` })
 })
 
 // POST /api/presentations/:id/import-pptx — convert PPTX to per-slide PNG images
@@ -845,16 +953,25 @@ app.post('/api/presentations/:id/import-pptx', upload.single('file'), async (req
         return n(a) - n(b)
       })
 
-    const uploadDir = path.join(UPLOADS_DIR, req.params.id)
-    fs.ensureDirSync(uploadDir)
-
-    const urls = pngFiles.map(f => {
-      const id = uuidv4()
-      fs.copySync(path.join(tmpDir, f), path.join(uploadDir, `${id}.png`))
-      return `/uploads/${req.params.id}/${id}.png`
-    })
-
-    res.json({ urls })
+    if (isR2Enabled()) {
+      const urls = []
+      for (const f of pngFiles) {
+        const result = await r2Upload(path.join(tmpDir, f), f, 'image/png', {
+          presentationId: req.params.id, userId: req.userId, storage,
+        })
+        urls.push(result.url)
+      }
+      res.json({ urls })
+    } else {
+      const uploadDir = path.join(UPLOADS_DIR, req.params.id)
+      fs.ensureDirSync(uploadDir)
+      const urls = pngFiles.map(f => {
+        const id = uuidv4()
+        fs.copySync(path.join(tmpDir, f), path.join(uploadDir, `${id}.png`))
+        return `/uploads/${req.params.id}/${id}.png`
+      })
+      res.json({ urls })
+    }
   } catch (err) {
     console.error('PPTX import error:', err.message)
     res.status(500).json({ error: err.message })
@@ -893,7 +1010,7 @@ app.post('/api/render-manim', express.json(), async (req, res) => {
 // GET /api/presentations/:id/export - download HTML
 app.get('/api/presentations/:id/export', async (req, res) => {
   try {
-    const presentation = await storage.getPresentation(req.params.id)
+    const presentation = await storage.getPresentation(req.params.id, req.userId)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
     const html = generateRevealHTML(presentation)
     const filename = `${(presentation.title || 'presentation').replace(/[^a-z0-9]/gi, '_')}.html`
@@ -908,7 +1025,7 @@ app.get('/api/presentations/:id/export', async (req, res) => {
 // GET /api/presentations/:id/present - serve in browser
 app.get('/api/presentations/:id/present', async (req, res) => {
   try {
-    const presentation = await storage.getPresentation(req.params.id)
+    const presentation = await storage.getPresentation(req.params.id, req.userId)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
     const html = generateRevealHTML(presentation)
     res.setHeader('Content-Type', 'text/html')
@@ -926,7 +1043,7 @@ app.get('/api/presentations/:id/present', async (req, res) => {
 // POST /api/presentations/:id/share - enable sharing, return token
 app.post('/api/presentations/:id/share', async (req, res) => {
   try {
-    const result = await storage.createShareToken(req.params.id)
+    const result = await storage.createShareToken(req.params.id, req.userId)
     if (!result) return res.status(404).json({ error: 'Not found' })
     res.json(result)
   } catch (err) {
@@ -937,7 +1054,7 @@ app.post('/api/presentations/:id/share', async (req, res) => {
 // DELETE /api/presentations/:id/share - disable sharing
 app.delete('/api/presentations/:id/share', async (req, res) => {
   try {
-    res.json(await storage.deleteShareToken(req.params.id))
+    res.json(await storage.deleteShareToken(req.params.id, req.userId))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -946,7 +1063,7 @@ app.delete('/api/presentations/:id/share', async (req, res) => {
 // GET /api/presentations/:id/share - get share status
 app.get('/api/presentations/:id/share', async (req, res) => {
   try {
-    res.json(await storage.getShareStatus(req.params.id))
+    res.json(await storage.getShareStatus(req.params.id, req.userId))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -957,6 +1074,7 @@ app.get('/share/:token', async (req, res) => {
   try {
     const presentation = await storage.getSharedPresentation(req.params.token)
     if (!presentation) return res.status(404).send('Presentation not found or sharing disabled')
+
     const html = generateRevealHTML(presentation)
     res.setHeader('Content-Type', 'text/html')
     res.send(html)
@@ -967,10 +1085,10 @@ app.get('/share/:token', async (req, res) => {
 
 // --- Version History ---
 
-// POST /api/presentations/:id/snapshot - save named snapshot
+// POST /api/presentations/:id/snapshot
 app.post('/api/presentations/:id/snapshot', async (req, res) => {
   try {
-    const result = await storage.createSnapshot(req.params.id, req.body.name)
+    const result = await storage.createSnapshot(req.params.id, req.body.name, req.userId)
     if (!result) return res.status(404).json({ error: 'Not found' })
     res.json(result)
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -979,14 +1097,14 @@ app.post('/api/presentations/:id/snapshot', async (req, res) => {
 // GET /api/presentations/:id/snapshots - list snapshots
 app.get('/api/presentations/:id/snapshots', async (req, res) => {
   try {
-    res.json(await storage.listSnapshots(req.params.id))
+    res.json(await storage.listSnapshots(req.params.id, req.userId))
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // POST /api/presentations/:id/restore/:snapshotId - restore a snapshot
 app.post('/api/presentations/:id/restore/:snapshotId', async (req, res) => {
   try {
-    const restored = await storage.restoreSnapshot(req.params.id, req.params.snapshotId)
+    const restored = await storage.restoreSnapshot(req.params.id, req.params.snapshotId, req.userId)
     if (!restored) return res.status(404).json({ error: 'Snapshot or presentation not found' })
     res.json(restored)
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -995,7 +1113,7 @@ app.post('/api/presentations/:id/restore/:snapshotId', async (req, res) => {
 // DELETE /api/presentations/:id/snapshots/:snapshotId
 app.delete('/api/presentations/:id/snapshots/:snapshotId', async (req, res) => {
   try {
-    await storage.deleteSnapshot(req.params.id, req.params.snapshotId)
+    await storage.deleteSnapshot(req.params.id, req.params.snapshotId, req.userId)
     res.json({ success: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -1073,9 +1191,9 @@ app.post('/api/rclone/sync', async (req, res) => {
     // Clean sync dir
     fs.emptyDirSync(SYNC_DIR)
 
-    const allSummaries = await storage.listPresentations()
+    const _sums = await storage.listPresentations(req.userId)
     const presentations = []
-    for (const s of allSummaries) { const p = await storage.getPresentation(s.id); if (p) presentations.push(p) }
+    for (const s of _sums) { const p = await storage.getPresentation(s.id, req.userId); if (p) presentations.push(p) }
     for (const pres of presentations) {
       const folderName = (pres.title || 'untitled').replace(/[^a-z0-9_-]/gi, '_').toLowerCase()
       const folder = path.join(SYNC_DIR, folderName)
@@ -1087,10 +1205,12 @@ app.post('/api/rclone/sync', async (req, res) => {
       fs.writeFileSync(path.join(folder, 'presentation.json'), JSON.stringify(pres, null, 2))
     }
 
-    // Also copy uploads directory
-    const uploadsSync = path.join(SYNC_DIR, '_uploads')
-    if (fs.existsSync(UPLOADS_DIR)) {
-      fs.copySync(UPLOADS_DIR, uploadsSync)
+    // Copy local uploads (skip in R2 mode — files are already in cloud storage)
+    if (!isR2Enabled()) {
+      const uploadsSync = path.join(SYNC_DIR, '_uploads')
+      if (fs.existsSync(UPLOADS_DIR)) {
+        fs.copySync(UPLOADS_DIR, uploadsSync)
+      }
     }
 
     // Run rclone sync
@@ -1115,7 +1235,7 @@ app.post('/api/rclone/sync-single', async (req, res) => {
     if (!remote || !presentationId) return res.status(400).json({ error: 'Remote and presentationId required' })
     const dest = remotePath || '/slides-backup'
 
-    const pres = await storage.getPresentation(presentationId)
+    const pres = await storage.getPresentation(presentationId, req.userId)
     if (!pres) return res.status(404).json({ error: 'Presentation not found' })
 
     fs.ensureDirSync(SYNC_DIR)
@@ -1143,7 +1263,7 @@ app.post('/api/rclone/sync-single', async (req, res) => {
 // GET /api/github/config - get saved config (token is masked)
 app.get('/api/github/config', async (req, res) => {
   try {
-    const config = await storage.getGithubConfig()
+    const config = await storage.getGithubConfig(req.userId)
     res.json({ owner: config.owner || '', repo: config.repo || '', hasToken: !!config.token })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -1153,7 +1273,7 @@ app.get('/api/github/config', async (req, res) => {
 // POST /api/github/config - save config
 app.post('/api/github/config', async (req, res) => {
   try {
-    const updated = await storage.setGithubConfig(req.body)
+    const updated = await storage.setGithubConfig(req.body, req.userId)
     res.json({ owner: updated.owner || '', repo: updated.repo || '', hasToken: !!updated.token })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -1163,12 +1283,12 @@ app.post('/api/github/config', async (req, res) => {
 // POST /api/presentations/:id/github/push - push presentation to GitHub
 app.post('/api/presentations/:id/github/push', async (req, res) => {
   try {
-    const config = await storage.getGithubConfig()
+    const config = await storage.getGithubConfig(req.userId)
     if (!config.token || !config.owner || !config.repo) {
       return res.status(400).json({ error: 'GitHub not configured. Set token, owner, and repo first.' })
     }
 
-    const presentation = await storage.getPresentation(req.params.id)
+    const presentation = await storage.getPresentation(req.params.id, req.userId)
     if (!presentation) return res.status(404).json({ error: 'Presentation not found' })
 
     const { token, owner, repo } = config
