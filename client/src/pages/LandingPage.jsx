@@ -1,0 +1,161 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Jessica Birky
+
+import { Pencil, Presentation, Layout, Code2, Download, Server, Check, ArrowRight } from 'lucide-react'
+
+const FEATURES = [
+  { icon: Pencil, title: 'WYSIWYG Editor', desc: 'Edit slides visually with a rich text editor. Drag, drop, and resize — no code required.' },
+  { icon: Presentation, title: 'Powered by reveal.js', desc: 'Beautiful presentations with smooth transitions, speaker notes, and full-screen mode.' },
+  { icon: Layout, title: 'Theme Gallery', desc: 'Start from built-in templates or create your own custom themes and reuse them.' },
+  { icon: Code2, title: 'LaTeX & Code', desc: 'First-class support for math equations, syntax-highlighted code blocks, and Markdown.' },
+  { icon: Download, title: 'Export Anywhere', desc: 'Export to standalone HTML, push to GitHub, or sync to cloud storage with one click.' },
+  { icon: Server, title: 'Self-Hostable', desc: 'Run on your own server with Docker. Full data ownership, no vendor lock-in.' },
+]
+
+const PLANS = [
+  {
+    name: 'Free',
+    price: '$0',
+    period: '/mo',
+    features: ['5 presentations', 'Basic themes', '100 MB storage', 'Community support'],
+    cta: 'Get Started',
+    highlighted: false,
+  },
+  {
+    name: 'Pro',
+    price: '$9',
+    period: '/mo',
+    features: ['Unlimited presentations', 'All themes & templates', '10 GB storage', 'Priority support', 'Custom branding'],
+    cta: 'Start Free Trial',
+    highlighted: true,
+  },
+  {
+    name: 'Team',
+    price: '$19',
+    period: '/user/mo',
+    features: ['Everything in Pro', 'Team collaboration', 'Shared templates', 'Admin controls', 'SSO'],
+    cta: 'Contact Us',
+    highlighted: false,
+  },
+]
+
+export default function LandingPage({ onSignIn }) {
+  return (
+    <div className="landing-page">
+      {/* Nav */}
+      <nav className="landing-nav">
+        <div className="landing-nav-inner">
+          <div className="landing-logo">
+            <span style={{ color: 'var(--accent)' }}>P</span>arallax
+          </div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <button className="landing-btn-ghost" onClick={onSignIn}>Sign In</button>
+            <button className="landing-btn-primary" onClick={onSignIn}>
+              Get Started <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <div className="landing-scroll">
+        {/* Hero */}
+        <section className="landing-hero">
+          <h1 className="landing-hero-title">
+            Create stunning presentations,<br />
+            <span style={{ color: 'var(--accent)' }}>effortlessly.</span>
+          </h1>
+          <p className="landing-hero-sub">
+            A powerful WYSIWYG editor powered by reveal.js. Design beautiful slides
+            with drag-and-drop, rich media, and professional themes.
+          </p>
+          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button className="landing-btn-primary landing-btn-lg" onClick={onSignIn}>
+              Get Started Free <ArrowRight size={18} />
+            </button>
+            <a href="https://github.com/jbirky/revealjs_gui" target="_blank" rel="noopener noreferrer"
+              className="landing-btn-ghost landing-btn-lg">
+              View on GitHub
+            </a>
+          </div>
+
+          {/* Hero visual */}
+          <div className="landing-hero-visual">
+            <div className="landing-mockup">
+              <div className="landing-mockup-toolbar">
+                <div className="landing-mockup-dot" style={{ background: '#ef4444' }} />
+                <div className="landing-mockup-dot" style={{ background: '#eab308' }} />
+                <div className="landing-mockup-dot" style={{ background: '#22c55e' }} />
+              </div>
+              <div className="landing-mockup-slide">
+                <div style={{ width: '60%', height: 12, background: 'rgba(255,255,255,0.8)', borderRadius: 6, marginBottom: 12 }} />
+                <div style={{ width: '40%', height: 8, background: 'rgba(255,255,255,0.3)', borderRadius: 4, marginBottom: 20 }} />
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ flex: 1, height: 60, background: 'rgba(99,102,241,0.2)', borderRadius: 6, border: '1px solid rgba(99,102,241,0.3)' }} />
+                  <div style={{ flex: 1, height: 60, background: 'rgba(99,102,241,0.15)', borderRadius: 6, border: '1px solid rgba(99,102,241,0.2)' }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Features */}
+        <section className="landing-section">
+          <h2 className="landing-section-title">Everything you need</h2>
+          <p className="landing-section-sub">
+            From simple slideshows to complex academic presentations — Parallax has you covered.
+          </p>
+          <div className="landing-features-grid">
+            {FEATURES.map(f => (
+              <div key={f.title} className="landing-feature-card">
+                <div className="landing-feature-icon">
+                  <f.icon size={24} />
+                </div>
+                <h3>{f.title}</h3>
+                <p>{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Pricing */}
+        <section className="landing-section">
+          <h2 className="landing-section-title">Simple pricing</h2>
+          <p className="landing-section-sub">
+            Start for free, upgrade when you need more.
+          </p>
+          <div className="landing-pricing-grid">
+            {PLANS.map(plan => (
+              <div key={plan.name} className={`landing-price-card ${plan.highlighted ? 'landing-price-highlighted' : ''}`}>
+                {plan.highlighted && <div className="landing-price-badge">Most Popular</div>}
+                <h3>{plan.name}</h3>
+                <div className="landing-price-amount">
+                  {plan.price}<span>{plan.period}</span>
+                </div>
+                <ul>
+                  {plan.features.map(f => (
+                    <li key={f}><Check size={16} /> {f}</li>
+                  ))}
+                </ul>
+                <button
+                  className={plan.highlighted ? 'landing-btn-primary' : 'landing-btn-ghost'}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  onClick={onSignIn}
+                >
+                  {plan.cta}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="landing-footer">
+          <div className="landing-logo" style={{ fontSize: 18 }}>
+            <span style={{ color: 'var(--accent)' }}>P</span>arallax
+          </div>
+          <p>&copy; 2026 Jessica Birky. Licensed under AGPL-3.0.</p>
+        </footer>
+      </div>
+    </div>
+  )
+}

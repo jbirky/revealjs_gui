@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth, SignIn, SignedIn, SignedOut } from '@clerk/clerk-react'
 import HomePage from './pages/HomePage'
 import EditorPage from './pages/EditorPage'
+import LandingPage from './pages/LandingPage'
 import { setTokenGetter } from './utils/api'
 
 const isCloud = import.meta.env.VITE_PARALLAX_MODE === 'cloud'
@@ -13,27 +14,38 @@ function TokenBridge() {
 }
 
 function AuthGateCloud({ children }) {
+  const [showAuth, setShowAuth] = useState(false)
+
   return (
     <>
       <TokenBridge />
       <SignedOut>
-        <div style={{
-          minHeight: '100vh', display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 32,
-          background: 'var(--bg-primary, #0f0f1a)',
-        }}>
-          <div style={{ textAlign: 'center' }}>
-            <h1 style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-primary, #fff)', margin: 0 }}>
-              <span style={{ color: 'var(--accent, #6366f1)' }}>P</span>arallax
-            </h1>
-            <p style={{ color: 'var(--text-muted, #888)', marginTop: 8, fontSize: 15 }}>
-              Sign in to create and manage presentations
-            </p>
+        {showAuth ? (
+          <div style={{
+            minHeight: '100vh', display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 32,
+            background: 'var(--bg-primary, #0f0f1a)',
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <h1 style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-primary, #fff)', margin: 0, cursor: 'pointer' }}
+                  onClick={() => setShowAuth(false)}>
+                <span style={{ color: 'var(--accent, #6366f1)' }}>P</span>arallax
+              </h1>
+              <p style={{ color: 'var(--text-muted, #888)', marginTop: 8, fontSize: 15 }}>
+                Sign in to create and manage presentations
+              </p>
+            </div>
+            <SignIn routing="hash" appearance={{
+              variables: { colorPrimary: '#6366f1', colorBackground: '#1e1e2e', colorText: '#e0e0e0', colorInputBackground: '#2a2a3e', colorInputText: '#e0e0e0' },
+            }} />
+            <button onClick={() => setShowAuth(false)}
+              style={{ color: 'var(--text-muted)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}>
+              &larr; Back to home
+            </button>
           </div>
-          <SignIn routing="hash" appearance={{
-            variables: { colorPrimary: '#6366f1', colorBackground: '#1e1e2e', colorText: '#e0e0e0', colorInputBackground: '#2a2a3e', colorInputText: '#e0e0e0' },
-          }} />
-        </div>
+        ) : (
+          <LandingPage onSignIn={() => setShowAuth(true)} />
+        )}
       </SignedOut>
       <SignedIn>{children}</SignedIn>
     </>
