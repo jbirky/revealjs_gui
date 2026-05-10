@@ -4,7 +4,7 @@ This tutorial walks you through creating a complete presentation from scratch â€
 
 ## 1. Creating a new presentation
 
-1. Open Slides Editor in your browser (default: `http://localhost:3002`).
+1. Open Parallax in your browser (default: `http://localhost:3002`).
 2. On the home screen, click **New Presentation**.
 3. A dialog appears asking you to name your presentation. Enter a name (e.g., "My First Deck") and click **Create**.
 

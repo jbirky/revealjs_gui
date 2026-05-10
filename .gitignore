@@ -3,6 +3,7 @@ client/dist/
 dist-electron/
 server/data/
 server/uploads/
+plans/
 *.log
 
 # Environment secrets

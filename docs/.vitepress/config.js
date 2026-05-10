@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'Slides Editor',
+  title: 'Parallax',
   description: 'A self-hostable WYSIWYG presentation editor powered by reveal.js',
   base: '/revealjs_gui/',
   ignoreDeadLinks: true,
@@ -40,11 +40,32 @@ export default defineConfig({
       ],
       '/tutorials/': [
         {
-          text: 'Tutorials',
+          text: 'Getting Started',
           items: [
             { text: 'Your First Presentation', link: '/tutorials/first-presentation' },
             { text: 'Academic Slides', link: '/tutorials/academic-slides' },
-            { text: 'Using LaTeX & Math', link: '/tutorials/using-latex' }
+          ]
+        },
+        {
+          text: 'Tools',
+          items: [
+            { text: 'Text & Typography', link: '/tutorials/text-typography' },
+            { text: 'Images', link: '/tutorials/images' },
+            { text: 'Shapes & Drawing', link: '/tutorials/shapes-drawing' },
+            { text: 'Code, LaTeX & Markdown', link: '/tutorials/code-math' },
+            { text: 'Charts & Tables', link: '/tutorials/charts-tables' },
+            { text: 'HTML Embeds & p5.js', link: '/tutorials/html-embeds' },
+            { text: 'Kinetic Text', link: '/tutorials/kinetic-text' },
+            { text: 'Video & Audio', link: '/tutorials/media' },
+          ]
+        },
+        {
+          text: 'Presentation',
+          items: [
+            { text: 'Animations & Fragments', link: '/tutorials/animations' },
+            { text: 'Transitions', link: '/tutorials/transitions' },
+            { text: 'Presenting & Export', link: '/tutorials/presenting' },
+            { text: 'Using LaTeX & Math', link: '/tutorials/using-latex' },
           ]
         }
       ]

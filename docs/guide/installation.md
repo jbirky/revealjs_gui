@@ -1,10 +1,10 @@
 # Installation
 
-Slides Editor can be run via Docker, as a desktop app, or directly from source with Node.js.
+Parallax can be run via Docker, as a desktop app, or directly from source with Node.js.
 
 ## Option 1: Docker (Recommended)
 
-Docker is the easiest way to run Slides Editor as a persistent server.
+Docker is the easiest way to run Parallax as a persistent server.
 
 ### Prerequisites
 
@@ -59,7 +59,7 @@ Go to the [Releases page](https://github.com/jbirky/revealjs_gui/releases) and d
 | Platform | File |
 |---|---|
 | Linux (AppImage) | `Slides-Editor-x.x.x.AppImage` |
-| Linux (Debian/Ubuntu) | `slides-editor_x.x.x_amd64.deb` |
+| Linux (Debian/Ubuntu) | `parallax_x.x.x_amd64.deb` |
 | macOS | `Slides-Editor-x.x.x.dmg` |
 | Windows | `Slides-Editor-Setup-x.x.x.exe` |
 
@@ -73,9 +73,9 @@ chmod +x Slides-Editor-*.AppImage
 ### Linux .deb
 
 ```bash
-sudo dpkg -i slides-editor_*.deb
+sudo dpkg -i parallax_*.deb
 # Then launch from your application menu or run:
-slides-editor
+parallax
 ```
 
 ::: tip

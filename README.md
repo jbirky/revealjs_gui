@@ -1,4 +1,4 @@
-# Slides Editor
+# Parallax
 
 A self-hostable WYSIWYG presentation editor powered by [reveal.js](https://revealjs.com/). Build and present slides in the browser — no account, no cloud, no tracking. Also available as a standalone desktop app via Electron.
 
@@ -78,7 +78,7 @@ A self-hostable WYSIWYG presentation editor powered by [reveal.js](https://revea
 
 ### Option A — Desktop App (Electron)
 
-Run Slides Editor as a native desktop application. No server, no Docker, no browser needed.
+Run Parallax as a native desktop application. No server, no Docker, no browser needed.
 
 #### Pre-built packages
 
@@ -133,9 +133,9 @@ The desktop app stores data in your OS app data folder:
 
 | Platform | Path |
 |----------|------|
-| Linux | `~/.config/Slides Editor/` |
-| macOS | `~/Library/Application Support/Slides Editor/` |
-| Windows | `%APPDATA%/Slides Editor/` |
+| Linux | `~/.config/Parallax/` |
+| macOS | `~/Library/Application Support/Parallax/` |
+| Windows | `%APPDATA%/Parallax/` |
 
 ---
 
@@ -405,3 +405,11 @@ slides.example.com {
 | Desktop app | Electron |
 | Cloud sync | rclone |
 | Storage | JSON files + local filesystem |
+
+## License
+
+Parallax is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+
+You are free to use, modify, and self-host Parallax. If you modify the source and offer it as a network service, you must make your modifications available under the same license. See the [LICENSE](LICENSE) file for full terms.
+
+Copyright (c) 2026 Jessica Birky
