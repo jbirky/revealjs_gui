@@ -1663,6 +1663,19 @@ class MyScene(Scene):
         {isTemplate && (
           <span style={{ fontSize: 11, background: '#f59e0b', color: '#000', padding: '2px 8px', borderRadius: 4, fontWeight: 600, flexShrink: 0, marginRight: 4 }}>TEMPLATE</span>
         )}
+        {presentation.expiresAt && (() => {
+          const days = Math.ceil((new Date(presentation.expiresAt) - Date.now()) / 86400000)
+          if (days > 14) return null
+          return (
+            <span style={{
+              fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 600, flexShrink: 0, marginRight: 4,
+              background: days <= 7 ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)',
+              color: days <= 7 ? '#ef4444' : '#f59e0b',
+            }}>
+              {days <= 0 ? 'EXPIRED' : `Expires in ${days}d`}
+            </span>
+          )
+        })()}
         <input
           className="title-input"
           value={presentation.title || ''}

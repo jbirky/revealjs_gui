@@ -41,12 +41,12 @@ class PgStorage extends StorageInterface {
 
   async getPresentation(id, userId) {
     const { rows } = await this.query(
-      'SELECT id, data, created_at as "createdAt", updated_at as "updatedAt" FROM presentations WHERE id = $1 AND is_template = false',
+      'SELECT id, data, created_at as "createdAt", updated_at as "updatedAt", expires_at as "expiresAt" FROM presentations WHERE id = $1 AND is_template = false',
       [id]
     )
     if (!rows.length) return null
     const r = rows[0]
-    return { ...r.data, id: r.id, createdAt: r.createdAt, updatedAt: r.updatedAt }
+    return { ...r.data, id: r.id, createdAt: r.createdAt, updatedAt: r.updatedAt, expiresAt: r.expiresAt || null }
   }
 
   async createPresentation(data, userId, expiresAt = null) {

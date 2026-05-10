@@ -322,6 +322,14 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
             <Plus size={16} />
             New Presentation
           </button>
+          {isCloud && planInfo && (
+            <span style={{
+              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+              background: planInfo.plan === 'pro' ? 'rgba(99,102,241,0.15)' : planInfo.plan === 'team' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.08)',
+              color: planInfo.plan === 'pro' ? '#818cf8' : planInfo.plan === 'team' ? '#22c55e' : 'var(--text-muted)',
+              textTransform: 'uppercase', letterSpacing: 0.5,
+            }}>{planInfo.plan || 'free'}</span>
+          )}
           {isCloud && <UserButton appearance={{ elements: { avatarBox: { width: 32, height: 32 } } }} />}
         </div>
       </div>
@@ -374,6 +382,14 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
                     <div className="card-info">
                       <h3>{pres.title || 'Untitled'}</h3>
                       <p>{pres.slideCount} slide{pres.slideCount !== 1 ? 's' : ''} &middot; {formatDate(pres.updatedAt)}</p>
+                      {isCloud && pres.expiresAt && (() => {
+                        const days = Math.ceil((new Date(pres.expiresAt) - Date.now()) / 86400000)
+                        return (
+                          <p style={{ fontSize: 11, color: days <= 7 ? '#ef4444' : '#f59e0b', margin: '2px 0 0' }}>
+                            {days <= 0 ? 'Expired' : `Expires in ${days} day${days !== 1 ? 's' : ''}`}
+                          </p>
+                        )
+                      })()}
                     </div>
                     <div className="card-actions">
                       <button
