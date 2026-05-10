@@ -479,7 +479,7 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 .landing-scroll { flex: 1; overflow-y: auto; }
 .landing-nav {
   position: sticky; top: 0; z-index: 100;
-  background: rgba(15, 15, 23, 0.85); backdrop-filter: blur(12px);
+  background: rgba(30, 30, 50, 0.9); backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
 }
 .landing-nav-inner {

@@ -36,7 +36,8 @@ function AuthGateCloud({ children }) {
               </p>
             </div>
             <SignIn routing="hash" appearance={{
-              variables: { colorPrimary: '#6366f1', colorBackground: '#1e1e2e', colorText: '#e0e0e0', colorInputBackground: '#2a2a3e', colorInputText: '#e0e0e0' },
+              variables: { colorPrimary: '#6366f1', colorBackground: '#2a2a3e', colorText: '#f0f0f0', colorInputBackground: '#3a3a52', colorInputText: '#f0f0f0' },
+              elements: { socialButtonsBlockButton: { backgroundColor: '#ffffff', color: '#1a1a2e', borderColor: '#e0e0e0' } },
             }} />
             <button onClick={() => setShowAuth(false)}
               style={{ color: 'var(--text-muted)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}>

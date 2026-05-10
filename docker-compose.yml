@@ -2,11 +2,20 @@ services:
   parallax-stable:
     build:
       context: https://github.com/jbirky/revealjs_gui.git#main
+      args:
+        - VITE_PARALLAX_MODE=cloud
+        - VITE_CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
     ports:
       - "127.0.0.1:3002:3002"
     volumes:
       - revealjs-data:/app/server/data
       - revealjs-uploads:/app/server/uploads
+    env_file:
+      - .env
+    environment:
+      - PARALLAX_MODE=cloud
+      - PARALLAX_DB=postgres
+      - NODE_ENV=production
     restart: unless-stopped
 
   parallax-dev:
