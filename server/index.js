@@ -14,48 +14,21 @@ const app = express()
 const PORT = process.env.PORT || 3002
 
 // Support custom data directory (used by Electron to write to user's app data folder)
+const createStorage = require('./storage')
+const storage = createStorage()
+
 const DATA_DIR = process.env.SLIDES_DATA_DIR || path.join(__dirname, 'data')
 const UPLOADS_BASE = process.env.SLIDES_UPLOADS_DIR || path.join(__dirname, 'uploads')
-
-const DATA_FILE = path.join(DATA_DIR, 'presentations.json')
-const GITHUB_CONFIG_FILE = path.join(DATA_DIR, 'github-config.json')
 const UPLOADS_DIR = UPLOADS_BASE
-const SHARE_FILE = path.join(DATA_DIR, 'share-tokens.json')
-const TEMPLATES_FILE = path.join(DATA_DIR, 'templates.json')
 const RCLONE_CONFIG_FILE = path.join(DATA_DIR, 'rclone.conf')
 const SYNC_DIR = path.join(DATA_DIR, 'sync-export')
-const HISTORY_DIR = path.join(DATA_DIR, 'history')
 
 // Ensure directories exist
 fs.ensureDirSync(DATA_DIR)
 fs.ensureDirSync(UPLOADS_DIR)
 
-// Initialize share tokens file if missing
-if (!fs.existsSync(SHARE_FILE)) {
-  fs.writeJsonSync(SHARE_FILE, {})
-}
-
-// Initialize templates file if missing
-if (!fs.existsSync(TEMPLATES_FILE)) {
-  fs.writeJsonSync(TEMPLATES_FILE, [])
-}
-
-// Helper: read/write templates
-async function readTemplates() { return fs.readJson(TEMPLATES_FILE) }
-async function writeTemplates(data) { return fs.writeJson(TEMPLATES_FILE, data, { spaces: 2 }) }
-
-// Initialize data file if missing
-if (!fs.existsSync(DATA_FILE)) {
-  fs.writeJsonSync(DATA_FILE, [])
-}
-
-// Initialize GitHub config if missing
-if (!fs.existsSync(GITHUB_CONFIG_FILE)) {
-  fs.writeJsonSync(GITHUB_CONFIG_FILE, { token: '', owner: '', repo: '' })
-}
-
 // Multer storage config — destination is per-presentation when req.params.id is present
-const storage = multer.diskStorage({
+const multerStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = req.params.id ? path.join(UPLOADS_DIR, req.params.id) : UPLOADS_DIR
     fs.ensureDirSync(dir)
@@ -66,7 +39,7 @@ const storage = multer.diskStorage({
     cb(null, `${uuidv4()}${ext}`)
   }
 })
-const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } }) // 500MB limit for video
+const upload = multer({ storage: multerStorage, limits: { fileSize: 500 * 1024 * 1024 } }) // 500MB limit for video
 
 app.use(cors())
 app.use(express.json({ limit: '50mb' }))
@@ -104,15 +77,7 @@ function transcodeVideoIfNeeded(filePath) {
   }
 }
 
-// Helper: read all presentations
-async function readPresentations() {
-  return fs.readJson(DATA_FILE)
-}
 
-// Helper: write all presentations
-async function writePresentations(data) {
-  return fs.writeJson(DATA_FILE, data, { spaces: 2 })
-}
 
 // Shape SVG rendering helper (mirrors client/src/utils/shapeUtils.js)
 function shapeSvgString(el) {
@@ -636,17 +601,7 @@ function escapeHtml(str) {
 // GET /api/presentations - list summaries
 app.get('/api/presentations', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const summaries = presentations.map(p => ({
-      id: p.id,
-      title: p.title,
-      theme: p.theme,
-      transition: p.transition,
-      slideCount: (p.slides || []).length,
-      updatedAt: p.updatedAt,
-      createdAt: p.createdAt,
-      thumbnail: (p.slides && p.slides[0]) ? p.slides[0].background : null
-    }))
+    const summaries = await storage.listPresentations()
     res.json(summaries)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -681,8 +636,7 @@ app.post('/api/presentations', async (req, res) => {
       delete presentation.thumbnail
     } else if (templateId) {
       // Create from template
-      const templates = await readTemplates()
-      const template = templates.find(t => t.id === templateId)
+      const template = await storage.getTemplate(templateId)
       if (template) {
         const cloned = JSON.parse(JSON.stringify(template))
         presentation = {
@@ -726,10 +680,8 @@ app.post('/api/presentations', async (req, res) => {
       }
     }
 
-    const presentations = await readPresentations()
-    presentations.push(presentation)
-    await writePresentations(presentations)
-    res.status(201).json(presentation)
+    const created = await storage.createPresentation(presentation)
+    res.status(201).json(created)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -740,18 +692,7 @@ app.post('/api/presentations', async (req, res) => {
 // GET /api/templates
 app.get('/api/templates', async (req, res) => {
   try {
-    const templates = await readTemplates()
-    const summaries = templates.map(t => ({
-      id: t.id,
-      title: t.title,
-      theme: t.theme,
-      transition: t.transition,
-      slideCount: (t.slides || []).length,
-      updatedAt: t.updatedAt,
-      createdAt: t.createdAt,
-      thumbnail: (t.slides && t.slides[0]) ? t.slides[0].background : null
-    }))
-    res.json(summaries)
+    res.json(await storage.listTemplates())
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -760,17 +701,7 @@ app.get('/api/templates', async (req, res) => {
 // POST /api/templates - create new template
 app.post('/api/templates', async (req, res) => {
   try {
-    const now = new Date().toISOString()
-    const template = {
-      ...req.body,
-      id: uuidv4(),
-      isTemplate: true,
-      createdAt: now,
-      updatedAt: now
-    }
-    const templates = await readTemplates()
-    templates.push(template)
-    await writeTemplates(templates)
+    const template = await storage.createTemplate(req.body)
     res.status(201).json(template)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -780,8 +711,7 @@ app.post('/api/templates', async (req, res) => {
 // GET /api/templates/:id
 app.get('/api/templates/:id', async (req, res) => {
   try {
-    const templates = await readTemplates()
-    const template = templates.find(t => t.id === req.params.id)
+    const template = await storage.getTemplate(req.params.id)
     if (!template) return res.status(404).json({ error: 'Not found' })
     res.json(template)
   } catch (err) {
@@ -792,12 +722,9 @@ app.get('/api/templates/:id', async (req, res) => {
 // PUT /api/templates/:id
 app.put('/api/templates/:id', async (req, res) => {
   try {
-    const templates = await readTemplates()
-    const index = templates.findIndex(t => t.id === req.params.id)
-    if (index === -1) return res.status(404).json({ error: 'Not found' })
-    templates[index] = { ...templates[index], ...req.body, id: req.params.id, updatedAt: new Date().toISOString() }
-    await writeTemplates(templates)
-    res.json(templates[index])
+    const updated = await storage.updateTemplate(req.params.id, req.body)
+    if (!updated) return res.status(404).json({ error: 'Not found' })
+    res.json(updated)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -806,11 +733,8 @@ app.put('/api/templates/:id', async (req, res) => {
 // DELETE /api/templates/:id
 app.delete('/api/templates/:id', async (req, res) => {
   try {
-    const templates = await readTemplates()
-    const index = templates.findIndex(t => t.id === req.params.id)
-    if (index === -1) return res.status(404).json({ error: 'Not found' })
-    templates.splice(index, 1)
-    await writeTemplates(templates)
+    const deleted = await storage.deleteTemplate(req.params.id)
+    if (!deleted) return res.status(404).json({ error: 'Not found' })
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -820,21 +744,8 @@ app.delete('/api/templates/:id', async (req, res) => {
 // POST /api/presentations/:id/save-as-template
 app.post('/api/presentations/:id/save-as-template', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const pres = presentations.find(p => p.id === req.params.id)
-    if (!pres) return res.status(404).json({ error: 'Not found' })
-    const now = new Date().toISOString()
-    const template = {
-      ...JSON.parse(JSON.stringify(pres)),
-      id: uuidv4(),
-      title: (req.body.title || pres.title || 'Untitled') + ' (template)',
-      isTemplate: true,
-      createdAt: now,
-      updatedAt: now
-    }
-    const templates = await readTemplates()
-    templates.push(template)
-    await writeTemplates(templates)
+    const template = await storage.saveAsTemplate(req.params.id, req.body.title)
+    if (!template) return res.status(404).json({ error: 'Not found' })
     res.status(201).json(template)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -844,8 +755,7 @@ app.post('/api/presentations/:id/save-as-template', async (req, res) => {
 // GET /api/presentations/:id - get full presentation
 app.get('/api/presentations/:id', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === req.params.id)
+    const presentation = await storage.getPresentation(req.params.id)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
     res.json(presentation)
   } catch (err) {
@@ -856,17 +766,9 @@ app.get('/api/presentations/:id', async (req, res) => {
 // PUT /api/presentations/:id - update
 app.put('/api/presentations/:id', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const index = presentations.findIndex(p => p.id === req.params.id)
-    if (index === -1) return res.status(404).json({ error: 'Not found' })
-    presentations[index] = {
-      ...presentations[index],
-      ...req.body,
-      id: req.params.id,
-      updatedAt: new Date().toISOString()
-    }
-    await writePresentations(presentations)
-    res.json(presentations[index])
+    const updated = await storage.updatePresentation(req.params.id, req.body)
+    if (!updated) return res.status(404).json({ error: 'Not found' })
+    res.json(updated)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -875,11 +777,8 @@ app.put('/api/presentations/:id', async (req, res) => {
 // DELETE /api/presentations/:id
 app.delete('/api/presentations/:id', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const index = presentations.findIndex(p => p.id === req.params.id)
-    if (index === -1) return res.status(404).json({ error: 'Not found' })
-    presentations.splice(index, 1)
-    await writePresentations(presentations)
+    const deleted = await storage.deletePresentation(req.params.id)
+    if (!deleted) return res.status(404).json({ error: 'Not found' })
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -889,17 +788,8 @@ app.delete('/api/presentations/:id', async (req, res) => {
 // POST /api/presentations/:id/duplicate
 app.post('/api/presentations/:id/duplicate', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const original = presentations.find(p => p.id === req.params.id)
-    if (!original) return res.status(404).json({ error: 'Not found' })
-    const now = new Date().toISOString()
-    const copy = JSON.parse(JSON.stringify(original))
-    copy.id = uuidv4()
-    copy.title = (copy.title || 'Untitled') + ' (copy)'
-    copy.createdAt = now
-    copy.updatedAt = now
-    presentations.push(copy)
-    await writePresentations(presentations)
+    const copy = await storage.duplicatePresentation(req.params.id)
+    if (!copy) return res.status(404).json({ error: 'Not found' })
     res.status(201).json(copy)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -1003,8 +893,7 @@ app.post('/api/render-manim', express.json(), async (req, res) => {
 // GET /api/presentations/:id/export - download HTML
 app.get('/api/presentations/:id/export', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === req.params.id)
+    const presentation = await storage.getPresentation(req.params.id)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
     const html = generateRevealHTML(presentation)
     const filename = `${(presentation.title || 'presentation').replace(/[^a-z0-9]/gi, '_')}.html`
@@ -1019,8 +908,7 @@ app.get('/api/presentations/:id/export', async (req, res) => {
 // GET /api/presentations/:id/present - serve in browser
 app.get('/api/presentations/:id/present', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === req.params.id)
+    const presentation = await storage.getPresentation(req.params.id)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
     const html = generateRevealHTML(presentation)
     res.setHeader('Content-Type', 'text/html')
@@ -1033,25 +921,14 @@ app.get('/api/presentations/:id/present', async (req, res) => {
 // --- Share Links ---
 
 // Helper: read/write share tokens
-async function readShareTokens() { return fs.readJson(SHARE_FILE) }
-async function writeShareTokens(data) { return fs.writeJson(SHARE_FILE, data, { spaces: 2 }) }
+
 
 // POST /api/presentations/:id/share - enable sharing, return token
 app.post('/api/presentations/:id/share', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === req.params.id)
-    if (!presentation) return res.status(404).json({ error: 'Not found' })
-
-    const tokens = await readShareTokens()
-    // Check if already shared
-    let token = Object.entries(tokens).find(([t, id]) => id === req.params.id)?.[0]
-    if (!token) {
-      token = uuidv4()
-      tokens[token] = req.params.id
-      await writeShareTokens(tokens)
-    }
-    res.json({ token, shared: true })
+    const result = await storage.createShareToken(req.params.id)
+    if (!result) return res.status(404).json({ error: 'Not found' })
+    res.json(result)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1060,12 +937,7 @@ app.post('/api/presentations/:id/share', async (req, res) => {
 // DELETE /api/presentations/:id/share - disable sharing
 app.delete('/api/presentations/:id/share', async (req, res) => {
   try {
-    const tokens = await readShareTokens()
-    for (const [token, id] of Object.entries(tokens)) {
-      if (id === req.params.id) delete tokens[token]
-    }
-    await writeShareTokens(tokens)
-    res.json({ shared: false })
+    res.json(await storage.deleteShareToken(req.params.id))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1074,9 +946,7 @@ app.delete('/api/presentations/:id/share', async (req, res) => {
 // GET /api/presentations/:id/share - get share status
 app.get('/api/presentations/:id/share', async (req, res) => {
   try {
-    const tokens = await readShareTokens()
-    const entry = Object.entries(tokens).find(([t, id]) => id === req.params.id)
-    res.json({ shared: !!entry, token: entry ? entry[0] : null })
+    res.json(await storage.getShareStatus(req.params.id))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1085,14 +955,8 @@ app.get('/api/presentations/:id/share', async (req, res) => {
 // GET /share/:token - public view of shared presentation
 app.get('/share/:token', async (req, res) => {
   try {
-    const tokens = await readShareTokens()
-    const presentationId = tokens[req.params.token]
-    if (!presentationId) return res.status(404).send('Presentation not found or sharing disabled')
-
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === presentationId)
-    if (!presentation) return res.status(404).send('Presentation not found')
-
+    const presentation = await storage.getSharedPresentation(req.params.token)
+    if (!presentation) return res.status(404).send('Presentation not found or sharing disabled')
     const html = generateRevealHTML(presentation)
     res.setHeader('Content-Type', 'text/html')
     res.send(html)
@@ -1103,59 +967,35 @@ app.get('/share/:token', async (req, res) => {
 
 // --- Version History ---
 
-fs.ensureDirSync(HISTORY_DIR)
-
 // POST /api/presentations/:id/snapshot - save named snapshot
 app.post('/api/presentations/:id/snapshot', async (req, res) => {
   try {
-    const presentations = await readPresentations()
-    const pres = presentations.find(p => p.id === req.params.id)
-    if (!pres) return res.status(404).json({ error: 'Not found' })
-    const name = req.body.name || new Date().toISOString()
-    const presDir = path.join(HISTORY_DIR, req.params.id)
-    fs.ensureDirSync(presDir)
-    const snapshotId = uuidv4()
-    const snapshot = { id: snapshotId, name, createdAt: new Date().toISOString(), data: JSON.parse(JSON.stringify(pres)) }
-    fs.writeJsonSync(path.join(presDir, `${snapshotId}.json`), snapshot, { spaces: 2 })
-    res.json({ id: snapshotId, name, createdAt: snapshot.createdAt })
+    const result = await storage.createSnapshot(req.params.id, req.body.name)
+    if (!result) return res.status(404).json({ error: 'Not found' })
+    res.json(result)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // GET /api/presentations/:id/snapshots - list snapshots
 app.get('/api/presentations/:id/snapshots', async (req, res) => {
   try {
-    const presDir = path.join(HISTORY_DIR, req.params.id)
-    if (!fs.existsSync(presDir)) return res.json([])
-    const files = fs.readdirSync(presDir).filter(f => f.endsWith('.json')).sort()
-    const snapshots = files.map(f => {
-      const s = fs.readJsonSync(path.join(presDir, f))
-      return { id: s.id, name: s.name, createdAt: s.createdAt, slideCount: (s.data?.slides || []).length }
-    }).reverse()
-    res.json(snapshots)
+    res.json(await storage.listSnapshots(req.params.id))
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // POST /api/presentations/:id/restore/:snapshotId - restore a snapshot
 app.post('/api/presentations/:id/restore/:snapshotId', async (req, res) => {
   try {
-    const presDir = path.join(HISTORY_DIR, req.params.id)
-    const snapFile = path.join(presDir, `${req.params.snapshotId}.json`)
-    if (!fs.existsSync(snapFile)) return res.status(404).json({ error: 'Snapshot not found' })
-    const snapshot = fs.readJsonSync(snapFile)
-    const presentations = await readPresentations()
-    const index = presentations.findIndex(p => p.id === req.params.id)
-    if (index === -1) return res.status(404).json({ error: 'Presentation not found' })
-    presentations[index] = { ...snapshot.data, id: req.params.id, updatedAt: new Date().toISOString() }
-    await writePresentations(presentations)
-    res.json(presentations[index])
+    const restored = await storage.restoreSnapshot(req.params.id, req.params.snapshotId)
+    if (!restored) return res.status(404).json({ error: 'Snapshot or presentation not found' })
+    res.json(restored)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // DELETE /api/presentations/:id/snapshots/:snapshotId
 app.delete('/api/presentations/:id/snapshots/:snapshotId', async (req, res) => {
   try {
-    const snapFile = path.join(HISTORY_DIR, req.params.id, `${req.params.snapshotId}.json`)
-    if (fs.existsSync(snapFile)) fs.removeSync(snapFile)
+    await storage.deleteSnapshot(req.params.id, req.params.snapshotId)
     res.json({ success: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -1233,7 +1073,9 @@ app.post('/api/rclone/sync', async (req, res) => {
     // Clean sync dir
     fs.emptyDirSync(SYNC_DIR)
 
-    const presentations = await readPresentations()
+    const allSummaries = await storage.listPresentations()
+    const presentations = []
+    for (const s of allSummaries) { const p = await storage.getPresentation(s.id); if (p) presentations.push(p) }
     for (const pres of presentations) {
       const folderName = (pres.title || 'untitled').replace(/[^a-z0-9_-]/gi, '_').toLowerCase()
       const folder = path.join(SYNC_DIR, folderName)
@@ -1273,8 +1115,7 @@ app.post('/api/rclone/sync-single', async (req, res) => {
     if (!remote || !presentationId) return res.status(400).json({ error: 'Remote and presentationId required' })
     const dest = remotePath || '/slides-backup'
 
-    const presentations = await readPresentations()
-    const pres = presentations.find(p => p.id === presentationId)
+    const pres = await storage.getPresentation(presentationId)
     if (!pres) return res.status(404).json({ error: 'Presentation not found' })
 
     fs.ensureDirSync(SYNC_DIR)
@@ -1302,12 +1143,8 @@ app.post('/api/rclone/sync-single', async (req, res) => {
 // GET /api/github/config - get saved config (token is masked)
 app.get('/api/github/config', async (req, res) => {
   try {
-    const config = await fs.readJson(GITHUB_CONFIG_FILE)
-    res.json({
-      owner: config.owner || '',
-      repo: config.repo || '',
-      hasToken: !!(config.token),
-    })
+    const config = await storage.getGithubConfig()
+    res.json({ owner: config.owner || '', repo: config.repo || '', hasToken: !!config.token })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1316,14 +1153,8 @@ app.get('/api/github/config', async (req, res) => {
 // POST /api/github/config - save config
 app.post('/api/github/config', async (req, res) => {
   try {
-    const existing = await fs.readJson(GITHUB_CONFIG_FILE)
-    const updated = {
-      token: req.body.token !== undefined ? req.body.token : existing.token,
-      owner: req.body.owner !== undefined ? req.body.owner : existing.owner,
-      repo: req.body.repo !== undefined ? req.body.repo : existing.repo,
-    }
-    await fs.writeJson(GITHUB_CONFIG_FILE, updated, { spaces: 2 })
-    res.json({ owner: updated.owner, repo: updated.repo, hasToken: !!updated.token })
+    const updated = await storage.setGithubConfig(req.body)
+    res.json({ owner: updated.owner || '', repo: updated.repo || '', hasToken: !!updated.token })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1332,13 +1163,12 @@ app.post('/api/github/config', async (req, res) => {
 // POST /api/presentations/:id/github/push - push presentation to GitHub
 app.post('/api/presentations/:id/github/push', async (req, res) => {
   try {
-    const config = await fs.readJson(GITHUB_CONFIG_FILE)
+    const config = await storage.getGithubConfig()
     if (!config.token || !config.owner || !config.repo) {
       return res.status(400).json({ error: 'GitHub not configured. Set token, owner, and repo first.' })
     }
 
-    const presentations = await readPresentations()
-    const presentation = presentations.find(p => p.id === req.params.id)
+    const presentation = await storage.getPresentation(req.params.id)
     if (!presentation) return res.status(404).json({ error: 'Presentation not found' })
 
     const { token, owner, repo } = config
