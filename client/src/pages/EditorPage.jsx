@@ -256,6 +256,10 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [snapshots, setSnapshots] = useState([])
   const [snapshotName, setSnapshotName] = useState('')
+  const [showGitHistory, setShowGitHistory] = useState(false)
+  const [gitCommits, setGitCommits] = useState([])
+  const [gitLoading, setGitLoading] = useState(false)
+  const [gitRestoring, setGitRestoring] = useState(null)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [showRulers, setShowRulers] = useState(false)
   const [guides, setGuides] = useState([]) // persistent guide lines: [{ axis: 'x'|'y', position: number }]
@@ -1800,6 +1804,25 @@ class MyScene(Scene):
                     <CloudUpload size={14} />
                     Proton Drive
                   </button>
+                  <div style={{ borderTop: '1px solid var(--border)' }} />
+                  <button
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    onClick={async () => {
+                      setShowSyncDropdown(false)
+                      setShowGitHistory(true)
+                      setGitLoading(true)
+                      try {
+                        const commits = await api.getGitHistory(presentationId)
+                        setGitCommits(commits)
+                      } catch (e) { setGitCommits([]); console.error(e) }
+                      setGitLoading(false)
+                    }}
+                  >
+                    <History size={14} />
+                    Git History
+                  </button>
                 </div>
               </>
             )}
@@ -2432,6 +2455,61 @@ class MyScene(Scene):
                       }}
                     >
                       <X size={12} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showGitHistory && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowGitHistory(false) }}>
+          <div style={{ background: '#1e1e2e', borderRadius: 12, padding: 24, width: 520, maxWidth: '90vw', maxHeight: '70vh', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16, color: '#e0e0e0' }}>
+                <Github size={16} style={{ marginRight: 8, verticalAlign: -2 }} />
+                Git History
+              </h3>
+              <button className="btn btn-ghost" onClick={() => setShowGitHistory(false)} style={{ padding: 4 }}><X size={16} /></button>
+            </div>
+
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              {gitLoading ? (
+                <p style={{ color: '#888', fontSize: 13, textAlign: 'center', padding: 20 }}>Loading commits...</p>
+              ) : gitCommits.length === 0 ? (
+                <p style={{ color: '#666', fontSize: 13, textAlign: 'center', padding: 20 }}>No commits found. Push to GitHub first.</p>
+              ) : (
+                gitCommits.map((commit, i) => (
+                  <div key={commit.sha} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 10px', borderBottom: '1px solid #2a2a3e' }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: i === 0 ? 'var(--accent)' : '#555', marginTop: 6, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: '#e0e0e0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {commit.message.split('\n')[0]}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                        {new Date(commit.date).toLocaleString()} &middot; {commit.author} &middot; <code style={{ fontSize: 10, color: '#666' }}>{commit.sha.slice(0, 7)}</code>
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: 11, padding: '3px 10px', flexShrink: 0 }}
+                      disabled={gitRestoring === commit.sha}
+                      onClick={async () => {
+                        if (!confirm(`Restore from commit ${commit.sha.slice(0, 7)}? Current changes will be overwritten.`)) return
+                        setGitRestoring(commit.sha)
+                        try {
+                          const data = await api.getGitVersion(presentationId, commit.sha)
+                          await api.updatePresentation(presentationId, data)
+                          setPresentation({ ...data, slides: (data.slides || []).map(s => s) })
+                          setShowGitHistory(false)
+                        } catch (e) { alert('Restore failed: ' + e.message) }
+                        setGitRestoring(null)
+                      }}
+                    >
+                      {gitRestoring === commit.sha ? '...' : 'Restore'}
                     </button>
                   </div>
                 ))

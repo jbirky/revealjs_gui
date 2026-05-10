@@ -1480,6 +1480,69 @@ app.post('/api/presentations/:id/github/push', async (req, res) => {
   }
 })
 
+// GET /api/presentations/:id/github/history - list git commits for this presentation
+app.get('/api/presentations/:id/github/history', async (req, res) => {
+  try {
+    const config = await storage.getGithubConfig(req.userId)
+    if (!config.token || !config.owner || !config.repo) {
+      return res.status(400).json({ error: 'GitHub not configured' })
+    }
+    const presentation = await storage.getPresentation(req.params.id, req.userId)
+    if (!presentation) return res.status(404).json({ error: 'Not found' })
+
+    const { token, owner, repo } = config
+    const folderName = (presentation.title || 'untitled').replace(/[^a-z0-9_-]/gi, '_').toLowerCase()
+
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/commits?path=${encodeURIComponent(folderName)}/presentation.json&per_page=50`,
+      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+    )
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}))
+      return res.status(response.status).json({ error: body.message || 'GitHub API error' })
+    }
+    const commits = await response.json()
+    res.json(commits.map(c => ({
+      sha: c.sha,
+      message: c.commit.message,
+      date: c.commit.committer.date,
+      author: c.commit.author.name,
+    })))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/presentations/:id/github/version/:sha - fetch presentation.json at a specific commit
+app.get('/api/presentations/:id/github/version/:sha', async (req, res) => {
+  try {
+    const config = await storage.getGithubConfig(req.userId)
+    if (!config.token || !config.owner || !config.repo) {
+      return res.status(400).json({ error: 'GitHub not configured' })
+    }
+    const presentation = await storage.getPresentation(req.params.id, req.userId)
+    if (!presentation) return res.status(404).json({ error: 'Not found' })
+
+    const { token, owner, repo } = config
+    const folderName = (presentation.title || 'untitled').replace(/[^a-z0-9_-]/gi, '_').toLowerCase()
+    const filePath = `${folderName}/presentation.json`
+
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(filePath)}?ref=${req.params.sha}`,
+      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+    )
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}))
+      return res.status(response.status).json({ error: body.message || 'GitHub API error' })
+    }
+    const file = await response.json()
+    const content = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'))
+    res.json(content)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // In production, serve client build with SPA fallback
 if (process.env.NODE_ENV === 'production') {
   // Support both Docker layout (../client/dist) and Electron layout (resourcesPath/client/dist)

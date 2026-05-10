@@ -98,6 +98,10 @@ export const api = {
     body: JSON.stringify(data)
   }).then(async r => { const b = await r.json(); if (!r.ok) throw new Error(b.error); return b }),
 
+  // Git history
+  getGitHistory: (id) => authFetch(`${BASE}/presentations/${id}/github/history`).then(async r => { const b = await r.json(); if (!r.ok) throw new Error(b.error || 'Failed'); return b }),
+  getGitVersion: (id, sha) => authFetch(`${BASE}/presentations/${id}/github/version/${sha}`).then(async r => { const b = await r.json(); if (!r.ok) throw new Error(b.error || 'Failed'); return b }),
+
   // User / plan
   getMe: () => authFetch(`${BASE}/me`).then(r => r.json()),
 
