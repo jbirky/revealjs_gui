@@ -15,6 +15,8 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
 const createStorage = require('./storage')
 const storage = createStorage()
 const { authStack, requireUser, IS_CLOUD } = require('./middleware/auth')
+const { isR2Enabled, streamFromR2 } = require('./services/r2')
+const { handleUpload: r2Upload, deleteUploadsForPresentation } = require('./services/upload-service')
 
 const DATA_DIR = process.env.SLIDES_DATA_DIR || path.join(__dirname, 'data')
 const UPLOADS_BASE = process.env.SLIDES_UPLOADS_DIR || path.join(__dirname, 'uploads')
@@ -25,12 +27,18 @@ const SYNC_DIR = path.join(DATA_DIR, 'sync-export')
 fs.ensureDirSync(DATA_DIR)
 fs.ensureDirSync(UPLOADS_DIR)
 
-// Multer storage config — destination is per-presentation when req.params.id is present
+// Multer storage config
 const multerStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = req.params.id ? path.join(UPLOADS_DIR, req.params.id) : UPLOADS_DIR
-    fs.ensureDirSync(dir)
-    cb(null, dir)
+    if (isR2Enabled()) {
+      const tmpDir = path.join(os.tmpdir(), 'parallax-uploads')
+      fs.ensureDirSync(tmpDir)
+      cb(null, tmpDir)
+    } else {
+      const dir = req.params.id ? path.join(UPLOADS_DIR, req.params.id) : UPLOADS_DIR
+      fs.ensureDirSync(dir)
+      cb(null, dir)
+    }
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname)
@@ -41,7 +49,28 @@ const upload = multer({ storage: multerStorage, limits: { fileSize: 500 * 1024 *
 
 app.use(cors())
 app.use(express.json({ limit: '50mb' }))
-app.use('/uploads', express.static(UPLOADS_DIR))
+if (isR2Enabled()) {
+  app.get('/uploads/*', async (req, res) => {
+    const urlPath = req.path.replace(/^\/uploads\//, '')
+    try {
+      const { rows } = await storage.query(
+        'SELECT storage_key, content_type FROM uploads WHERE filename = $1',
+        [urlPath]
+      )
+      if (!rows.length) return res.status(404).send('Not found')
+      const { body, contentType, contentLength } = await streamFromR2(rows[0].storage_key)
+      res.setHeader('Content-Type', contentType || rows[0].content_type || 'application/octet-stream')
+      if (contentLength) res.setHeader('Content-Length', contentLength)
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      body.pipe(res)
+    } catch (err) {
+      console.error('R2 proxy error:', err.message)
+      res.status(500).send('Storage error')
+    }
+  })
+} else {
+  app.use('/uploads', express.static(UPLOADS_DIR))
+}
 
 // Auth: in cloud mode, parses Clerk session and attaches req.userId
 // In self-hosted mode, sets req.userId = null (no-op)
@@ -637,6 +666,9 @@ app.put('/api/presentations/:id', async (req, res) => {
 // DELETE /api/presentations/:id
 app.delete('/api/presentations/:id', async (req, res) => {
   try {
+    if (isR2Enabled()) {
+      await deleteUploadsForPresentation(req.params.id, storage)
+    }
     const deleted = await storage.deletePresentation(req.params.id, req.userId)
     if (!deleted) return res.status(404).json({ error: 'Not found' })
     res.json({ success: true })
@@ -657,25 +689,43 @@ app.post('/api/presentations/:id/duplicate', async (req, res) => {
 })
 
 // POST /api/upload (legacy global upload)
-app.post('/api/upload', upload.single('file'), (req, res) => {
+app.post('/api/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
-  let filename = req.file.filename
-  if (req.file.mimetype.startsWith('video/')) {
-    const finalPath = transcodeVideoIfNeeded(req.file.path)
-    filename = path.basename(finalPath)
+  try {
+    let filePath = req.file.path
+    if (req.file.mimetype.startsWith('video/')) {
+      filePath = transcodeVideoIfNeeded(filePath)
+    }
+    if (isR2Enabled()) {
+      const result = await r2Upload(filePath, req.file.originalname, req.file.mimetype, {
+        presentationId: null, userId: req.userId, storage,
+      })
+      return res.json(result)
+    }
+    res.json({ url: `/uploads/${path.basename(filePath)}` })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
-  res.json({ url: `/uploads/${filename}` })
 })
 
 // POST /api/presentations/:id/upload (per-presentation upload)
-app.post('/api/presentations/:id/upload', upload.single('file'), (req, res) => {
+app.post('/api/presentations/:id/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
-  let filename = req.file.filename
-  if (req.file.mimetype.startsWith('video/')) {
-    const finalPath = transcodeVideoIfNeeded(req.file.path)
-    filename = path.basename(finalPath)
+  try {
+    let filePath = req.file.path
+    if (req.file.mimetype.startsWith('video/')) {
+      filePath = transcodeVideoIfNeeded(filePath)
+    }
+    if (isR2Enabled()) {
+      const result = await r2Upload(filePath, req.file.originalname, req.file.mimetype, {
+        presentationId: req.params.id, userId: req.userId, storage,
+      })
+      return res.json(result)
+    }
+    res.json({ url: `/uploads/${req.params.id}/${path.basename(filePath)}` })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
-  res.json({ url: `/uploads/${req.params.id}/${filename}` })
 })
 
 // POST /api/presentations/:id/import-pptx — convert PPTX to per-slide PNG images
@@ -705,16 +755,25 @@ app.post('/api/presentations/:id/import-pptx', upload.single('file'), async (req
         return n(a) - n(b)
       })
 
-    const uploadDir = path.join(UPLOADS_DIR, req.params.id)
-    fs.ensureDirSync(uploadDir)
-
-    const urls = pngFiles.map(f => {
-      const id = uuidv4()
-      fs.copySync(path.join(tmpDir, f), path.join(uploadDir, `${id}.png`))
-      return `/uploads/${req.params.id}/${id}.png`
-    })
-
-    res.json({ urls })
+    if (isR2Enabled()) {
+      const urls = []
+      for (const f of pngFiles) {
+        const result = await r2Upload(path.join(tmpDir, f), f, 'image/png', {
+          presentationId: req.params.id, userId: req.userId, storage,
+        })
+        urls.push(result.url)
+      }
+      res.json({ urls })
+    } else {
+      const uploadDir = path.join(UPLOADS_DIR, req.params.id)
+      fs.ensureDirSync(uploadDir)
+      const urls = pngFiles.map(f => {
+        const id = uuidv4()
+        fs.copySync(path.join(tmpDir, f), path.join(uploadDir, `${id}.png`))
+        return `/uploads/${req.params.id}/${id}.png`
+      })
+      res.json({ urls })
+    }
   } catch (err) {
     console.error('PPTX import error:', err.message)
     res.status(500).json({ error: err.message })
@@ -948,10 +1007,12 @@ app.post('/api/rclone/sync', async (req, res) => {
       fs.writeFileSync(path.join(folder, 'presentation.json'), JSON.stringify(pres, null, 2))
     }
 
-    // Also copy uploads directory
-    const uploadsSync = path.join(SYNC_DIR, '_uploads')
-    if (fs.existsSync(UPLOADS_DIR)) {
-      fs.copySync(UPLOADS_DIR, uploadsSync)
+    // Copy local uploads (skip in R2 mode — files are already in cloud storage)
+    if (!isR2Enabled()) {
+      const uploadsSync = path.join(SYNC_DIR, '_uploads')
+      if (fs.existsSync(UPLOADS_DIR)) {
+        fs.copySync(UPLOADS_DIR, uploadsSync)
+      }
     }
 
     // Run rclone sync

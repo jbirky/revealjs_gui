@@ -25,6 +25,7 @@ services:
     environment:
       - PARALLAX_MODE=cloud
       - PARALLAX_DB=postgres
+      - PARALLAX_STORAGE=r2
       - NODE_ENV=production
     restart: unless-stopped
 
