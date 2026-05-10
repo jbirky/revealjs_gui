@@ -1363,7 +1363,32 @@ app.post('/api/presentations/:id/github/push', async (req, res) => {
 
     // Folder name from presentation title
     const folderName = (presentation.title || 'untitled').replace(/[^a-z0-9_-]/gi, '_').toLowerCase()
-    const htmlContent = generateRevealHTML(presentation)
+
+    // Collect all /uploads/ paths referenced in the presentation
+    const uploadPaths = new Set()
+    const collectUploads = (str) => { for (const m of str.matchAll(/\/uploads\/[^\s"'<>)]+/g)) uploadPaths.add(m[0]) }
+    for (const slide of presentation.slides || []) {
+      for (const el of slide.elements || []) {
+        if (el.src && el.src.startsWith('/uploads/')) uploadPaths.add(el.src)
+        if (el.poster && el.poster.startsWith('/uploads/')) uploadPaths.add(el.poster)
+        if (el.content) collectUploads(el.content)
+      }
+      if (slide.background?.image?.startsWith('/uploads/')) uploadPaths.add(slide.background.image)
+    }
+
+    // Rewrite /uploads/path to ./assets/filename for self-contained HTML
+    const exportPres = JSON.parse(JSON.stringify(presentation))
+    const assetName = (p) => path.basename(p)
+    const rewriteUploads = (str) => str.replace(/\/uploads\/[^\s"'<>)]+/g, m => `./assets/${assetName(m)}`)
+    for (const slide of exportPres.slides || []) {
+      for (const el of slide.elements || []) {
+        if (el.src && el.src.startsWith('/uploads/')) el.src = `./assets/${assetName(el.src)}`
+        if (el.poster && el.poster.startsWith('/uploads/')) el.poster = `./assets/${assetName(el.poster)}`
+        if (el.content && el.content.includes('/uploads/')) el.content = rewriteUploads(el.content)
+      }
+      if (slide.background?.image?.startsWith('/uploads/')) slide.background.image = `./assets/${assetName(slide.background.image)}`
+    }
+    const htmlContent = generateRevealHTML(exportPres)
     const jsonContent = JSON.stringify(presentation, null, 2)
 
     // Get default branch
@@ -1413,6 +1438,32 @@ app.post('/api/presentations/:id/github/push', async (req, res) => {
     }
     const readmeContent = readmeLines.join('\n') + '\n'
 
+    // Upload asset files to GitHub as blobs
+    const assetBlobs = []
+    for (const uploadPath of uploadPaths) {
+      const relativePath = uploadPath.replace(/^\/uploads\//, '')
+      try {
+        let fileBuffer
+        if (isR2Enabled()) {
+          const { rows } = await storage.query('SELECT storage_key FROM uploads WHERE filename = $1', [relativePath])
+          if (!rows.length) continue
+          const { body } = await streamFromR2(rows[0].storage_key)
+          const chunks = []
+          for await (const chunk of body) chunks.push(chunk)
+          fileBuffer = Buffer.concat(chunks)
+        } else {
+          const filePath = path.join(UPLOADS_DIR, relativePath)
+          if (!fs.existsSync(filePath)) continue
+          fileBuffer = fs.readFileSync(filePath)
+        }
+        const blob = await gh(`/repos/${owner}/${repo}/git/blobs`, {
+          method: 'POST',
+          body: JSON.stringify({ content: fileBuffer.toString('base64'), encoding: 'base64' }),
+        })
+        assetBlobs.push({ path: `${folderName}/assets/${assetName(uploadPath)}`, mode: '100644', type: 'blob', sha: blob.sha })
+      } catch (e) { console.error(`Asset upload failed for ${uploadPath}:`, e.message) }
+    }
+
     // Create blobs for our files
     const htmlBlob = await gh(`/repos/${owner}/${repo}/git/blobs`, {
       method: 'POST',
@@ -1427,12 +1478,13 @@ app.post('/api/presentations/:id/github/push', async (req, res) => {
       body: JSON.stringify({ content: Buffer.from(readmeContent).toString('base64'), encoding: 'base64' }),
     })
 
-    // Create a new tree with our files + README
+    // Create a new tree with our files, assets, + README
     const treePayload = {
       tree: [
         { path: `${folderName}/presentation.html`, mode: '100644', type: 'blob', sha: htmlBlob.sha },
         { path: `${folderName}/presentation.json`, mode: '100644', type: 'blob', sha: jsonBlob.sha },
         { path: 'README.md', mode: '100644', type: 'blob', sha: readmeBlob.sha },
+        ...assetBlobs,
       ],
     }
     if (baseTreeSha) treePayload.base_tree = baseTreeSha
