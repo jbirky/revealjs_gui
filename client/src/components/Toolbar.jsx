@@ -76,6 +76,7 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
   const [showLayoutMenu, setShowLayoutMenu] = useState(false)
   const [showNonobjectiveMenu, setShowNonobjectiveMenu] = useState(false)
   const [showModularMenu, setShowModularMenu] = useState(false)
+  const [showTableMenu, setShowTableMenu] = useState(false)
   const [showColorPalette, setShowColorPalette] = useState(false)
   const [showHighlightPalette, setShowHighlightPalette] = useState(false)
   const [showBgMenu, setShowBgMenu] = useState(false)
