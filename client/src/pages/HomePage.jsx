@@ -190,6 +190,17 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
     }
   }
 
+  async function handleCancelSubscription() {
+    if (!confirm('Cancel your Pro subscription? You\'ll keep access until the end of your billing period.')) return
+    try {
+      const result = await api.cancelSubscription()
+      alert(`Subscription will cancel on ${new Date(result.cancelAt).toLocaleDateString()}. You keep Pro access until then.`)
+    } catch (err) {
+      console.error('Cancel error:', err)
+      alert(err.message || 'Failed to cancel subscription')
+    }
+  }
+
   useEffect(() => {
     loadData()
   }, [])
@@ -365,6 +376,9 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
                 )}
                 {planInfo?.billing && planInfo?.plan !== 'free' && (
                   <UserButton.Action label="Manage subscription" labelIcon={<span style={{ fontSize: 14 }}>&#x2699;</span>} onClick={handleManageBilling} />
+                )}
+                {planInfo?.billing && planInfo?.plan !== 'free' && (
+                  <UserButton.Action label="Cancel renewal" labelIcon={<span style={{ fontSize: 14 }}>&#x2715;</span>} onClick={handleCancelSubscription} />
                 )}
               </UserButton.MenuItems>
             </UserButton>

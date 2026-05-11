@@ -102,4 +102,34 @@ async function handleWebhook(storage, rawBody, signature) {
   return event
 }
 
-module.exports = { isEnabled, createCheckoutSession, createPortalSession, handleWebhook, getStripe }
+async function cancelSubscription(storage, userId) {
+  const s = getStripe()
+  const { rows } = await storage.query('SELECT stripe_subscription_id FROM users WHERE id = $1', [userId])
+  const subId = rows[0]?.stripe_subscription_id
+  if (!subId) throw new Error('No active subscription')
+  const sub = await s.subscriptions.update(subId, { cancel_at_period_end: true })
+  return { cancelAt: new Date(sub.current_period_end * 1000).toISOString() }
+}
+
+async function resumeSubscription(storage, userId) {
+  const s = getStripe()
+  const { rows } = await storage.query('SELECT stripe_subscription_id FROM users WHERE id = $1', [userId])
+  const subId = rows[0]?.stripe_subscription_id
+  if (!subId) throw new Error('No active subscription')
+  await s.subscriptions.update(subId, { cancel_at_period_end: false })
+}
+
+async function getSubscriptionStatus(storage, userId) {
+  const s = getStripe()
+  const { rows } = await storage.query('SELECT stripe_subscription_id FROM users WHERE id = $1', [userId])
+  const subId = rows[0]?.stripe_subscription_id
+  if (!subId) return { active: false }
+  const sub = await s.subscriptions.retrieve(subId)
+  return {
+    active: sub.status === 'active',
+    cancelAtPeriodEnd: sub.cancel_at_period_end,
+    currentPeriodEnd: new Date(sub.current_period_end * 1000).toISOString(),
+  }
+}
+
+module.exports = { isEnabled, createCheckoutSession, createPortalSession, handleWebhook, cancelSubscription, resumeSubscription, getSubscriptionStatus, getStripe }

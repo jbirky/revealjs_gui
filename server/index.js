@@ -317,6 +317,27 @@ if (IS_CLOUD && stripeService.isEnabled()) {
       res.json({ url: session.url })
     } catch (err) { res.status(500).json({ error: err.message }) }
   })
+
+  app.get('/api/billing/status', requireUser, async (req, res) => {
+    try {
+      const status = await stripeService.getSubscriptionStatus(storage, req.userId)
+      res.json(status)
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+
+  app.post('/api/billing/cancel', requireUser, async (req, res) => {
+    try {
+      const result = await stripeService.cancelSubscription(storage, req.userId)
+      res.json(result)
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+
+  app.post('/api/billing/resume', requireUser, async (req, res) => {
+    try {
+      await stripeService.resumeSubscription(storage, req.userId)
+      res.json({ ok: true })
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
 }
 
 // Transcode a video file to H.264 MP4 if its codec isn't web-compatible.

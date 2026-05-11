@@ -113,4 +113,7 @@ export const api = {
   // Billing
   createCheckout: () => authFetch(`${BASE}/billing/checkout`, { method: 'POST' }).then(r => r.json()),
   createPortal: () => authFetch(`${BASE}/billing/portal`, { method: 'POST' }).then(r => r.json()),
+  getBillingStatus: () => authFetch(`${BASE}/billing/status`).then(r => r.json()),
+  cancelSubscription: () => authFetch(`${BASE}/billing/cancel`, { method: 'POST' }).then(r => r.json()),
+  resumeSubscription: () => authFetch(`${BASE}/billing/resume`, { method: 'POST' }).then(r => r.json()),
 }
