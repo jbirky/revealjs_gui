@@ -3,6 +3,7 @@ import { useAuth, SignIn, SignedIn, SignedOut } from '@clerk/clerk-react'
 import HomePage from './pages/HomePage'
 import EditorPage from './pages/EditorPage'
 import LandingPage from './pages/LandingPage'
+import DocsPage from './components/DocsPage'
 import { setTokenGetter } from './utils/api'
 
 const isCloud = import.meta.env.VITE_PARALLAX_MODE === 'cloud'
@@ -59,16 +60,46 @@ function AuthGateSelfHosted({ children }) {
 
 const AuthGate = isCloud ? AuthGateCloud : AuthGateSelfHosted
 
+function DocsOverlay({ onClose, initialPage }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column' }}>
+      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', borderBottom: '1px solid var(--border)', background: 'rgba(30,30,50,0.95)', backdropFilter: 'blur(12px)' }}>
+        <div style={{ fontSize: 20, fontWeight: 700 }}><span style={{ color: 'var(--accent)' }}>P</span>arallax Docs</div>
+        <button onClick={onClose} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 }}>Back to app</button>
+      </nav>
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <DocsPage initialPage={initialPage} />
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [page, setPage] = useState('home')
   const [presentationId, setPresentationId] = useState(null)
   const [isTemplate, setIsTemplate] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('editor-theme') || 'dark')
+  const [docsOverlay, setDocsOverlay] = useState(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark')
     localStorage.setItem('editor-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    const check = () => {
+      const hash = window.location.hash
+      if (hash.startsWith('#docs')) {
+        const p = hash.replace('#docs/', '').replace('#docs', '')
+        setDocsOverlay(p && p.includes('/') ? p : 'guide/getting-started')
+      }
+    }
+    check()
+    window.addEventListener('hashchange', check)
+    return () => window.removeEventListener('hashchange', check)
+  }, [])
+
+  const closeDocs = () => { setDocsOverlay(null); window.location.hash = '' }
 
   const openEditor = (id, template = false) => { setPresentationId(id); setIsTemplate(template); setPage('editor') }
   const goHome = () => { setPage('home'); setPresentationId(null); setIsTemplate(false) }
@@ -79,6 +110,7 @@ export default function App() {
         ? <HomePage onOpen={openEditor} theme={theme} onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} />
         : <EditorPage presentationId={presentationId} isTemplate={isTemplate} onGoHome={goHome} />
       }
+      {docsOverlay && <DocsOverlay onClose={closeDocs} initialPage={docsOverlay} />}
     </AuthGate>
   )
 }

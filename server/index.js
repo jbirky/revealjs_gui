@@ -1648,6 +1648,55 @@ app.get('/api/presentations/:id/github/version/:sha', async (req, res) => {
   }
 })
 
+// ---- Docs API ----
+
+const DOCS_DIR = path.join(__dirname, '..', 'docs')
+
+app.get('/api/docs/sidebar', (req, res) => {
+  const configPath = path.join(DOCS_DIR, '.vitepress', 'config.js')
+  if (!fs.existsSync(DOCS_DIR)) return res.json({ guide: [], features: [], tutorials: [] })
+  const sidebar = {
+    guide: [
+      { text: 'Introduction', link: 'guide/getting-started' },
+      { text: 'Installation', link: 'guide/installation' },
+      { text: 'Keyboard Shortcuts', link: 'guide/keyboard-shortcuts' },
+    ],
+    features: [
+      { text: 'Overview', link: 'features/overview' },
+      { text: 'Text & Formatting', link: 'features/text-formatting' },
+      { text: 'Shapes & Elements', link: 'features/shapes' },
+      { text: 'LaTeX & Math', link: 'features/latex' },
+      { text: 'Charts', link: 'features/charts' },
+      { text: 'Export & Sharing', link: 'features/export' },
+    ],
+    tutorials: [
+      { text: 'Your First Presentation', link: 'tutorials/first-presentation' },
+      { text: 'Academic Slides', link: 'tutorials/academic-slides' },
+      { text: 'Text & Typography', link: 'tutorials/text-typography' },
+      { text: 'Images', link: 'tutorials/images' },
+      { text: 'Shapes & Drawing', link: 'tutorials/shapes-drawing' },
+      { text: 'Code, LaTeX & Markdown', link: 'tutorials/code-math' },
+      { text: 'Charts & Tables', link: 'tutorials/charts-tables' },
+      { text: 'HTML Embeds & p5.js', link: 'tutorials/html-embeds' },
+      { text: 'Kinetic Text', link: 'tutorials/kinetic-text' },
+      { text: 'Video & Audio', link: 'tutorials/media' },
+      { text: 'Animations & Fragments', link: 'tutorials/animations' },
+      { text: 'Transitions', link: 'tutorials/transitions' },
+      { text: 'Presenting & Export', link: 'tutorials/presenting' },
+      { text: 'Using LaTeX & Math', link: 'tutorials/using-latex' },
+    ],
+  }
+  res.json(sidebar)
+})
+
+app.get('/api/docs/:section/:page', (req, res) => {
+  const { section, page } = req.params
+  const safe = (s) => s.replace(/[^a-z0-9_-]/gi, '')
+  const filePath = path.join(DOCS_DIR, safe(section), safe(page) + '.md')
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Doc not found' })
+  res.type('text/plain').send(fs.readFileSync(filePath, 'utf8'))
+})
+
 // ---- Plugin API ----
 
 app.get('/api/plugins', async (req, res) => {

@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 import { SHAPES } from '../utils/shapeUtils'
 
-const DOCS_BASE = '/revealjs_gui/tutorials/'
+const DOCS_BASE = '/#docs/tutorials/'
 const DocsLink = ({ page, onClose }) => (
   <>
     <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />

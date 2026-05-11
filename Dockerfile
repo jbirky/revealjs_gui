@@ -34,8 +34,9 @@ COPY server/package.json ./server/
 # Install only server (production) dependencies
 RUN npm ci --workspace=server --omit=dev
 
-# Copy server source and the compiled client
+# Copy server source, docs, and the compiled client
 COPY server/ ./server/
+COPY docs/ ./docs/
 COPY --from=builder /app/client/dist ./client/dist
 
 # Persist uploaded images and presentation data via a named volume
