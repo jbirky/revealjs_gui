@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Jessica Birky
 
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Presentation, Copy, Sun, Moon, Layout } from 'lucide-react'
+import { Plus, Pencil, Trash2, Presentation, Copy, Sun, Moon, Layout, ExternalLink } from 'lucide-react'
 import { api } from '../utils/api'
 
 import { UserButton } from '@clerk/clerk-react'
@@ -307,7 +307,12 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
   return (
     <div className="home-page">
       <div className="home-header">
-        <h1><span>P</span>arallax</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <h1><span>P</span>arallax</h1>
+          <a href="/" target="_blank" rel="noopener noreferrer" title="Landing page" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)', textDecoration: 'none', padding: '4px 8px', borderRadius: 5, border: '1px solid var(--border)', transition: 'color 0.15s, border-color 0.15s' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--text-muted)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}>
+            <ExternalLink size={12} /> Site
+          </a>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             className="btn btn-secondary"
