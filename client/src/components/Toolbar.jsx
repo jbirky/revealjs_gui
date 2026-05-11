@@ -368,25 +368,6 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
         </>)}
       </div>
 
-      {/* Plugins dropdown */}
-      {pluginTypes.length > 0 && (
-      <div style={{ position: 'relative' }}>
-        <button className="btn-icon" onClick={() => setShowPluginMenu(v => !v)} title="Plugins" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
-          <Puzzle size={14} /> Plugins <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.6 }}>&#9660;</span>
-        </button>
-        {showPluginMenu && (<>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowPluginMenu(false)} />
-          <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, minWidth: 180, overflow: 'hidden', padding: '4px 0' }}>
-            {pluginTypes.map(pt => (
-              <button key={pt.type} onClick={() => { setShowPluginMenu(false); onAddPluginElement?.(pt.type) }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                <Puzzle size={13} style={{ opacity: 0.5 }} /> {pt.label}
-              </button>
-            ))}
-          </div>
-        </>)}
-      </div>
-      )}
-
       <button className="btn-icon" title="Insert Chart" onClick={onAddChart} style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
         <span style={{ fontSize: 14 }}>&#9776;</span> Chart
       </button>
@@ -710,21 +691,6 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
 
       {/* Chart docs */}
       {/* Table docs - handled inline */}
-
-      {/* Add Axis Line - legacy, now in Layout dropdown */}
-      <button
-        className="btn-icon"
-        onClick={() => {
-          const existing = slide?.axisLines || []
-          const id = crypto.randomUUID()
-          const axis = existing.length % 2 === 0 ? 'x' : 'y'
-          const position = axis === 'x' ? Math.round(960 / 3) : 270
-          onUpdateSlide({ axisLines: [...existing, { id, axis, position, visible: true, snap: true }] })
-        }}
-        title="Add axis line (composition guide)"
-      >
-        <Minus size={14} style={{ transform: 'rotate(90deg)' }} />
-      </button>
 
       {selectedCount >= 2 && (
         <>
@@ -1325,6 +1291,26 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
           </div>
         </div>
       )}
+
+      {/* Plugins dropdown — far right */}
+      {pluginTypes.length > 0 && (<>
+        <div style={{ flex: 1 }} />
+        <div style={{ position: 'relative' }}>
+          <button className="btn-icon" onClick={() => setShowPluginMenu(v => !v)} title="Plugins" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+            <Puzzle size={14} /> Plugins <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.6 }}>&#9660;</span>
+          </button>
+          {showPluginMenu && (<>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowPluginMenu(false)} />
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, minWidth: 180, overflow: 'hidden', padding: '4px 0' }}>
+              {pluginTypes.map(pt => (
+                <button key={pt.type} onClick={() => { setShowPluginMenu(false); onAddPluginElement?.(pt.type) }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                  <Puzzle size={13} style={{ opacity: 0.5 }} /> {pt.label}
+                </button>
+              ))}
+            </div>
+          </>)}
+        </div>
+      </>)}
     </div>
   )
 }
