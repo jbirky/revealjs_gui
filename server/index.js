@@ -1779,15 +1779,22 @@ app.delete('/api/presentations/:id/plugins/:pluginId', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-// Self-hosted: serve plugin assets from the plugins directory
-if (!IS_CLOUD) {
-  const pluginsDir = path.join(DATA_DIR, 'plugins')
-  fs.ensureDirSync(pluginsDir)
-  app.use('/api/plugins/:slug/assets', (req, res, next) => {
-    const safePath = path.normalize(req.params.slug).replace(/\.\./g, '')
-    express.static(path.join(pluginsDir, safePath, 'dist'))(req, res, next)
-  })
-}
+// Serve plugin assets from user plugins dir and bundled plugins dir
+const userPluginsDir = path.join(DATA_DIR, 'plugins')
+const bundledPluginsDir = path.join(__dirname, '..', 'plugins')
+fs.ensureDirSync(userPluginsDir)
+app.use('/api/plugins/:slug/assets', (req, res, next) => {
+  const safePath = path.normalize(req.params.slug).replace(/\.\./g, '')
+  const userDir = path.join(userPluginsDir, safePath, 'dist')
+  const bundledDir = path.join(bundledPluginsDir, safePath, 'dist')
+  if (fs.existsSync(userDir)) {
+    express.static(userDir)(req, res, next)
+  } else if (fs.existsSync(bundledDir)) {
+    express.static(bundledDir)(req, res, next)
+  } else {
+    next()
+  }
+})
 
 // In production, serve client build with SPA fallback
 if (process.env.NODE_ENV === 'production') {

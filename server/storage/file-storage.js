@@ -200,24 +200,38 @@ class FileStorage extends StorageInterface {
     return file
   }
 
-  async listPlugins() {
-    const dir = this._pluginsDir()
+  _bundledPluginsDir() {
+    return path.join(__dirname, '..', '..', 'plugins')
+  }
+
+  _scanPluginDir(dir) {
+    if (!fs.existsSync(dir)) return []
     const entries = fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory())
     const plugins = []
     for (const entry of entries) {
       const manifestPath = path.join(dir, entry.name, 'parallax-plugin.json')
       if (!fs.existsSync(manifestPath)) continue
       const manifest = fs.readJsonSync(manifestPath)
-      plugins.push({ id: manifest.id, slug: entry.name, name: manifest.name, description: manifest.description, version: manifest.version, manifest })
+      plugins.push({ id: manifest.id, slug: entry.name, name: manifest.name, description: manifest.description, version: manifest.version, manifest, _dir: dir })
     }
     return plugins
   }
 
+  async listPlugins() {
+    const user = this._scanPluginDir(this._pluginsDir())
+    const bundled = this._scanPluginDir(this._bundledPluginsDir())
+    const seen = new Set(user.map(p => p.slug))
+    return [...user, ...bundled.filter(p => !seen.has(p.slug))]
+  }
+
   async getPlugin(slug) {
-    const manifestPath = path.join(this._pluginsDir(), slug, 'parallax-plugin.json')
-    if (!fs.existsSync(manifestPath)) return null
-    const manifest = fs.readJsonSync(manifestPath)
-    return { id: manifest.id, slug, name: manifest.name, description: manifest.description, version: manifest.version, manifest }
+    for (const dir of [this._pluginsDir(), this._bundledPluginsDir()]) {
+      const manifestPath = path.join(dir, slug, 'parallax-plugin.json')
+      if (!fs.existsSync(manifestPath)) continue
+      const manifest = fs.readJsonSync(manifestPath)
+      return { id: manifest.id, slug, name: manifest.name, description: manifest.description, version: manifest.version, manifest, _dir: dir }
+    }
+    return null
   }
 
   async installPlugin() {}

@@ -49,6 +49,7 @@ import anOldHopeCSS from '../../../node_modules/highlight.js/styles/an-old-hope.
 import atomOneLightCSS from '../../../node_modules/highlight.js/styles/atom-one-light.min.css?raw'
 import githubCSS from '../../../node_modules/highlight.js/styles/github.min.css?raw'
 import vsCSS from '../../../node_modules/highlight.js/styles/vs.min.css?raw'
+import { loadPlugins, getInsertablePluginTypes, createPluginElement } from '../plugins/PluginLoader'
 
 const CODE_THEME_CSS = {
   'monokai': monokaiCSS,
@@ -334,6 +335,20 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
       setLoading(false)
     })
   }, [presentationId])
+
+  // Load plugins on mount
+  const [pluginsLoaded, setPluginsLoaded] = useState(false)
+  useEffect(() => {
+    loadPlugins({
+      getPresentation: () => presentation,
+      updateElement: (id, patch) => {
+        setPresentation(prev => {
+          if (!prev) return prev
+          return { ...prev, slides: prev.slides.map(s => ({ ...s, elements: (s.elements || []).map(el => el.id === id ? { ...el, ...patch } : el) })) }
+        })
+      },
+    }).then(() => setPluginsLoaded(true)).catch(() => setPluginsLoaded(true))
+  }, [])
 
   // Load GitHub config on mount
   useEffect(() => {
@@ -624,6 +639,16 @@ svg.selectAll('circle').data(data).join('circle')
   .attr('cx', d => d.x).attr('cy', d => d.y).attr('r', d => d.r)
   .attr('fill', (d,i) => d3.schemeTableau10[i%10]).attr('opacity', 0.8);
 <\/script>`
+
+  const addPluginElement = useCallback((fullType) => {
+    const el = createPluginElement(fullType)
+    if (!el) return
+    setPresentation(prev => {
+      if (!prev) return prev
+      return { ...prev, slides: prev.slides.map((s, i) => i === currentSlideIndexRef.current ? { ...s, elements: [...(s.elements || []), el] } : s) }
+    })
+    setSelectedElementIds([el.id])
+  }, [])
 
   const addHtmlElement = useCallback(() => {
     const newEl = {
@@ -2601,6 +2626,8 @@ class MyScene(Scene):
             onAddAudio={addAudioElement}
             onAddTable={addTableElement}
             onAddManim={addManimElement}
+            pluginTypes={pluginsLoaded ? getInsertablePluginTypes() : []}
+            onAddPluginElement={addPluginElement}
             selectedCount={selectedElementIds.length}
             onAlignElements={alignElements}
             smartGuidesEnabled={smartGuidesEnabled}

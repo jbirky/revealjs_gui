@@ -253,14 +253,30 @@ class PgStorage extends StorageInterface {
 
   // --- Plugins ---
 
+  _scanBundledPlugins() {
+    const dir = require('path').join(__dirname, '..', '..', 'plugins')
+    const fs = require('fs-extra')
+    if (!fs.existsSync(dir)) return []
+    return fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory()).map(entry => {
+      const mp = require('path').join(dir, entry.name, 'parallax-plugin.json')
+      if (!fs.existsSync(mp)) return null
+      const m = fs.readJsonSync(mp)
+      return { id: m.id, slug: entry.name, name: m.name, description: m.description, version: m.version, manifest: m }
+    }).filter(Boolean)
+  }
+
   async listPlugins() {
     const { rows } = await this.query(`SELECT id, slug, name, description, version, price_cents as "priceCents", manifest, published, downloads, avg_rating as "avgRating" FROM plugins WHERE published = true ORDER BY name`)
-    return rows
+    const bundled = this._scanBundledPlugins()
+    const seen = new Set(rows.map(r => r.slug))
+    return [...rows, ...bundled.filter(b => !seen.has(b.slug))]
   }
 
   async getPlugin(slug) {
     const { rows } = await this.query(`SELECT id, slug, name, description, version, price_cents as "priceCents", manifest, published, downloads, avg_rating as "avgRating" FROM plugins WHERE slug = $1`, [slug])
-    return rows[0] || null
+    if (rows[0]) return rows[0]
+    const bundled = this._scanBundledPlugins().find(b => b.slug === slug)
+    return bundled || null
   }
 
   async installPlugin(pluginId, userId) {
