@@ -14,42 +14,62 @@ function TokenBridge() {
   return null
 }
 
+function SignInPage() {
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: 32,
+      background: 'var(--bg-primary, #0f0f1a)',
+    }}>
+      <div style={{ textAlign: 'center' }}>
+        <h1 style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-primary, #fff)', margin: 0, cursor: 'pointer' }}
+            onClick={() => { window.location.href = '/' }}>
+          <span style={{ color: 'var(--accent, #6366f1)' }}>P</span>arallax
+        </h1>
+        <p style={{ color: 'var(--text-muted, #888)', marginTop: 8, fontSize: 15 }}>
+          Sign in to create and manage presentations
+        </p>
+      </div>
+      <SignIn routing="hash" afterSignInUrl="/dashboard" appearance={{
+        variables: { colorPrimary: '#6366f1', colorBackground: '#2a2a3e', colorText: '#f0f0f0', colorInputBackground: '#3a3a52', colorInputText: '#f0f0f0' },
+        elements: { socialButtonsBlockButton: { backgroundColor: '#ffffff', color: '#1a1a2e', borderColor: '#e0e0e0' } },
+      }} />
+      <button onClick={() => { window.location.href = '/' }}
+        style={{ color: 'var(--text-muted)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}>
+        &larr; Back to home
+      </button>
+    </div>
+  )
+}
+
 function AuthGateCloud({ children }) {
-  const [showAuth, setShowAuth] = useState(false)
+  const path = window.location.pathname
+  const isLanding = path === '/' || path === ''
+  const isSignIn = path === '/sign-in'
 
   return (
     <>
       <TokenBridge />
-      <SignedOut>
-        {showAuth ? (
-          <div style={{
-            minHeight: '100vh', display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: 32,
-            background: 'var(--bg-primary, #0f0f1a)',
-          }}>
-            <div style={{ textAlign: 'center' }}>
-              <h1 style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-primary, #fff)', margin: 0, cursor: 'pointer' }}
-                  onClick={() => setShowAuth(false)}>
-                <span style={{ color: 'var(--accent, #6366f1)' }}>P</span>arallax
-              </h1>
-              <p style={{ color: 'var(--text-muted, #888)', marginTop: 8, fontSize: 15 }}>
-                Sign in to create and manage presentations
-              </p>
-            </div>
-            <SignIn routing="hash" appearance={{
-              variables: { colorPrimary: '#6366f1', colorBackground: '#2a2a3e', colorText: '#f0f0f0', colorInputBackground: '#3a3a52', colorInputText: '#f0f0f0' },
-              elements: { socialButtonsBlockButton: { backgroundColor: '#ffffff', color: '#1a1a2e', borderColor: '#e0e0e0' } },
-            }} />
-            <button onClick={() => setShowAuth(false)}
-              style={{ color: 'var(--text-muted)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}>
-              &larr; Back to home
-            </button>
-          </div>
-        ) : (
-          <LandingPage onSignIn={() => setShowAuth(true)} />
-        )}
-      </SignedOut>
-      <SignedIn>{children}</SignedIn>
+      {isLanding ? (
+        <>
+          <SignedOut>
+            <LandingPage onSignIn={() => { window.location.href = '/sign-in' }} />
+          </SignedOut>
+          <SignedIn>
+            <LandingPage onSignIn={() => { window.location.href = '/dashboard' }} />
+          </SignedIn>
+        </>
+      ) : isSignIn ? (
+        <>
+          <SignedOut><SignInPage /></SignedOut>
+          <SignedIn>{(() => { window.location.href = '/dashboard'; return null })()}</SignedIn>
+        </>
+      ) : (
+        <>
+          <SignedOut><SignInPage /></SignedOut>
+          <SignedIn>{children}</SignedIn>
+        </>
+      )}
     </>
   )
 }
