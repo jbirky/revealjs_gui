@@ -37,6 +37,7 @@ async function createCheckoutSession(storage, userId, email, name, successUrl, c
   const session = await s.checkout.sessions.create({
     customer: customerId,
     mode: 'subscription',
+    allow_promotion_codes: true,
     line_items: [{ price: STRIPE_PRO_PRICE_ID, quantity: 1 }],
     success_url: successUrl,
     cancel_url: cancelUrl,
