@@ -20,7 +20,7 @@ services:
 
   parallax-dev:
     build:
-      context: https://github.com/jbirky/revealjs_gui.git#saas-migration
+      context: https://github.com/jbirky/revealjs_gui.git#dev
       args:
         - VITE_PARALLAX_MODE=cloud
         - VITE_CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}

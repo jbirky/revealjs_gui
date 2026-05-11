@@ -179,6 +179,88 @@ class FileStorage extends StorageInterface {
     await fs.writeJson(this.githubConfigFile, updated, { spaces: 2 })
     return updated
   }
+
+  // --- Plugins (self-hosted: directory-scanned, no marketplace) ---
+
+  _pluginsDir() {
+    const dir = path.join(this.dataDir, 'plugins')
+    fs.ensureDirSync(dir)
+    return dir
+  }
+
+  _pluginStorageFile() {
+    const file = path.join(this.dataDir, 'plugin-storage.json')
+    if (!fs.existsSync(file)) fs.writeJsonSync(file, {})
+    return file
+  }
+
+  _presPluginsFile() {
+    const file = path.join(this.dataDir, 'presentation-plugins.json')
+    if (!fs.existsSync(file)) fs.writeJsonSync(file, {})
+    return file
+  }
+
+  async listPlugins() {
+    const dir = this._pluginsDir()
+    const entries = fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory())
+    const plugins = []
+    for (const entry of entries) {
+      const manifestPath = path.join(dir, entry.name, 'parallax-plugin.json')
+      if (!fs.existsSync(manifestPath)) continue
+      const manifest = fs.readJsonSync(manifestPath)
+      plugins.push({ id: manifest.id, slug: entry.name, name: manifest.name, description: manifest.description, version: manifest.version, manifest })
+    }
+    return plugins
+  }
+
+  async getPlugin(slug) {
+    const manifestPath = path.join(this._pluginsDir(), slug, 'parallax-plugin.json')
+    if (!fs.existsSync(manifestPath)) return null
+    const manifest = fs.readJsonSync(manifestPath)
+    return { id: manifest.id, slug, name: manifest.name, description: manifest.description, version: manifest.version, manifest }
+  }
+
+  async installPlugin() {}
+  async uninstallPlugin() {}
+  async getInstalledPlugins() { return this.listPlugins() }
+
+  async getPresentationPlugins(presentationId) {
+    const mapping = fs.readJsonSync(this._presPluginsFile())
+    const slugs = mapping[presentationId] || []
+    const all = await this.listPlugins()
+    return all.filter(p => slugs.includes(p.slug))
+  }
+
+  async enablePluginForPresentation(presentationId, pluginId) {
+    const mapping = fs.readJsonSync(this._presPluginsFile())
+    const list = mapping[presentationId] || []
+    if (!list.includes(pluginId)) list.push(pluginId)
+    mapping[presentationId] = list
+    fs.writeJsonSync(this._presPluginsFile(), mapping, { spaces: 2 })
+  }
+
+  async disablePluginForPresentation(presentationId, pluginId) {
+    const mapping = fs.readJsonSync(this._presPluginsFile())
+    mapping[presentationId] = (mapping[presentationId] || []).filter(s => s !== pluginId)
+    fs.writeJsonSync(this._presPluginsFile(), mapping, { spaces: 2 })
+  }
+
+  async getPluginStorage(userId, pluginId, key) {
+    const store = fs.readJsonSync(this._pluginStorageFile())
+    return store[`${userId}:${pluginId}:${key}`] ?? null
+  }
+
+  async setPluginStorage(userId, pluginId, key, value) {
+    const store = fs.readJsonSync(this._pluginStorageFile())
+    store[`${userId}:${pluginId}:${key}`] = value
+    fs.writeJsonSync(this._pluginStorageFile(), store, { spaces: 2 })
+  }
+
+  async deletePluginStorage(userId, pluginId, key) {
+    const store = fs.readJsonSync(this._pluginStorageFile())
+    delete store[`${userId}:${pluginId}:${key}`]
+    fs.writeJsonSync(this._pluginStorageFile(), store, { spaces: 2 })
+  }
 }
 
 module.exports = FileStorage

@@ -252,6 +252,19 @@ function shapeSvgString(el) {
   return `<svg width="100%" height="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="position:absolute;inset:0;overflow:visible;">${inner}${textEl}</svg>`
 }
 
+function buildHtmlEmbed(userHtml, embedW, embedH) {
+  const initScript = `<script>const EMBED_WIDTH=${embedW},EMBED_HEIGHT=${embedH};(function(){function fit(){document.querySelectorAll('svg').forEach(function(s){if(s._vb)return;var w=s.getAttribute('width'),h=s.getAttribute('height');if(w&&h&&!s.getAttribute('viewBox'))s.setAttribute('viewBox','0 0 '+parseFloat(w)+' '+parseFloat(h));if(s.getAttribute('viewBox')){s.setAttribute('width','100%');s.setAttribute('height','100%');s._vb=1;}});}window.addEventListener('load',fit);setTimeout(fit,100);setTimeout(fit,400);new MutationObserver(fit).observe(document.documentElement,{childList:true,subtree:true});})();<\/script>`
+  const resetStyle = `<style>html,body{margin:0;padding:0;overflow:hidden;width:100%;height:100%;box-sizing:border-box;}canvas{display:block;}svg{display:block;}<\/style>`
+  const injection = initScript + resetStyle
+  if (/<head[^>]*>/i.test(userHtml))
+    return userHtml.replace(/<head[^>]*>/i, m => m + injection)
+  if (/<html[^>]*>/i.test(userHtml))
+    return userHtml.replace(/<html[^>]*>/i, m => m + injection)
+  if (/<!doctype[^>]*>/i.test(userHtml))
+    return userHtml.replace(/(<!doctype[^>]*>)/i, '$1' + injection)
+  return injection + userHtml
+}
+
 // Generate reveal.js HTML
 function generateRevealHTML(presentation) {
   const theme = presentation.theme || 'black'
@@ -349,8 +362,8 @@ function generateRevealHTML(presentation) {
           return `<div${fragClass}${fragIdx} style="${style}${opacityStyle}">${shapeSvgString(el)}</div>`
         }
         if (el.type === 'html') {
-          const srcdoc = (el.content || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-          return `<iframe${fragClass}${fragIdx} srcdoc="${srcdoc}" style="${style}border:none;" scrolling="no"></iframe>`
+          const srcdoc = buildHtmlEmbed(el.content || '', el.width, el.height).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+          return `<iframe${fragClass}${fragIdx} srcdoc="${srcdoc}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
         if (el.type === 'code') {
           const lang = el.language || 'plaintext'
@@ -476,11 +489,11 @@ function generateRevealHTML(presentation) {
         const activeIdx = slide.activeSection
         const seqSpans = sequenceSections.map((sec, i) => {
           const isActive = activeIdx === i
-          const secLabel = typeof sec === 'object' ? (sec.label || 'Section ' + (i+1)) : (sec || 'Section ' + (i+1))
-          const secColor = typeof sec === 'object' && sec.color ? sec.color : null
-          const color = isActive ? (secColor || footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor
+          const secLabel = typeof sec === 'string' ? sec : (sec?.label || '')
+          const secActiveColor = typeof sec === 'object' && sec?.color ? sec.color : (footerColor || 'rgba(255,255,255,0.9)')
+          const color = isActive ? secActiveColor : footerInactiveColor
           const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
-          return `<span style="color:${color};${weight}">${escapeHtml(secLabel)}</span>`
+          return `<span style="color:${color};${weight}">${escapeHtml(secLabel || `Section ${i+1}`)}</span>`
         }).join('')
         const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
         footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;">${timeSpan}<div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
@@ -546,8 +559,10 @@ function generateRevealHTML(presentation) {
     /* reveal.js constrains/decorates section imgs — reset everything */
     .reveal .slides section img { margin: 0 !important; border: none !important; background: none !important; box-shadow: none !important; max-width: none !important; max-height: none !important; }
     /* Footer — explicit CSS rule with high specificity so reveal.js theme cannot override */
+    /* color only on the container so per-span inline colors (inactive sections) are not overridden */
+    .reveal .slides section .reveal-footer { color: ${footerColor} !important; }
     .reveal .slides section .reveal-footer,
-    .reveal .slides section .reveal-footer * { font-family: ${footerFontFamily} !important; font-size: ${footerFontSize}px !important; color: ${footerColor} !important; }
+    .reveal .slides section .reveal-footer * { font-family: ${footerFontFamily} !important; font-size: ${footerFontSize}px !important; }
     #fs-btn {
       position: fixed; bottom: 16px; right: 16px; z-index: 9999;
       background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.3);
@@ -1632,6 +1647,90 @@ app.get('/api/presentations/:id/github/version/:sha', async (req, res) => {
     res.status(500).json({ error: err.message })
   }
 })
+
+// ---- Plugin API ----
+
+app.get('/api/plugins', async (req, res) => {
+  try {
+    const plugins = await storage.listPlugins()
+    res.json(plugins)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/plugins/:slug', async (req, res) => {
+  try {
+    const plugin = await storage.getPlugin(req.params.slug)
+    if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
+    res.json(plugin)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/plugins/:slug/manifest', async (req, res) => {
+  try {
+    const plugin = await storage.getPlugin(req.params.slug)
+    if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
+    res.json(plugin.manifest)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+if (IS_CLOUD) {
+  app.post('/api/plugins/:slug/install', ...authStack, requireUser, async (req, res) => {
+    try {
+      const plugin = await storage.getPlugin(req.params.slug)
+      if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
+      await storage.installPlugin(plugin.id, req.userId)
+      res.json({ ok: true })
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+
+  app.delete('/api/plugins/:slug/install', ...authStack, requireUser, async (req, res) => {
+    try {
+      const plugin = await storage.getPlugin(req.params.slug)
+      if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
+      await storage.uninstallPlugin(plugin.id, req.userId)
+      res.json({ ok: true })
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+
+  app.get('/api/me/plugins', ...authStack, requireUser, async (req, res) => {
+    try {
+      const plugins = await storage.getInstalledPlugins(req.userId)
+      res.json(plugins)
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+}
+
+app.get('/api/presentations/:id/plugins', async (req, res) => {
+  try {
+    const plugins = await storage.getPresentationPlugins(req.params.id)
+    res.json(plugins)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/presentations/:id/plugins', async (req, res) => {
+  try {
+    const { pluginId, config } = req.body
+    await storage.enablePluginForPresentation(req.params.id, pluginId, config)
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/presentations/:id/plugins/:pluginId', async (req, res) => {
+  try {
+    await storage.disablePluginForPresentation(req.params.id, req.params.pluginId)
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Self-hosted: serve plugin assets from the plugins directory
+if (!IS_CLOUD) {
+  const pluginsDir = path.join(DATA_DIR, 'plugins')
+  fs.ensureDirSync(pluginsDir)
+  app.use('/api/plugins/:slug/assets', (req, res, next) => {
+    const safePath = path.normalize(req.params.slug).replace(/\.\./g, '')
+    express.static(path.join(pluginsDir, safePath, 'dist'))(req, res, next)
+  })
+}
 
 // In production, serve client build with SPA fallback
 if (process.env.NODE_ENV === 'production') {
