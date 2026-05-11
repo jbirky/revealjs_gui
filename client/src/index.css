@@ -506,6 +506,8 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 }
 .landing-btn-ghost:hover { color: #fff; border-color: rgba(255,255,255,0.5); }
 .landing-btn-lg { padding: 14px 28px; font-size: 16px; border-radius: 10px; }
+.landing-btn-ghost.landing-btn-lg { color: #000; border-color: rgba(0,0,0,0.2); background: #fff; }
+.landing-btn-ghost.landing-btn-lg:hover { color: #000; border-color: rgba(0,0,0,0.4); background: #f0f0f0; }
 
 .landing-hero {
   text-align: center; padding: 80px 24px 60px;
@@ -598,7 +600,8 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 
 .landing-footer {
   text-align: center; padding: 40px 24px;
-  border-top: 1px solid var(--border); color: var(--text-muted); font-size: 13px;
+  background: rgba(15, 15, 30, 0.95); border-top: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.5); font-size: 13px;
 }
 .landing-footer p { margin: 8px 0 0; }
 
