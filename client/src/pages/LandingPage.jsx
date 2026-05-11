@@ -18,26 +18,18 @@ const PLANS = [
   {
     name: 'Free',
     price: '$0',
-    period: '/mo',
-    features: ['3 presentations', 'Basic themes', '100 MB storage', '30-day expiration'],
+    period: '',
+    features: ['3 presentations', '100 MB storage', '30-day expiration'],
     cta: 'Get Started',
     highlighted: false,
   },
   {
     name: 'Pro',
-    price: '$9',
+    price: '$5',
     period: '/mo',
-    features: ['Unlimited presentations', 'All themes & templates', '10 GB storage', 'Priority support', 'Custom branding'],
-    cta: 'Start Free Trial',
+    features: ['Unlimited presentations', '5 GB storage', 'No expiration', 'Priority support'],
+    cta: 'Upgrade to Pro',
     highlighted: true,
-  },
-  {
-    name: 'Team',
-    price: '$19',
-    period: '/user/mo',
-    features: ['Everything in Pro', 'Team collaboration', 'Shared templates', 'Admin controls', 'SSO'],
-    cta: 'Contact Us',
-    highlighted: false,
   },
 ]
 
@@ -163,7 +155,7 @@ export default function LandingPage({ onSignIn }) {
           <p className="landing-section-sub">
             Start for free, upgrade when you need more.
           </p>
-          <div className="landing-pricing-grid">
+          <div className="landing-pricing-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', maxWidth: 700, margin: '0 auto' }}>
             {PLANS.map(plan => (
               <div key={plan.name} className={`landing-price-card ${plan.highlighted ? 'landing-price-highlighted' : ''}`}>
                 {plan.highlighted && <div className="landing-price-badge">Most Popular</div>}
