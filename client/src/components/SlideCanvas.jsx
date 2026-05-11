@@ -1016,7 +1016,7 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
               else if (element.type === 'html') onOpenHtmlEditor?.(element.id)
               else if (element.type === 'code') onOpenCodeEditor?.(element.id)
               else if (element.type === 'latex') onOpenLatexEditor?.(element.id)
-              else if (element.type === 'manim') onOpenManimEditor?.(element.id)
+              else if (element.type === 'manim' || element.type === 'plugin:manim') onOpenManimEditor?.(element.id)
               else if (element.type === 'p5') onOpenP5Editor?.(element.id)
               else if (element.type === 'textpath') onStartEdit(element.id)
             }}

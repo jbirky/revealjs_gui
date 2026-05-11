@@ -643,12 +643,19 @@ svg.selectAll('circle').data(data).join('circle')
   const addPluginElement = useCallback((fullType) => {
     const el = createPluginElement(fullType)
     if (!el) return
+    if (fullType === 'plugin:manim') {
+      el.pluginData = { ...el.pluginData, content: DEFAULT_MANIM }
+    }
     setPresentation(prev => {
       if (!prev) return prev
       return { ...prev, slides: prev.slides.map((s, i) => i === currentSlideIndexRef.current ? { ...s, elements: [...(s.elements || []), el] } : s) }
     })
     setSelectedElementIds([el.id])
-  }, [])
+    if (fullType === 'plugin:manim') {
+      const d = el.pluginData
+      setManimEditorState({ elementId: el.id, content: d.content, sceneName: d.sceneName || 'MyScene', quality: d.quality || 'l', rendered: null, rendering: false, error: null, isPlugin: true })
+    }
+  }, [DEFAULT_MANIM])
 
   const addHtmlElement = useCallback(() => {
     const newEl = {
@@ -1120,20 +1127,32 @@ class MyScene(Scene):
   const openManimEditor = useCallback((elementId) => {
     const slide = presentation?.slides[currentSlideIndexRef.current]
     const element = slide?.elements?.find(el => el.id === elementId)
-    if (!element || element.type !== 'manim') return
-    setManimEditorState({ elementId, content: element.content || DEFAULT_MANIM, sceneName: element.sceneName || 'MyScene', quality: element.quality || 'l', rendered: element.rendered || null, rendering: false, error: null })
+    if (!element) return
+    if (element.type === 'manim') {
+      setManimEditorState({ elementId, content: element.content || DEFAULT_MANIM, sceneName: element.sceneName || 'MyScene', quality: element.quality || 'l', rendered: element.rendered || null, rendering: false, error: null })
+    } else if (element.type === 'plugin:manim') {
+      const d = element.pluginData || {}
+      setManimEditorState({ elementId, content: d.content || DEFAULT_MANIM, sceneName: d.sceneName || 'MyScene', quality: d.quality || 'l', rendered: d.rendered || null, rendering: false, error: null, isPlugin: true })
+    }
   }, [presentation, DEFAULT_MANIM])
 
   const commitManimEdit = useCallback(() => {
     if (!manimEditorState) return
-    updateElement(manimEditorState.elementId, {
+    const patch = {
       content: manimEditorState.content,
       sceneName: manimEditorState.sceneName,
       quality: manimEditorState.quality,
       rendered: manimEditorState.rendered,
-    })
+    }
+    if (manimEditorState.isPlugin) {
+      const slide = presentation?.slides[currentSlideIndexRef.current]
+      const element = slide?.elements?.find(el => el.id === manimEditorState.elementId)
+      updateElement(manimEditorState.elementId, { pluginData: { ...(element?.pluginData || {}), ...patch } })
+    } else {
+      updateElement(manimEditorState.elementId, patch)
+    }
     setManimEditorState(null)
-  }, [manimEditorState, updateElement])
+  }, [manimEditorState, updateElement, presentation])
 
   const renderManim = useCallback(async () => {
     if (!manimEditorState) return

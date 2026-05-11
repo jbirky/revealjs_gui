@@ -332,9 +332,6 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
             <button onClick={() => { setShowEmbedMenu(false); onAddP5() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
               <Code size={14} /> p5.js
             </button>
-            <button onClick={() => { setShowEmbedMenu(false); onAddManim() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-              <span style={{ fontSize: 14, width: 14, textAlign: 'center' }}>🎬</span> Manim
-            </button>
             <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
             <button onClick={() => { setShowEmbedMenu(false); onAddAnime?.() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
               <span style={{ fontSize: 14, width: 14, textAlign: 'center' }}>&#x2728;</span> Anime.js
