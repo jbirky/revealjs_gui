@@ -50,7 +50,7 @@ function generateHTML(templateId, params) {
 
   const { text, fontFamily, fontSize, color, duration, background } = params
   const font = fontFamily || "'Barlow', sans-serif"
-  const scale = 4
+  const scale = 10
   const size = (fontSize || 48) * scale
   const col = color || '#ffffff'
   const dur = duration || 2
