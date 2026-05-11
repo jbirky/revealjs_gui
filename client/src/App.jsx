@@ -83,9 +83,9 @@ const AuthGate = isCloud ? AuthGateCloud : AuthGateSelfHosted
 function DocsOverlay({ onClose, initialPage }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column' }}>
-      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', borderBottom: '1px solid var(--border)', background: 'rgba(30,30,50,0.95)', backdropFilter: 'blur(12px)' }}>
-        <div style={{ fontSize: 20, fontWeight: 700 }}><span style={{ color: 'var(--accent)' }}>P</span>arallax Docs</div>
-        <button onClick={onClose} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 }}>Back to app</button>
+      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(15,15,30,0.95)', backdropFilter: 'blur(12px)' }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}><span style={{ color: 'var(--accent)' }}>P</span>arallax Docs</div>
+        <button onClick={onClose} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: '6px 14px', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 13 }}>Back to app</button>
       </nav>
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <DocsPage initialPage={initialPage} />
