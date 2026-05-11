@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Jessica Birky
 
 import { useState, useMemo } from 'react'
+import { Bold, Italic, Underline, Code2 } from 'lucide-react'
 
 const FONTS = [
   "'Barlow', sans-serif",
@@ -12,7 +13,14 @@ const FONTS = [
   "'JetBrains Mono', monospace",
   "'Space Mono', monospace",
   "'Source Sans 3', sans-serif",
+  "'Merriweather', serif",
+  "'Fira Code', monospace",
+  "'Latin Modern Roman', serif",
+  "'Comfortaa', sans-serif",
+  "'Codystar', sans-serif",
 ]
+
+const WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900]
 
 const TEMPLATES = [
   { id: 'typewriter', name: 'Typewriter', desc: 'Characters appear one at a time with a blinking cursor' },
@@ -25,12 +33,24 @@ const TEMPLATES = [
   { id: 'glitch', name: 'Glitch', desc: 'Digital glitch with color channel split' },
   { id: 'bounce', name: 'Bounce In', desc: 'Letters drop in with spring physics' },
   { id: 'stagger-center', name: 'Stagger Center', desc: 'Letters spread out from center' },
+  { id: 'custom', name: 'Custom Code', desc: 'Write your own kinetic text HTML/CSS/JS' },
 ]
 
+function textStyle(params) {
+  const parts = []
+  if (params.bold) parts.push('font-weight:' + (params.fontWeight || 700))
+  else if (params.fontWeight && params.fontWeight !== 400) parts.push('font-weight:' + params.fontWeight)
+  if (params.italic) parts.push('font-style:italic')
+  if (params.underline) parts.push('text-decoration:underline')
+  return parts.join(';')
+}
+
 function generateHTML(templateId, params) {
+  if (templateId === 'custom') return params.customCode || ''
+
   const { text, fontFamily, fontSize, color, duration, background } = params
   const font = fontFamily || "'Barlow', sans-serif"
-  const scale = 2
+  const scale = 4
   const size = (fontSize || 48) * scale
   const col = color || '#ffffff'
   const dur = duration || 2
@@ -38,19 +58,20 @@ function generateHTML(templateId, params) {
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const chars = [...text]
   const words = text.split(/\s+/)
+  const ts = textStyle(params)
+  const tsAttr = ts ? `;${ts}` : ''
 
   const base = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;600;700&family=Inter:wght@400;600;700&family=Roboto:wght@400;700&family=Playfair+Display:wght@400;700&family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=Space+Mono:wght@400;700&family=Source+Sans+3:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@100;200;300;400;500;600;700;800;900&family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Roboto:wght@100;300;400;500;700;900&family=Playfair+Display:wght@400;500;600;700;800;900&family=Bebas+Neue&family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&family=Space+Mono:wght@400;700&family=Source+Sans+3:wght@300;400;500;600;700;800;900&family=Merriweather:wght@300;400;700;900&family=Fira+Code:wght@300;400;500;600;700&family=Comfortaa:wght@300;400;500;600;700&family=Codystar:wght@300;400&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:${scale*100}%;height:${scale*100}%;overflow:hidden;background:${bg};transform:scale(${1/scale});transform-origin:0 0}
-body{display:flex;align-items:center;justify-content:center;font-family:${font};color:${col}}
+body{display:flex;align-items:center;justify-content:center;font-family:${font};color:${col}${tsAttr}}
 </style>`
 
   switch (templateId) {
 
     case 'typewriter': {
-      const speed = Math.max(0.02, dur / chars.length)
       return `${base}
 <style>
 .tw{font-size:${size}px;white-space:nowrap;overflow:hidden;border-right:3px solid ${col};width:0;animation:tw-type ${dur}s steps(${chars.length}) forwards,tw-blink 0.6s step-end infinite}
@@ -76,7 +97,7 @@ body{display:flex;align-items:center;justify-content:center;font-family:${font};
       return `${base}
 <style>
 .rv-wrap{perspective:800px;text-align:center}
-.rv{font-size:${size}px;font-weight:700;display:inline-block;transform-style:preserve-3d;opacity:0;transform:rotateY(-180deg);animation:rv-in ${dur}s cubic-bezier(0.23,1,0.32,1) 0.2s forwards,rv-drift ${dur*4}s ease-in-out ${dur+0.5}s infinite}
+.rv{font-size:${size}px;display:inline-block;transform-style:preserve-3d;opacity:0;transform:rotateY(-180deg);animation:rv-in ${dur}s cubic-bezier(0.23,1,0.32,1) 0.2s forwards,rv-drift ${dur*4}s ease-in-out ${dur+0.5}s infinite}
 @keyframes rv-in{0%{opacity:0;transform:rotateY(-180deg)}30%{opacity:1}100%{opacity:1;transform:rotateY(0)}}
 @keyframes rv-drift{0%,100%{transform:rotateY(0)}50%{transform:rotateY(10deg)}}
 </style></head><body><div class="rv-wrap"><div class="rv">${escaped}</div></div></body></html>`
@@ -104,7 +125,7 @@ body{display:flex;align-items:center;justify-content:center;font-family:${font};
       }).join('')
       return `${base}
 <style>
-.sf{font-size:${size}px;display:flex;gap:2px;font-weight:700;letter-spacing:0.05em}
+.sf{font-size:${size}px;display:flex;gap:2px;letter-spacing:0.05em}
 .sf span{display:inline-block;background:rgba(255,255,255,0.08);padding:4px 6px;border-radius:3px;opacity:0;transform:rotateX(-90deg);transform-origin:top center;animation:sf-flip 0.4s ease-out forwards}
 @keyframes sf-flip{to{opacity:1;transform:rotateX(0)}}
 </style></head><body><div style="perspective:600px"><div class="sf">${spans}</div></div></body></html>`
@@ -142,7 +163,7 @@ body{display:flex;align-items:center;justify-content:center;font-family:${font};
     case 'glitch': {
       return `${base}
 <style>
-.gl{font-size:${size}px;font-weight:700;position:relative;white-space:nowrap}
+.gl{font-size:${size}px;position:relative;white-space:nowrap}
 .gl::before,.gl::after{content:'${escaped.replace(/'/g,"\\'")}';position:absolute;left:0;top:0;width:100%;overflow:hidden}
 .gl::before{color:#0ff;animation:gl-r ${dur*0.5}s infinite linear alternate-reverse;clip-path:inset(0 0 60% 0)}
 .gl::after{color:#f0f;animation:gl-b ${dur*0.4}s infinite linear alternate-reverse;clip-path:inset(60% 0 0 0)}
@@ -159,7 +180,7 @@ body{display:flex;align-items:center;justify-content:center;font-family:${font};
       }).join('')
       return `${base}
 <style>
-.bn{font-size:${size}px;white-space:nowrap;font-weight:700}
+.bn{font-size:${size}px;white-space:nowrap}
 .bn span{display:inline-block;opacity:0;transform:translateY(-80px);animation:bn-drop 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards}
 @keyframes bn-drop{to{opacity:1;transform:translateY(0)}}
 </style></head><body><div class="bn">${spans}</div></body></html>`
@@ -174,7 +195,7 @@ body{display:flex;align-items:center;justify-content:center;font-family:${font};
       }).join('')
       return `${base}
 <style>
-.sc{font-size:${size}px;white-space:nowrap;font-weight:600}
+.sc{font-size:${size}px;white-space:nowrap}
 .sc span{display:inline-block;opacity:0;transform:scale(0) rotate(20deg);animation:sc-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards}
 @keyframes sc-pop{to{opacity:1;transform:scale(1) rotate(0)}}
 </style></head><body><div class="sc">${spans}</div></body></html>`
@@ -185,32 +206,91 @@ body{display:flex;align-items:center;justify-content:center;font-family:${font};
   }
 }
 
+const DEFAULT_CUSTOM = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+body { display: flex; align-items: center; justify-content: center; font-family: 'Barlow', sans-serif; color: #ffffff; }
+
+.text {
+  font-size: 48px;
+  font-weight: 700;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
+}
+</style>
+</head>
+<body>
+  <div class="text">Your Text Here</div>
+</body>
+</html>`
+
 export default function KineticTextModal({ onInsert, onClose, slideW = 960, slideH = 540 }) {
   const [selected, setSelected] = useState('typewriter')
+  const [customCode, setCustomCode] = useState(DEFAULT_CUSTOM)
+  const [isEditingCode, setIsEditingCode] = useState(false)
   const [params, setParams] = useState({
     text: 'Hello World',
     fontFamily: "'Barlow', sans-serif",
     fontSize: 48,
+    fontWeight: 400,
+    bold: false,
+    italic: false,
+    underline: false,
     color: '#ffffff',
     duration: 2,
     background: 'transparent',
+    customCode: DEFAULT_CUSTOM,
   })
 
   const update = (k, v) => setParams(p => ({ ...p, [k]: v }))
 
-  const previewHtml = useMemo(() => generateHTML(selected, params), [selected, params])
+  const previewHtml = useMemo(() => {
+    if (isEditingCode) return customCode
+    return generateHTML(selected, { ...params, customCode })
+  }, [selected, params, customCode, isEditingCode])
 
-  const previewKey = `${selected}-${params.text}-${params.fontFamily}-${params.fontSize}-${params.color}-${params.duration}-${params.background}`
+  const previewKey = isEditingCode
+    ? `custom-${customCode.length}`
+    : `${selected}-${params.text}-${params.fontFamily}-${params.fontSize}-${params.fontWeight}-${params.bold}-${params.italic}-${params.underline}-${params.color}-${params.duration}-${params.background}`
+
+  const handleEditAsCode = () => {
+    if (!isEditingCode) {
+      setCustomCode(generateHTML(selected, { ...params, customCode: params.customCode }))
+    }
+    setIsEditingCode(!isEditingCode)
+  }
+
+  const handleInsert = () => {
+    onInsert(isEditingCode ? customCode : previewHtml)
+  }
+
+  const isCustomTemplate = selected === 'custom'
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: 'var(--bg-card, #1e1e2e)', borderRadius: 12, width: 820, maxHeight: '90vh', display: 'flex', flexDirection: 'column', border: '1px solid var(--border, #333)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-card, #1e1e2e)', borderRadius: 12, width: 860, maxHeight: '90vh', display: 'flex', flexDirection: 'column', border: '1px solid var(--border, #333)', overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid var(--border, #333)' }}>
           <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary, #fff)' }}>Kinetic Text</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted, #888)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {!isCustomTemplate && (
+              <button onClick={handleEditAsCode} title={isEditingCode ? 'Back to template' : 'Edit as code'}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, background: isEditingCode ? 'rgba(99,102,241,0.15)' : 'none', border: '1px solid var(--border, #333)', borderRadius: 4, padding: '3px 8px', color: isEditingCode ? 'var(--accent, #6366f1)' : 'var(--text-muted, #888)', cursor: 'pointer', fontSize: 11 }}>
+                <Code2 size={12} /> {isEditingCode ? 'Template' : 'Edit as code'}
+              </button>
+            )}
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted, #888)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -219,11 +299,11 @@ export default function KineticTextModal({ onInsert, onClose, slideW = 960, slid
           <div style={{ width: 240, borderRight: '1px solid var(--border, #333)', overflowY: 'auto', padding: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               {TEMPLATES.map(t => (
-                <button key={t.id} onClick={() => setSelected(t.id)} title={t.desc}
+                <button key={t.id} onClick={() => { setSelected(t.id); setIsEditingCode(false); if (t.id === 'custom') update('customCode', customCode) }} title={t.desc}
                   style={{
                     padding: '10px 6px', borderRadius: 6, border: selected === t.id ? '2px solid var(--accent, #6366f1)' : '1px solid var(--border, #333)',
                     background: selected === t.id ? 'rgba(99,102,241,0.12)' : 'var(--bg-hover, #252530)',
-                    color: 'var(--text-primary, #fff)', cursor: 'pointer', fontSize: 10, fontWeight: 600, textAlign: 'center', lineHeight: 1.3,
+                    color: t.id === 'custom' ? 'var(--accent, #6366f1)' : 'var(--text-primary, #fff)', cursor: 'pointer', fontSize: 10, fontWeight: 600, textAlign: 'center', lineHeight: 1.3,
                   }}>
                   {t.name}
                 </button>
@@ -246,40 +326,85 @@ export default function KineticTextModal({ onInsert, onClose, slideW = 960, slid
             </div>
 
             {/* Controls */}
-            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border, #333)', overflowY: 'auto', maxHeight: 220 }}>
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted, #888)', marginBottom: 3 }}>Text</div>
-                <input type="text" value={params.text} onChange={e => update('text', e.target.value)}
-                  style={{ width: '100%', padding: '6px 8px', background: 'var(--bg-hover, #252530)', border: '1px solid var(--border, #333)', borderRadius: 4, color: 'var(--text-primary, #fff)', fontSize: 13 }} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
-                <div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted, #888)', marginBottom: 2 }}>Font</div>
-                  <select value={params.fontFamily} onChange={e => update('fontFamily', e.target.value)}
-                    style={{ width: '100%', padding: '4px', background: 'var(--bg-hover, #252530)', border: '1px solid var(--border, #333)', borderRadius: 4, color: 'var(--text-primary, #fff)', fontSize: 10 }}>
-                    {FONTS.map(f => <option key={f} value={f}>{f.split("'")[1] || f}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted, #888)', marginBottom: 2 }}>Size (px)</div>
-                  <input type="number" min={12} max={200} value={params.fontSize} onChange={e => update('fontSize', Number(e.target.value) || 48)}
-                    style={{ width: '100%', padding: '4px', background: 'var(--bg-hover, #252530)', border: '1px solid var(--border, #333)', borderRadius: 4, color: 'var(--text-primary, #fff)', fontSize: 11 }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted, #888)', marginBottom: 2 }}>Duration (s)</div>
-                  <input type="number" min={0.3} max={10} step={0.1} value={params.duration} onChange={e => update('duration', Number(e.target.value) || 2)}
-                    style={{ width: '100%', padding: '4px', background: 'var(--bg-hover, #252530)', border: '1px solid var(--border, #333)', borderRadius: 4, color: 'var(--text-primary, #fff)', fontSize: 11 }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted, #888)', marginBottom: 2 }}>Color</div>
-                  <input type="color" value={params.color} onChange={e => update('color', e.target.value)}
-                    style={{ width: '100%', height: 26, border: '1px solid var(--border, #333)', borderRadius: 4, cursor: 'pointer', background: 'var(--bg-hover, #252530)' }} />
+            {(isEditingCode || isCustomTemplate) ? (
+              <div style={{ borderTop: '1px solid var(--border, #333)', display: 'flex', flexDirection: 'column', maxHeight: 280 }}>
+                <textarea
+                  value={customCode}
+                  onChange={e => { setCustomCode(e.target.value); update('customCode', e.target.value) }}
+                  onKeyDown={e => {
+                    if (e.key === 'Tab') { e.preventDefault(); const s = e.target.selectionStart; const val = e.target.value; setCustomCode(val.substring(0, s) + '  ' + val.substring(e.target.selectionEnd)); setTimeout(() => { e.target.selectionStart = e.target.selectionEnd = s + 2 }, 0) }
+                  }}
+                  spellCheck={false}
+                  style={{ flex: 1, minHeight: 180, padding: '10px 14px', background: '#1a1a2e', border: 'none', color: '#e0e0e0', fontFamily: "'Fira Code', 'JetBrains Mono', monospace", fontSize: 12, lineHeight: 1.5, resize: 'none', outline: 'none' }}
+                />
+                <div style={{ padding: '6px 14px', borderTop: '1px solid var(--border, #333)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted, #888)' }}>Full HTML/CSS/JS — write your own animation</span>
+                  <button onClick={() => { setCustomCode(previewHtml); update('customCode', previewHtml) }}
+                    style={{ fontSize: 10, padding: '2px 8px', background: 'none', border: '1px solid var(--border, #333)', borderRadius: 4, color: 'var(--text-muted, #888)', cursor: 'pointer' }}>
+                    Refresh Preview
+                  </button>
                 </div>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted, #888)', marginTop: 4 }}>
-                {TEMPLATES.find(t => t.id === selected)?.desc}
+            ) : (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border, #333)', overflowY: 'auto', maxHeight: 220 }}>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted, #888)', marginBottom: 3 }}>Text</div>
+                  <input type="text" value={params.text} onChange={e => update('text', e.target.value)}
+                    style={{ width: '100%', padding: '6px 8px', background: 'var(--bg-hover, #252530)', border: '1px solid var(--border, #333)', borderRadius: 4, color: 'var(--text-primary, #fff)', fontSize: 13 }} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted, #888)', marginBottom: 2 }}>Font</div>
+                    <select value={params.fontFamily} onChange={e => update('fontFamily', e.target.value)}
+                      style={{ width: '100%', padding: '4px', background: 'var(--bg-hover, #252530)', border: '1px solid var(--border, #333)', borderRadius: 4, color: 'var(--text-primary, #fff)', fontSize: 10 }}>
+                      {FONTS.map(f => <option key={f} value={f}>{f.split("'")[1] || f}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted, #888)', marginBottom: 2 }}>Size (px)</div>
+                    <input type="number" min={12} max={200} value={params.fontSize} onChange={e => update('fontSize', Number(e.target.value) || 48)}
+                      style={{ width: '100%', padding: '4px', background: 'var(--bg-hover, #252530)', border: '1px solid var(--border, #333)', borderRadius: 4, color: 'var(--text-primary, #fff)', fontSize: 11 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted, #888)', marginBottom: 2 }}>Weight</div>
+                    <select value={params.fontWeight} onChange={e => update('fontWeight', Number(e.target.value))}
+                      style={{ width: '100%', padding: '4px', background: 'var(--bg-hover, #252530)', border: '1px solid var(--border, #333)', borderRadius: 4, color: 'var(--text-primary, #fff)', fontSize: 10 }}>
+                      {WEIGHTS.map(w => <option key={w} value={w}>{w}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted, #888)', marginBottom: 2 }}>Duration (s)</div>
+                    <input type="number" min={0.3} max={10} step={0.1} value={params.duration} onChange={e => update('duration', Number(e.target.value) || 2)}
+                      style={{ width: '100%', padding: '4px', background: 'var(--bg-hover, #252530)', border: '1px solid var(--border, #333)', borderRadius: 4, color: 'var(--text-primary, #fff)', fontSize: 11 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted, #888)', marginBottom: 2 }}>Color</div>
+                    <input type="color" value={params.color} onChange={e => update('color', e.target.value)}
+                      style={{ width: '100%', height: 26, border: '1px solid var(--border, #333)', borderRadius: 4, cursor: 'pointer', background: 'var(--bg-hover, #252530)' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                  {[
+                    { key: 'bold', Icon: Bold, label: 'Bold' },
+                    { key: 'italic', Icon: Italic, label: 'Italic' },
+                    { key: 'underline', Icon: Underline, label: 'Underline' },
+                  ].map(({ key, Icon, label }) => (
+                    <button key={key} onClick={() => update(key, !params[key])} title={label}
+                      style={{
+                        padding: '4px 8px', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center',
+                        border: '1px solid ' + (params[key] ? 'var(--accent, #6366f1)' : 'var(--border, #333)'),
+                        background: params[key] ? 'rgba(99,102,241,0.15)' : 'var(--bg-hover, #252530)',
+                        color: params[key] ? 'var(--accent, #6366f1)' : 'var(--text-muted, #888)',
+                      }}>
+                      <Icon size={14} />
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted, #888)' }}>
+                  {TEMPLATES.find(t => t.id === selected)?.desc}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Footer */}
             <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border, #333)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -287,7 +412,7 @@ export default function KineticTextModal({ onInsert, onClose, slideW = 960, slid
                 style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid var(--border, #333)', background: 'transparent', color: 'var(--text-primary, #fff)', cursor: 'pointer', fontSize: 12 }}>
                 Cancel
               </button>
-              <button onClick={() => onInsert(previewHtml)}
+              <button onClick={handleInsert}
                 style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: 'var(--accent, #6366f1)', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                 Insert
               </button>
