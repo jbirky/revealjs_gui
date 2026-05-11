@@ -3,14 +3,19 @@
 
 import registry from './PluginRegistry'
 import { createPluginContext } from './PluginContext'
-import { api } from '../utils/api'
 
 const loaded = new Set()
+
+async function fetchPlugins() {
+  const res = await fetch('/api/plugins')
+  if (!res.ok) return []
+  return res.json()
+}
 
 export async function loadPlugins({ getPresentation, updateElement, showToast }) {
   let plugins
   try {
-    plugins = await api('/api/plugins')
+    plugins = await fetchPlugins()
   } catch {
     return
   }

@@ -145,6 +145,30 @@ app.use('/api/plugins/:slug/assets', (req, res, next) => {
   }
 })
 
+// Plugin listing (public, before auth — needed by client plugin loader)
+app.get('/api/plugins', async (req, res) => {
+  try {
+    const plugins = await storage.listPlugins()
+    res.json(plugins)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/plugins/:slug', async (req, res) => {
+  try {
+    const plugin = await storage.getPlugin(req.params.slug)
+    if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
+    res.json(plugin)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/plugins/:slug/manifest', async (req, res) => {
+  try {
+    const plugin = await storage.getPlugin(req.params.slug)
+    if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
+    res.json(plugin.manifest)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // Auth: in cloud mode, parses Clerk session and attaches req.userId
 // In self-hosted mode, sets req.userId = null (no-op)
 authStack().forEach(mw => app.use(mw))
@@ -1722,30 +1746,7 @@ app.get('/api/presentations/:id/github/version/:sha', async (req, res) => {
   }
 })
 
-// ---- Plugin API ----
-
-app.get('/api/plugins', async (req, res) => {
-  try {
-    const plugins = await storage.listPlugins()
-    res.json(plugins)
-  } catch (err) { res.status(500).json({ error: err.message }) }
-})
-
-app.get('/api/plugins/:slug', async (req, res) => {
-  try {
-    const plugin = await storage.getPlugin(req.params.slug)
-    if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
-    res.json(plugin)
-  } catch (err) { res.status(500).json({ error: err.message }) }
-})
-
-app.get('/api/plugins/:slug/manifest', async (req, res) => {
-  try {
-    const plugin = await storage.getPlugin(req.params.slug)
-    if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
-    res.json(plugin.manifest)
-  } catch (err) { res.status(500).json({ error: err.message }) }
-})
+// ---- Plugin API (authenticated routes) ----
 
 if (IS_CLOUD) {
   app.post('/api/plugins/:slug/install', requireUser, async (req, res) => {
