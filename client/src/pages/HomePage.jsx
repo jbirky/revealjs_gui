@@ -172,6 +172,24 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
   const atLimit = isCloud && planInfo && planInfo.limits?.maxPresentations != null
     && planInfo.presentationCount >= planInfo.limits.maxPresentations
 
+  async function handleUpgrade() {
+    try {
+      const data = await api.createCheckout()
+      if (data.url) window.location.href = data.url
+    } catch (err) {
+      console.error('Checkout error:', err)
+    }
+  }
+
+  async function handleManageBilling() {
+    try {
+      const data = await api.createPortal()
+      if (data.url) window.location.href = data.url
+    } catch (err) {
+      console.error('Portal error:', err)
+    }
+  }
+
   useEffect(() => {
     loadData()
   }, [])
@@ -328,12 +346,16 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
             New Presentation
           </button>
           {isCloud && planInfo && (
-            <span style={{
-              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
-              background: planInfo.plan === 'pro' ? 'rgba(99,102,241,0.15)' : planInfo.plan === 'team' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.08)',
-              color: planInfo.plan === 'pro' ? '#818cf8' : planInfo.plan === 'team' ? '#22c55e' : 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: 0.5,
-            }}>{planInfo.plan || 'free'}</span>
+            <button
+              onClick={planInfo.plan === 'free' && planInfo.billing ? handleUpgrade : planInfo.plan !== 'free' ? handleManageBilling : undefined}
+              style={{
+                fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, border: 'none', cursor: planInfo.billing ? 'pointer' : 'default',
+                background: planInfo.plan === 'pro' ? 'rgba(99,102,241,0.15)' : planInfo.plan === 'team' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.08)',
+                color: planInfo.plan === 'pro' ? '#818cf8' : planInfo.plan === 'team' ? '#22c55e' : 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: 0.5,
+              }}
+              title={planInfo.plan === 'free' ? 'Upgrade to Pro' : 'Manage subscription'}
+            >{planInfo.plan === 'free' && planInfo.billing ? 'Upgrade' : planInfo.plan || 'free'}</button>
           )}
           {isCloud && <UserButton appearance={{ elements: { avatarBox: { width: 32, height: 32 } } }} />}
         </div>
@@ -347,7 +369,11 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
           }}>
             You've reached the {planInfo.limits.maxPresentations}-presentation limit on the Free plan.
             {planInfo.limits.expirationDays && ` Presentations expire after ${planInfo.limits.expirationDays} days.`}
-            {' '}Upgrade to Pro for unlimited presentations.
+            {planInfo.billing && (
+              <button onClick={handleUpgrade} style={{ marginLeft: 8, padding: '4px 12px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                Upgrade to Pro — $5/mo
+              </button>
+            )}
           </div>
         )}
         <h2>My Presentations</h2>

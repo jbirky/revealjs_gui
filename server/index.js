@@ -51,6 +51,21 @@ const multerStorage = multer.diskStorage({
 const upload = multer({ storage: multerStorage, limits: { fileSize: 500 * 1024 * 1024 } }) // 500MB limit for video
 
 app.use(cors())
+
+// Stripe webhook — must be before express.json() to get raw body
+const stripeService = require('./services/stripe')
+if (stripeService.isEnabled()) {
+  app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+      await stripeService.handleWebhook(storage, req.body, req.headers['stripe-signature'])
+      res.json({ received: true })
+    } catch (err) {
+      console.error('Stripe webhook error:', err.message)
+      res.status(400).json({ error: err.message })
+    }
+  })
+}
+
 app.use(express.json({ limit: '50mb' }))
 if (isR2Enabled()) {
   app.get('/uploads/*', async (req, res) => {
@@ -263,16 +278,46 @@ app.get('/api/me', async (req, res) => {
       'SELECT COUNT(*)::int as count FROM presentations WHERE user_id = $1 AND is_template = false AND (expires_at IS NULL OR expires_at > NOW())',
       [req.userId]
     )
+    const { rows: storageRows } = await storage.query(
+      'SELECT COALESCE(storage_used_bytes, 0)::bigint as used FROM users WHERE id = $1', [req.userId]
+    )
     res.json({
       plan,
       presentationCount: rows[0].count,
+      storageUsed: Number(storageRows[0]?.used || 0),
       limits: {
         maxPresentations: limits.maxPresentations === Infinity ? null : limits.maxPresentations,
         expirationDays: limits.expirationDays,
+        storageBytes: limits.storageBytes,
       },
+      billing: stripeService.isEnabled(),
     })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
+
+// ---- Billing API ----
+if (IS_CLOUD && stripeService.isEnabled()) {
+  app.post('/api/billing/checkout', requireUser, async (req, res) => {
+    try {
+      const { rows } = await storage.query('SELECT email, name FROM users WHERE id = $1', [req.userId])
+      if (!rows[0]) return res.status(404).json({ error: 'User not found' })
+      const baseUrl = req.headers.origin || 'https://parallax-presentations.com'
+      const session = await stripeService.createCheckoutSession(
+        storage, req.userId, rows[0].email, rows[0].name,
+        `${baseUrl}/dashboard?billing=success`,
+        `${baseUrl}/dashboard?billing=cancel`
+      )
+      res.json({ url: session.url })
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+
+  app.post('/api/billing/portal', requireUser, async (req, res) => {
+    try {
+      const session = await stripeService.createPortalSession(storage, req.userId)
+      res.json({ url: session.url })
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+}
 
 // Transcode a video file to H.264 MP4 if its codec isn't web-compatible.
 // Returns the (possibly new) filename. Deletes the original on success.

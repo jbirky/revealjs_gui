@@ -109,4 +109,8 @@ export const api = {
   enableShare: (id) => authFetch(`${BASE}/presentations/${id}/share`, { method: 'POST' }).then(r => r.json()),
   disableShare: (id) => authFetch(`${BASE}/presentations/${id}/share`, { method: 'DELETE' }).then(r => r.json()),
   getShareStatus: (id) => authFetch(`${BASE}/presentations/${id}/share`).then(r => r.json()),
+
+  // Billing
+  createCheckout: () => authFetch(`${BASE}/billing/checkout`, { method: 'POST' }).then(r => r.json()),
+  createPortal: () => authFetch(`${BASE}/billing/portal`, { method: 'POST' }).then(r => r.json()),
 }
