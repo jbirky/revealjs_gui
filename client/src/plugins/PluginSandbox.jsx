@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Jessica Birky
 
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 
 export default function PluginSandbox({ sandboxUrl, pluginData, width, height, isSelected, onDataUpdate }) {
   const iframeRef = useRef(null)
   const dataRef = useRef(pluginData)
   dataRef.current = pluginData
+  const [fetchedHtml, setFetchedHtml] = useState(null)
+
+  useEffect(() => {
+    if (!sandboxUrl) return
+    fetch(sandboxUrl).then(r => r.ok ? r.text() : null).then(setFetchedHtml).catch(() => {})
+  }, [sandboxUrl])
 
   const postToSandbox = useCallback((type, payload) => {
     iframeRef.current?.contentWindow?.postMessage({ source: 'parallax-host', type, payload }, '*')
@@ -101,11 +107,24 @@ export default function PluginSandbox({ sandboxUrl, pluginData, width, height, i
 <\/script>
 </head><body></body></html>`
 
-  const srcdoc = sandboxUrl
-    ? undefined
-    : bridgeSrc
+  const bridgeScript = bridgeSrc.match(/<script>[\s\S]*?<\/script>/)?.[0] || ''
+  const bridgeStyle = bridgeSrc.match(/<style>[\s\S]*?<\/style>/)?.[0] || ''
+  const injection = bridgeScript + bridgeStyle
 
-  if (!sandboxUrl && !pluginData) {
+  let srcdoc
+  if (fetchedHtml) {
+    if (/<head[^>]*>/i.test(fetchedHtml)) {
+      srcdoc = fetchedHtml.replace(/<head[^>]*>/i, m => m + injection)
+    } else if (/<html[^>]*>/i.test(fetchedHtml)) {
+      srcdoc = fetchedHtml.replace(/<html[^>]*>/i, m => m + injection)
+    } else {
+      srcdoc = injection + fetchedHtml
+    }
+  } else if (!sandboxUrl) {
+    srcdoc = bridgeSrc
+  }
+
+  if (!srcdoc && !sandboxUrl) {
     return (
       <div style={{
         width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -116,10 +135,13 @@ export default function PluginSandbox({ sandboxUrl, pluginData, width, height, i
     )
   }
 
+  if (sandboxUrl && !srcdoc) {
+    return <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 12 }}>Loading plugin...</div>
+  }
+
   return (
     <iframe
       ref={iframeRef}
-      src={sandboxUrl || undefined}
       srcDoc={srcdoc}
       sandbox="allow-scripts"
       style={{

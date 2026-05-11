@@ -9,8 +9,8 @@
   },
   "license": "AGPL-3.0",
   "description": "Displays a number that counts up with animation — great for statistics and key metrics in presentations.",
-  "main": "./dist/plugin.js",
-  "sandbox": "./dist/sandbox.html",
+  "main": "./plugin.js",
+  "sandbox": "./sandbox.html",
   "contributes": {
     "elementTypes": [
       {

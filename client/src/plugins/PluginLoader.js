@@ -20,7 +20,7 @@ export async function loadPlugins({ getPresentation, updateElement, showToast })
     const manifest = plugin.manifest
     if (!manifest || !manifest.id) continue
 
-    registry.register(manifest)
+    registry.register(manifest, plugin.slug)
     loaded.add(plugin.slug)
 
     if (manifest.main) {

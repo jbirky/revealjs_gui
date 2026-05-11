@@ -15,9 +15,9 @@ class PluginRegistry {
     this._listeners = new Set()
   }
 
-  register(manifest) {
+  register(manifest, slug) {
     if (this._plugins.has(manifest.id)) return
-    this._plugins.set(manifest.id, { manifest, instance: null, activated: false })
+    this._plugins.set(manifest.id, { manifest, slug: slug || manifest.id, instance: null, activated: false })
 
     const contributes = manifest.contributes || {}
 

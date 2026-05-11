@@ -1614,8 +1614,9 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
       {element.type?.startsWith('plugin:') && (() => {
         const etDef = registry.getElementType(element.type)
         const pluginEntry = etDef ? registry.getPlugin(etDef.pluginId) : null
-        const sandboxUrl = pluginEntry?.manifest?.sandbox
-          ? `/api/plugins/${pluginEntry.manifest.id.split('.').pop()}/assets/${pluginEntry.manifest.sandbox.replace(/^\.\//, '')}`
+        const slug = pluginEntry?.slug
+        const sandboxUrl = pluginEntry?.manifest?.sandbox && slug
+          ? `/api/plugins/${slug}/assets/${pluginEntry.manifest.sandbox.replace(/^\.\//, '')}`
           : null
         return (
           <PluginSandbox
