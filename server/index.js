@@ -1674,7 +1674,7 @@ app.get('/api/plugins/:slug/manifest', async (req, res) => {
 })
 
 if (IS_CLOUD) {
-  app.post('/api/plugins/:slug/install', ...authStack, requireUser, async (req, res) => {
+  app.post('/api/plugins/:slug/install', requireUser, async (req, res) => {
     try {
       const plugin = await storage.getPlugin(req.params.slug)
       if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
@@ -1683,7 +1683,7 @@ if (IS_CLOUD) {
     } catch (err) { res.status(500).json({ error: err.message }) }
   })
 
-  app.delete('/api/plugins/:slug/install', ...authStack, requireUser, async (req, res) => {
+  app.delete('/api/plugins/:slug/install', requireUser, async (req, res) => {
     try {
       const plugin = await storage.getPlugin(req.params.slug)
       if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
@@ -1692,7 +1692,7 @@ if (IS_CLOUD) {
     } catch (err) { res.status(500).json({ error: err.message }) }
   })
 
-  app.get('/api/me/plugins', ...authStack, requireUser, async (req, res) => {
+  app.get('/api/me/plugins', requireUser, async (req, res) => {
     try {
       const plugins = await storage.getInstalledPlugins(req.userId)
       res.json(plugins)
