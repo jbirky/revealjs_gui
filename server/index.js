@@ -128,6 +128,23 @@ if (fs.existsSync(docsPublic)) {
   app.use('/revealjs_gui', express.static(docsPublic))
 }
 
+// Plugin assets (public, before auth — sandbox iframes need these)
+const userPluginsDir = path.join(DATA_DIR, 'plugins')
+const bundledPluginsDir = path.join(__dirname, '..', 'plugins')
+fs.ensureDirSync(userPluginsDir)
+app.use('/api/plugins/:slug/assets', (req, res, next) => {
+  const safePath = path.normalize(req.params.slug).replace(/\.\./g, '')
+  const userDir = path.join(userPluginsDir, safePath, 'dist')
+  const bundledDir = path.join(bundledPluginsDir, safePath, 'dist')
+  if (fs.existsSync(userDir)) {
+    express.static(userDir)(req, res, next)
+  } else if (fs.existsSync(bundledDir)) {
+    express.static(bundledDir)(req, res, next)
+  } else {
+    next()
+  }
+})
+
 // Auth: in cloud mode, parses Clerk session and attaches req.userId
 // In self-hosted mode, sets req.userId = null (no-op)
 authStack().forEach(mw => app.use(mw))
@@ -1777,23 +1794,6 @@ app.delete('/api/presentations/:id/plugins/:pluginId', async (req, res) => {
     await storage.disablePluginForPresentation(req.params.id, req.params.pluginId)
     res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
-})
-
-// Serve plugin assets from user plugins dir and bundled plugins dir
-const userPluginsDir = path.join(DATA_DIR, 'plugins')
-const bundledPluginsDir = path.join(__dirname, '..', 'plugins')
-fs.ensureDirSync(userPluginsDir)
-app.use('/api/plugins/:slug/assets', (req, res, next) => {
-  const safePath = path.normalize(req.params.slug).replace(/\.\./g, '')
-  const userDir = path.join(userPluginsDir, safePath, 'dist')
-  const bundledDir = path.join(bundledPluginsDir, safePath, 'dist')
-  if (fs.existsSync(userDir)) {
-    express.static(userDir)(req, res, next)
-  } else if (fs.existsSync(bundledDir)) {
-    express.static(bundledDir)(req, res, next)
-  } else {
-    next()
-  }
 })
 
 // In production, serve client build with SPA fallback
