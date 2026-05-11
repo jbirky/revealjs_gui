@@ -47,10 +47,13 @@ async function createCheckoutSession(storage, userId, email, name, successUrl, c
 
 async function createPortalSession(storage, userId) {
   const s = getStripe()
-  const { rows } = await storage.query('SELECT stripe_customer_id FROM users WHERE id = $1', [userId])
-  if (!rows[0]?.stripe_customer_id) throw new Error('No Stripe customer')
+  const { rows } = await storage.query('SELECT stripe_customer_id, email, name FROM users WHERE id = $1', [userId])
+  let customerId = rows[0]?.stripe_customer_id
+  if (!customerId) {
+    customerId = await getOrCreateCustomer(storage, userId, rows[0]?.email, rows[0]?.name)
+  }
   const session = await s.billingPortal.sessions.create({
-    customer: rows[0].stripe_customer_id,
+    customer: customerId,
     return_url: process.env.APP_URL || 'https://parallax-presentations.com/dashboard',
   })
   return session
