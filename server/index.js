@@ -123,6 +123,11 @@ app.get('/api/docs/:section/:page', (req, res) => {
   res.type('text/plain').send(fs.readFileSync(filePath, 'utf8'))
 })
 
+const docsPublic = path.join(DOCS_DIR, 'public')
+if (fs.existsSync(docsPublic)) {
+  app.use('/revealjs_gui', express.static(docsPublic))
+}
+
 // Auth: in cloud mode, parses Clerk session and attaches req.userId
 // In self-hosted mode, sets req.userId = null (no-op)
 authStack().forEach(mw => app.use(mw))
