@@ -357,7 +357,18 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
               title={planInfo.plan === 'free' ? 'Upgrade to Pro' : 'Manage subscription'}
             >{planInfo.plan === 'free' && planInfo.billing ? 'Upgrade' : planInfo.plan || 'free'}</button>
           )}
-          {isCloud && <UserButton appearance={{ elements: { avatarBox: { width: 32, height: 32 } } }} />}
+          {isCloud && (
+            <UserButton appearance={{ elements: { avatarBox: { width: 32, height: 32 } } }}>
+              <UserButton.MenuItems>
+                {planInfo?.billing && planInfo?.plan === 'free' && (
+                  <UserButton.Action label="Upgrade to Pro — $5/mo" labelIcon={<span style={{ fontSize: 14 }}>&#x2B06;</span>} onClick={handleUpgrade} />
+                )}
+                {planInfo?.billing && planInfo?.plan !== 'free' && (
+                  <UserButton.Action label="Manage subscription" labelIcon={<span style={{ fontSize: 14 }}>&#x2699;</span>} onClick={handleManageBilling} />
+                )}
+              </UserButton.MenuItems>
+            </UserButton>
+          )}
         </div>
       </div>
 
