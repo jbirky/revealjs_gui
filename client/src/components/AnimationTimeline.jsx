@@ -11,9 +11,20 @@ const ANIMATION_TYPES = [
   { value: 'grow', label: 'Grow' },
   { value: 'shrink', label: 'Shrink' },
   { value: 'zoom-in', label: 'Zoom In' },
+  { value: 'slide-up', label: 'Slide Up' },
+  { value: 'slide-down', label: 'Slide Down' },
+  { value: 'slide-left', label: 'Slide Left' },
+  { value: 'slide-right', label: 'Slide Right' },
+  { value: 'flip-up', label: 'Flip Up' },
+  { value: 'flip-down', label: 'Flip Down' },
   { value: 'highlight-red', label: 'Highlight Red' },
   { value: 'highlight-green', label: 'Highlight Green' },
   { value: 'highlight-blue', label: 'Highlight Blue' },
+  { value: 'highlight-current-red', label: 'Current Red' },
+  { value: 'highlight-current-green', label: 'Current Green' },
+  { value: 'highlight-current-blue', label: 'Current Blue' },
+  { value: 'strike', label: 'Strike Through' },
+  { value: 'semi-fade-out', label: 'Semi Fade Out' },
 ]
 
 const ELEMENT_COLORS = [
