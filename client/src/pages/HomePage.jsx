@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Jessica Birky
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Plus, Pencil, Trash2, Presentation, Copy, Sun, Moon, Layout, ExternalLink } from 'lucide-react'
 import { api } from '../utils/api'
 
@@ -160,10 +160,15 @@ function isGradientOrImage(thumbnail) {
   return thumbnail && (thumbnail.type === 'gradient' || thumbnail.type === 'image')
 }
 
-export default function HomePage({ onOpen, theme, onToggleTheme }) {
+function slugify(str) {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'untitled'
+}
+
+export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) {
   const [presentations, setPresentations] = useState([])
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
+  const slugConsumed = useRef(false)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ title: '', theme: 'black', transition: 'slide', templateId: null })
   const [creating, setCreating] = useState(false)
@@ -225,6 +230,22 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
     loadData()
   }, [])
 
+  useEffect(() => {
+    slugConsumed.current = false
+  }, [initialSlug])
+
+  useEffect(() => {
+    if (initialSlug && !slugConsumed.current && !loading && presentations.length > 0) {
+      slugConsumed.current = true
+      const found = presentations.find(p => slugify(p.title) === initialSlug)
+      if (found) {
+        onOpen(found.id, false, found.title)
+      } else {
+        window.history.replaceState(null, '', '/dashboard')
+      }
+    }
+  }, [initialSlug, loading, presentations, onOpen])
+
   async function loadData() {
     try {
       const [presData, tmplData] = await Promise.all([
@@ -250,7 +271,7 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
       const pres = await api.createPresentation(form)
       setShowModal(false)
       setForm({ title: '', theme: 'black', transition: 'slide', templateId: null })
-      onOpen(pres.id)
+      onOpen(pres.id, false, pres.title)
     } catch (err) {
       if (err.message.includes('limit')) alert(err.message)
       else console.error('Failed to create presentation', err)
@@ -276,10 +297,10 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
             elements: (s.elements || []).map(el => ({ ...el, id: crypto.randomUUID() }))
           }))
         })
-        onOpen(pres.id)
+        onOpen(pres.id, false, pres.title)
       } else {
         const pres = await api.createPresentation({ templateId })
-        onOpen(pres.id)
+        onOpen(pres.id, false, pres.title)
       }
     } catch (err) {
       console.error('Failed to create from template', err)
@@ -352,6 +373,14 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
   }
 
   const allTemplates = [...PRESET_THEMES, ...templates.map(t => ({ ...t, isUser: true }))]
+
+  if (initialSlug && !slugConsumed.current) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary, #0f0f1a)', color: 'var(--text-muted, #888)' }}>
+        Loading...
+      </div>
+    )
+  }
 
   return (
     <div className="home-page">
@@ -442,7 +471,7 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
                   <div
                     key={pres.id}
                     className="presentation-card"
-                    onClick={() => onOpen(pres.id)}
+                    onClick={() => onOpen(pres.id, false, pres.title)}
                   >
                     <div className="card-preview" style={bgProp}>
                       {(!pres.thumbnail || pres.thumbnail.type === 'none') && (
@@ -465,7 +494,7 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
                       <button
                         className="btn-icon"
                         title="Edit"
-                        onClick={(e) => { e.stopPropagation(); onOpen(pres.id) }}
+                        onClick={(e) => { e.stopPropagation(); onOpen(pres.id, false, pres.title) }}
                       >
                         <Pencil size={14} />
                       </button>

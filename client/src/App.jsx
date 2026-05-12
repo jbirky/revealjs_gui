@@ -8,6 +8,10 @@ import { setTokenGetter } from './utils/api'
 
 const isCloud = import.meta.env.VITE_PARALLAX_MODE === 'cloud'
 
+function slugify(str) {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'untitled'
+}
+
 function TokenBridge() {
   const { getToken } = useAuth()
   useEffect(() => { setTokenGetter(() => getToken()) }, [getToken])
@@ -100,6 +104,11 @@ export default function App() {
   const [isTemplate, setIsTemplate] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('editor-theme') || 'dark')
   const [docsOverlay, setDocsOverlay] = useState(null)
+  const [initialSlug, setInitialSlug] = useState(() => {
+    const path = window.location.pathname
+    const match = path.match(/^\/dashboard\/(.+)/)
+    return match ? decodeURIComponent(match[1]) : null
+  })
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark')
@@ -119,15 +128,51 @@ export default function App() {
     return () => window.removeEventListener('hashchange', check)
   }, [])
 
+  useEffect(() => {
+    const handler = () => {
+      const path = window.location.pathname
+      const match = path.match(/^\/dashboard\/(.+)/)
+      if (match) {
+        setInitialSlug(decodeURIComponent(match[1]))
+        setPage('home')
+        setPresentationId(null)
+        setIsTemplate(false)
+      } else {
+        setPage('home')
+        setPresentationId(null)
+        setIsTemplate(false)
+      }
+    }
+    window.addEventListener('popstate', handler)
+    return () => window.removeEventListener('popstate', handler)
+  }, [])
+
   const closeDocs = () => { setDocsOverlay(null); window.location.hash = '' }
 
-  const openEditor = (id, template = false) => { setPresentationId(id); setIsTemplate(template); setPage('editor') }
-  const goHome = () => { setPage('home'); setPresentationId(null); setIsTemplate(false) }
+  const openEditor = (id, template = false, title = '') => {
+    setPresentationId(id)
+    setIsTemplate(template)
+    setPage('editor')
+    setInitialSlug(null)
+    if (title && !template) {
+      const targetPath = `/dashboard/${slugify(title)}`
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ presentationId: id }, '', targetPath)
+      }
+    }
+  }
+
+  const goHome = () => {
+    setPage('home')
+    setPresentationId(null)
+    setIsTemplate(false)
+    window.history.pushState(null, '', '/dashboard')
+  }
 
   return (
     <AuthGate>
       {page === 'home'
-        ? <HomePage onOpen={openEditor} theme={theme} onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} />
+        ? <HomePage onOpen={openEditor} theme={theme} onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} initialSlug={initialSlug} />
         : <EditorPage presentationId={presentationId} isTemplate={isTemplate} onGoHome={goHome} />
       }
       {docsOverlay && <DocsOverlay onClose={closeDocs} initialPage={docsOverlay} />}
