@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  .counter-wrap {
+    width: 100%; height: 100%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; font-family: -apple-system, 'Inter', sans-serif;
+  }
+  .counter-value { font-weight: 800; letter-spacing: -2px; line-height: 1; }
+  .counter-label { margin-top: 6px; font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="counter-wrap">
+  <div class="counter-value" id="val"></div>
+  <div class="counter-label" id="lbl"></div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var api = window.parallax;
+  var valEl = document.getElementById('val');
+  var lblEl = document.getElementById('lbl');
+  var animId = null;
+
+  function formatNumber(n, useSep) {
+    if (!useSep) return String(Math.round(n));
+    return Math.round(n).toLocaleString();
+  }
+
+  function render(data) {
+    var target = Number(data.value) || 0;
+    var duration = Number(data.duration) || 2000;
+    var prefix = data.prefix || '';
+    var suffix = data.suffix || '';
+    var sep = data.separator !== false;
+
+    valEl.style.fontSize = (data.fontSize || 64) + 'px';
+    valEl.style.color = data.color || '#ffffff';
+    lblEl.style.fontSize = (data.labelSize || 16) + 'px';
+    lblEl.style.color = data.labelColor || 'rgba(255,255,255,0.6)';
+    lblEl.textContent = data.label || '';
+    lblEl.style.display = data.label ? 'block' : 'none';
+
+    if (animId) cancelAnimationFrame(animId);
+    var start = performance.now();
+    function step(now) {
+      var t = Math.min((now - start) / duration, 1);
+      var ease = 1 - Math.pow(1 - t, 3);
+      var current = target * ease;
+      valEl.textContent = prefix + formatNumber(current, sep) + suffix;
+      if (t < 1) animId = requestAnimationFrame(step);
+    }
+    animId = requestAnimationFrame(step);
+  }
+
+  if (api) {
+    render(api.data);
+    api.onDataChanged(render);
+  }
+});
+</script>
+</body>
+</html>

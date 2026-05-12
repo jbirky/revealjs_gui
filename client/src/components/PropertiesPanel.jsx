@@ -1233,18 +1233,41 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                     value={selectedElement.fragmentAnimation || 'fade-in'}
                     onChange={e => onUpdateElement({ fragmentAnimation: e.target.value })}
                   >
-                    <option value="fade-in">Fade In</option>
-                    <option value="fade-out">Fade Out</option>
-                    <option value="fade-up">Fade Up</option>
-                    <option value="fade-down">Fade Down</option>
-                    <option value="fade-left">Fade Left</option>
-                    <option value="fade-right">Fade Right</option>
-                    <option value="grow">Grow</option>
-                    <option value="shrink">Shrink</option>
-                    <option value="zoom-in">Zoom In</option>
-                    <option value="highlight-red">Highlight Red</option>
-                    <option value="highlight-green">Highlight Green</option>
-                    <option value="highlight-blue">Highlight Blue</option>
+                    <optgroup label="Fade">
+                      <option value="fade-in">Fade In</option>
+                      <option value="fade-out">Fade Out</option>
+                      <option value="fade-up">Fade Up</option>
+                      <option value="fade-down">Fade Down</option>
+                      <option value="fade-left">Fade Left</option>
+                      <option value="fade-right">Fade Right</option>
+                    </optgroup>
+                    <optgroup label="Zoom / Scale">
+                      <option value="grow">Grow</option>
+                      <option value="shrink">Shrink</option>
+                      <option value="zoom-in">Zoom In</option>
+                    </optgroup>
+                    <optgroup label="Slide">
+                      <option value="slide-up">Slide Up</option>
+                      <option value="slide-down">Slide Down</option>
+                      <option value="slide-left">Slide Left</option>
+                      <option value="slide-right">Slide Right</option>
+                    </optgroup>
+                    <optgroup label="Flip">
+                      <option value="flip-up">Flip Up</option>
+                      <option value="flip-down">Flip Down</option>
+                    </optgroup>
+                    <optgroup label="Highlight">
+                      <option value="highlight-red">Highlight Red</option>
+                      <option value="highlight-green">Highlight Green</option>
+                      <option value="highlight-blue">Highlight Blue</option>
+                      <option value="highlight-current-red">Current Red</option>
+                      <option value="highlight-current-green">Current Green</option>
+                      <option value="highlight-current-blue">Current Blue</option>
+                    </optgroup>
+                    <optgroup label="Other">
+                      <option value="strike">Strike Through</option>
+                      <option value="semi-fade-out">Semi Fade Out</option>
+                    </optgroup>
                   </select>
                 </div>
               </div>

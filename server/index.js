@@ -51,6 +51,21 @@ const multerStorage = multer.diskStorage({
 const upload = multer({ storage: multerStorage, limits: { fileSize: 500 * 1024 * 1024 } }) // 500MB limit for video
 
 app.use(cors())
+
+// Stripe webhook — must be before express.json() to get raw body
+const stripeService = require('./services/stripe')
+if (stripeService.isEnabled()) {
+  app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+      await stripeService.handleWebhook(storage, req.body, req.headers['stripe-signature'])
+      res.json({ received: true })
+    } catch (err) {
+      console.error('Stripe webhook error:', err.message)
+      res.status(400).json({ error: err.message })
+    }
+  })
+}
+
 app.use(express.json({ limit: '50mb' }))
 if (isR2Enabled()) {
   app.get('/uploads/*', async (req, res) => {
@@ -74,6 +89,100 @@ if (isR2Enabled()) {
 } else {
   app.use('/uploads', express.static(UPLOADS_DIR))
 }
+
+// ---- Docs API (public, before auth) ----
+
+const DOCS_DIR = path.join(__dirname, '..', 'docs')
+
+app.get('/api/docs/sidebar', (req, res) => {
+  if (!fs.existsSync(DOCS_DIR)) return res.json({ guide: [], features: [], tutorials: [] })
+  const sidebar = {
+    guide: [
+      { text: 'Introduction', link: 'guide/getting-started' },
+      { text: 'Installation', link: 'guide/installation' },
+      { text: 'Keyboard Shortcuts', link: 'guide/keyboard-shortcuts' },
+    ],
+    features: [
+      { text: 'Overview', link: 'features/overview' },
+      { text: 'Text & Formatting', link: 'features/text-formatting' },
+      { text: 'Shapes & Elements', link: 'features/shapes' },
+      { text: 'LaTeX & Math', link: 'features/latex' },
+      { text: 'Charts', link: 'features/charts' },
+      { text: 'Export & Sharing', link: 'features/export' },
+    ],
+    tutorials: [
+      { text: 'Your First Presentation', link: 'tutorials/first-presentation' },
+      { text: 'Academic Slides', link: 'tutorials/academic-slides' },
+      { text: 'Text & Typography', link: 'tutorials/text-typography' },
+      { text: 'Images', link: 'tutorials/images' },
+      { text: 'Shapes & Drawing', link: 'tutorials/shapes-drawing' },
+      { text: 'Code, LaTeX & Markdown', link: 'tutorials/code-math' },
+      { text: 'Charts & Tables', link: 'tutorials/charts-tables' },
+      { text: 'HTML Embeds & p5.js', link: 'tutorials/html-embeds' },
+      { text: 'Kinetic Text', link: 'tutorials/kinetic-text' },
+      { text: 'Video & Audio', link: 'tutorials/media' },
+      { text: 'Animations & Fragments', link: 'tutorials/animations' },
+      { text: 'Transitions', link: 'tutorials/transitions' },
+      { text: 'Presenting & Export', link: 'tutorials/presenting' },
+      { text: 'Using LaTeX & Math', link: 'tutorials/using-latex' },
+    ],
+  }
+  res.json(sidebar)
+})
+
+app.get('/api/docs/:section/:page', (req, res) => {
+  const { section, page } = req.params
+  const safe = (s) => s.replace(/[^a-z0-9_-]/gi, '')
+  const filePath = path.join(DOCS_DIR, safe(section), safe(page) + '.md')
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Doc not found' })
+  res.type('text/plain').send(fs.readFileSync(filePath, 'utf8'))
+})
+
+const docsPublic = path.join(DOCS_DIR, 'public')
+if (fs.existsSync(docsPublic)) {
+  app.use('/revealjs_gui', express.static(docsPublic))
+}
+
+// Plugin assets (public, before auth — sandbox iframes need these)
+const userPluginsDir = path.join(DATA_DIR, 'plugins')
+const bundledPluginsDir = path.join(__dirname, '..', 'plugins')
+fs.ensureDirSync(userPluginsDir)
+app.use('/api/plugins/:slug/assets', (req, res, next) => {
+  const safePath = path.normalize(req.params.slug).replace(/\.\./g, '')
+  const userDir = path.join(userPluginsDir, safePath, 'dist')
+  const bundledDir = path.join(bundledPluginsDir, safePath, 'dist')
+  if (fs.existsSync(userDir)) {
+    express.static(userDir)(req, res, next)
+  } else if (fs.existsSync(bundledDir)) {
+    express.static(bundledDir)(req, res, next)
+  } else {
+    next()
+  }
+})
+
+// Plugin listing (public, before auth — needed by client plugin loader)
+app.get('/api/plugins', async (req, res) => {
+  try {
+    const plugins = await storage.listPlugins()
+    res.json(plugins)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/plugins/:slug', async (req, res) => {
+  try {
+    const plugin = await storage.getPlugin(req.params.slug)
+    if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
+    res.json(plugin)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/plugins/:slug/manifest', async (req, res) => {
+  try {
+    const plugin = await storage.getPlugin(req.params.slug)
+    if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
+    res.json(plugin.manifest)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
 
 // Auth: in cloud mode, parses Clerk session and attaches req.userId
 // In self-hosted mode, sets req.userId = null (no-op)
@@ -169,16 +278,67 @@ app.get('/api/me', async (req, res) => {
       'SELECT COUNT(*)::int as count FROM presentations WHERE user_id = $1 AND is_template = false AND (expires_at IS NULL OR expires_at > NOW())',
       [req.userId]
     )
+    const { rows: storageRows } = await storage.query(
+      'SELECT COALESCE(storage_used_bytes, 0)::bigint as used FROM users WHERE id = $1', [req.userId]
+    )
     res.json({
       plan,
       presentationCount: rows[0].count,
+      storageUsed: Number(storageRows[0]?.used || 0),
       limits: {
         maxPresentations: limits.maxPresentations === Infinity ? null : limits.maxPresentations,
         expirationDays: limits.expirationDays,
+        storageBytes: limits.storageBytes,
       },
+      billing: stripeService.isEnabled(),
     })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
+
+// ---- Billing API ----
+if (IS_CLOUD && stripeService.isEnabled()) {
+  app.post('/api/billing/checkout', requireUser, async (req, res) => {
+    try {
+      const { rows } = await storage.query('SELECT email, name FROM users WHERE id = $1', [req.userId])
+      if (!rows[0]) return res.status(404).json({ error: 'User not found' })
+      const baseUrl = req.headers.origin || 'https://parallax-presentations.com'
+      const session = await stripeService.createCheckoutSession(
+        storage, req.userId, rows[0].email, rows[0].name,
+        `${baseUrl}/dashboard?billing=success`,
+        `${baseUrl}/dashboard?billing=cancel`
+      )
+      res.json({ url: session.url })
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+
+  app.post('/api/billing/portal', requireUser, async (req, res) => {
+    try {
+      const session = await stripeService.createPortalSession(storage, req.userId)
+      res.json({ url: session.url })
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+
+  app.get('/api/billing/status', requireUser, async (req, res) => {
+    try {
+      const status = await stripeService.getSubscriptionStatus(storage, req.userId)
+      res.json(status)
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+
+  app.post('/api/billing/cancel', requireUser, async (req, res) => {
+    try {
+      const result = await stripeService.cancelSubscription(storage, req.userId)
+      res.json(result)
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+
+  app.post('/api/billing/resume', requireUser, async (req, res) => {
+    try {
+      await stripeService.resumeSubscription(storage, req.userId)
+      res.json({ ok: true })
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+}
 
 // Transcode a video file to H.264 MP4 if its codec isn't web-compatible.
 // Returns the (possibly new) filename. Deletes the original on success.
@@ -250,6 +410,19 @@ function shapeSvgString(el) {
     textEl = `<text x="${w/2}" y="${h/2}" dominant-baseline="middle" text-anchor="middle" font-size="${fs}" fill="${tc}">${el.text}</text>`
   }
   return `<svg width="100%" height="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="position:absolute;inset:0;overflow:visible;">${inner}${textEl}</svg>`
+}
+
+function buildHtmlEmbed(userHtml, embedW, embedH) {
+  const initScript = `<script>const EMBED_WIDTH=${embedW},EMBED_HEIGHT=${embedH};(function(){function fit(){document.querySelectorAll('svg').forEach(function(s){if(s._vb)return;var w=s.getAttribute('width'),h=s.getAttribute('height');if(w&&h&&!s.getAttribute('viewBox'))s.setAttribute('viewBox','0 0 '+parseFloat(w)+' '+parseFloat(h));if(s.getAttribute('viewBox')){s.setAttribute('width','100%');s.setAttribute('height','100%');s._vb=1;}});}window.addEventListener('load',fit);setTimeout(fit,100);setTimeout(fit,400);new MutationObserver(fit).observe(document.documentElement,{childList:true,subtree:true});})();<\/script>`
+  const resetStyle = `<style>html,body{margin:0;padding:0;overflow:hidden;width:100%;height:100%;box-sizing:border-box;}canvas{display:block;}svg{display:block;}<\/style>`
+  const injection = initScript + resetStyle
+  if (/<head[^>]*>/i.test(userHtml))
+    return userHtml.replace(/<head[^>]*>/i, m => m + injection)
+  if (/<html[^>]*>/i.test(userHtml))
+    return userHtml.replace(/<html[^>]*>/i, m => m + injection)
+  if (/<!doctype[^>]*>/i.test(userHtml))
+    return userHtml.replace(/(<!doctype[^>]*>)/i, '$1' + injection)
+  return injection + userHtml
 }
 
 // Generate reveal.js HTML
@@ -349,8 +522,8 @@ function generateRevealHTML(presentation) {
           return `<div${fragClass}${fragIdx} style="${style}${opacityStyle}">${shapeSvgString(el)}</div>`
         }
         if (el.type === 'html') {
-          const srcdoc = (el.content || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-          return `<iframe${fragClass}${fragIdx} srcdoc="${srcdoc}" style="${style}border:none;" scrolling="no"></iframe>`
+          const srcdoc = buildHtmlEmbed(el.content || '', el.width, el.height).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+          return `<iframe${fragClass}${fragIdx} srcdoc="${srcdoc}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
         if (el.type === 'code') {
           const lang = el.language || 'plaintext'
@@ -440,6 +613,10 @@ function generateRevealHTML(presentation) {
           }).join('')
           return `<div${fragClass}${fragIdx} style="${style}overflow:auto;"><table style="width:100%;height:100%;border-collapse:collapse;">${rows}</table></div>`
         }
+        if (el.type && el.type.startsWith('plugin:')) {
+          const data = JSON.stringify(el.pluginData || {}).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+          return `<div${fragClass}${fragIdx} style="${style}" data-plugin-type="${el.type}" data-plugin-id="${el.pluginId || ''}" data-plugin-data="${data}"><div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);font-family:sans-serif;font-size:14px;">Plugin: ${escapeHtml(el.type.replace('plugin:', ''))}</div></div>`
+        }
         return ''
       }).join('\n')
 
@@ -476,11 +653,11 @@ function generateRevealHTML(presentation) {
         const activeIdx = slide.activeSection
         const seqSpans = sequenceSections.map((sec, i) => {
           const isActive = activeIdx === i
-          const secLabel = typeof sec === 'object' ? (sec.label || 'Section ' + (i+1)) : (sec || 'Section ' + (i+1))
-          const secColor = typeof sec === 'object' && sec.color ? sec.color : null
-          const color = isActive ? (secColor || footerColor || 'rgba(255,255,255,0.9)') : footerInactiveColor
+          const secLabel = typeof sec === 'string' ? sec : (sec?.label || '')
+          const secActiveColor = typeof sec === 'object' && sec?.color ? sec.color : (footerColor || 'rgba(255,255,255,0.9)')
+          const color = isActive ? secActiveColor : footerInactiveColor
           const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
-          return `<span style="color:${color};${weight}">${escapeHtml(secLabel)}</span>`
+          return `<span style="color:${color};${weight}">${escapeHtml(secLabel || `Section ${i+1}`)}</span>`
         }).join('')
         const pageSpan = pageLabel ? `<span style="margin-left:12px;flex-shrink:0;">${pageLabel}</span>` : ''
         footerHtml = `      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;">${timeSpan}<div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;">${seqSpans}</div>${pageSpan}</div>`
@@ -546,8 +723,10 @@ function generateRevealHTML(presentation) {
     /* reveal.js constrains/decorates section imgs — reset everything */
     .reveal .slides section img { margin: 0 !important; border: none !important; background: none !important; box-shadow: none !important; max-width: none !important; max-height: none !important; }
     /* Footer — explicit CSS rule with high specificity so reveal.js theme cannot override */
+    /* color only on the container so per-span inline colors (inactive sections) are not overridden */
+    .reveal .slides section .reveal-footer { color: ${footerColor} !important; }
     .reveal .slides section .reveal-footer,
-    .reveal .slides section .reveal-footer * { font-family: ${footerFontFamily} !important; font-size: ${footerFontSize}px !important; color: ${footerColor} !important; }
+    .reveal .slides section .reveal-footer * { font-family: ${footerFontFamily} !important; font-size: ${footerFontSize}px !important; }
     #fs-btn {
       position: fixed; bottom: 16px; right: 16px; z-index: 9999;
       background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.3);
@@ -571,6 +750,16 @@ function generateRevealHTML(presentation) {
     .slide-citations { position:absolute;right:2px;top:0;bottom:0;z-index:890;display:flex;align-items:center;pointer-events:none; }
     .slide-citations-text { writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;color:rgba(255,255,255,0.45);font-family:-apple-system,sans-serif;line-height:1.3;white-space:nowrap; }
     .slide-citations-text a { color:rgba(255,255,255,0.45);text-decoration:underline; }
+    /* Custom fragment animations */
+    .fragment.slide-up { transform:translateY(40px); transition:transform 0.5s ease, opacity 0.5s ease; }
+    .fragment.slide-down { transform:translateY(-40px); transition:transform 0.5s ease, opacity 0.5s ease; }
+    .fragment.slide-left { transform:translateX(40px); transition:transform 0.5s ease, opacity 0.5s ease; }
+    .fragment.slide-right { transform:translateX(-40px); transition:transform 0.5s ease, opacity 0.5s ease; }
+    .fragment.slide-up,.fragment.slide-down,.fragment.slide-left,.fragment.slide-right { opacity:0; }
+    .fragment.slide-up.visible,.fragment.slide-down.visible,.fragment.slide-left.visible,.fragment.slide-right.visible { transform:none; opacity:1; }
+    .fragment.flip-up { transform:perspective(600px) rotateX(90deg); opacity:0; transition:transform 0.6s ease, opacity 0.3s ease; }
+    .fragment.flip-down { transform:perspective(600px) rotateX(-90deg); opacity:0; transition:transform 0.6s ease, opacity 0.3s ease; }
+    .fragment.flip-up.visible,.fragment.flip-down.visible { transform:none; opacity:1; }
   </style>${presentation.customCSS ? `\n  <style>\n${presentation.customCSS}\n  </style>` : ''}
 </head>
 <body>
@@ -1631,6 +1820,57 @@ app.get('/api/presentations/:id/github/version/:sha', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
+})
+
+// ---- Plugin API (authenticated routes) ----
+
+if (IS_CLOUD) {
+  app.post('/api/plugins/:slug/install', requireUser, async (req, res) => {
+    try {
+      const plugin = await storage.getPlugin(req.params.slug)
+      if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
+      await storage.installPlugin(plugin.id, req.userId)
+      res.json({ ok: true })
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+
+  app.delete('/api/plugins/:slug/install', requireUser, async (req, res) => {
+    try {
+      const plugin = await storage.getPlugin(req.params.slug)
+      if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
+      await storage.uninstallPlugin(plugin.id, req.userId)
+      res.json({ ok: true })
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+
+  app.get('/api/me/plugins', requireUser, async (req, res) => {
+    try {
+      const plugins = await storage.getInstalledPlugins(req.userId)
+      res.json(plugins)
+    } catch (err) { res.status(500).json({ error: err.message }) }
+  })
+}
+
+app.get('/api/presentations/:id/plugins', async (req, res) => {
+  try {
+    const plugins = await storage.getPresentationPlugins(req.params.id)
+    res.json(plugins)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/presentations/:id/plugins', async (req, res) => {
+  try {
+    const { pluginId, config } = req.body
+    await storage.enablePluginForPresentation(req.params.id, pluginId, config)
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/presentations/:id/plugins/:pluginId', async (req, res) => {
+  try {
+    await storage.disablePluginForPresentation(req.params.id, req.params.pluginId)
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // In production, serve client build with SPA fallback

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Jessica Birky
 
-import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Presentation, Copy, Sun, Moon, Layout } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Plus, Pencil, Trash2, Presentation, Copy, Sun, Moon, Layout, ExternalLink } from 'lucide-react'
 import { api } from '../utils/api'
 
 import { UserButton } from '@clerk/clerk-react'
@@ -160,10 +160,15 @@ function isGradientOrImage(thumbnail) {
   return thumbnail && (thumbnail.type === 'gradient' || thumbnail.type === 'image')
 }
 
-export default function HomePage({ onOpen, theme, onToggleTheme }) {
+function slugify(str) {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'untitled'
+}
+
+export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) {
   const [presentations, setPresentations] = useState([])
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
+  const slugConsumed = useRef(false)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ title: '', theme: 'black', transition: 'slide', templateId: null })
   const [creating, setCreating] = useState(false)
@@ -172,9 +177,74 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
   const atLimit = isCloud && planInfo && planInfo.limits?.maxPresentations != null
     && planInfo.presentationCount >= planInfo.limits.maxPresentations
 
+  async function handleUpgrade() {
+    try {
+      const data = await api.createCheckout()
+      if (data.url) window.location.href = data.url
+    } catch (err) {
+      console.error('Checkout error:', err)
+    }
+  }
+
+  const [showBillingModal, setShowBillingModal] = useState(false)
+  const [billingStatus, setBillingStatus] = useState(null)
+  const [billingLoading, setBillingLoading] = useState(false)
+
+  async function openBillingModal() {
+    setShowBillingModal(true)
+    setBillingLoading(true)
+    try {
+      const status = await api.getBillingStatus()
+      setBillingStatus(status)
+    } catch { setBillingStatus(null) }
+    setBillingLoading(false)
+  }
+
+  async function handleUpgradeFromModal() {
+    try {
+      const data = await api.createCheckout()
+      if (data.url) window.location.href = data.url
+    } catch (err) { console.error('Checkout error:', err) }
+  }
+
+  async function handleCancelSubscription() {
+    if (!confirm('Cancel your Pro subscription? You\'ll keep access until the end of your billing period.')) return
+    try {
+      const result = await api.cancelSubscription()
+      setBillingStatus(prev => ({ ...prev, cancelAtPeriodEnd: true, currentPeriodEnd: result.cancelAt }))
+    } catch (err) {
+      alert(err.message || 'Failed to cancel')
+    }
+  }
+
+  async function handleResumeSubscription() {
+    try {
+      await api.resumeSubscription()
+      setBillingStatus(prev => ({ ...prev, cancelAtPeriodEnd: false }))
+    } catch (err) {
+      alert(err.message || 'Failed to resume')
+    }
+  }
+
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    slugConsumed.current = false
+  }, [initialSlug])
+
+  useEffect(() => {
+    if (initialSlug && !slugConsumed.current && !loading && presentations.length > 0) {
+      slugConsumed.current = true
+      const found = presentations.find(p => slugify(p.title) === initialSlug)
+      if (found) {
+        onOpen(found.id, false, found.title)
+      } else {
+        window.history.replaceState(null, '', '/dashboard')
+      }
+    }
+  }, [initialSlug, loading, presentations, onOpen])
 
   async function loadData() {
     try {
@@ -201,7 +271,7 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
       const pres = await api.createPresentation(form)
       setShowModal(false)
       setForm({ title: '', theme: 'black', transition: 'slide', templateId: null })
-      onOpen(pres.id)
+      onOpen(pres.id, false, pres.title)
     } catch (err) {
       if (err.message.includes('limit')) alert(err.message)
       else console.error('Failed to create presentation', err)
@@ -227,10 +297,10 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
             elements: (s.elements || []).map(el => ({ ...el, id: crypto.randomUUID() }))
           }))
         })
-        onOpen(pres.id)
+        onOpen(pres.id, false, pres.title)
       } else {
         const pres = await api.createPresentation({ templateId })
-        onOpen(pres.id)
+        onOpen(pres.id, false, pres.title)
       }
     } catch (err) {
       console.error('Failed to create from template', err)
@@ -304,10 +374,23 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
 
   const allTemplates = [...PRESET_THEMES, ...templates.map(t => ({ ...t, isUser: true }))]
 
+  if (initialSlug && !slugConsumed.current) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary, #0f0f1a)', color: 'var(--text-muted, #888)' }}>
+        Loading...
+      </div>
+    )
+  }
+
   return (
     <div className="home-page">
       <div className="home-header">
-        <h1><span>P</span>arallax</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <h1><span>P</span>arallax</h1>
+          <a href="/" target="_blank" rel="noopener noreferrer" title="Landing page" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)', textDecoration: 'none', padding: '4px 8px', borderRadius: 5, border: '1px solid var(--border)', transition: 'color 0.15s, border-color 0.15s' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--text-muted)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}>
+            <ExternalLink size={12} /> Site
+          </a>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             className="btn btn-secondary"
@@ -323,14 +406,26 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
             New Presentation
           </button>
           {isCloud && planInfo && (
-            <span style={{
-              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
-              background: planInfo.plan === 'pro' ? 'rgba(99,102,241,0.15)' : planInfo.plan === 'team' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.08)',
-              color: planInfo.plan === 'pro' ? '#818cf8' : planInfo.plan === 'team' ? '#22c55e' : 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: 0.5,
-            }}>{planInfo.plan || 'free'}</span>
+            <button
+              onClick={planInfo.billing ? openBillingModal : undefined}
+              style={{
+                fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, border: 'none', cursor: planInfo.billing ? 'pointer' : 'default',
+                background: planInfo.plan === 'pro' ? 'rgba(99,102,241,0.15)' : planInfo.plan === 'team' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.08)',
+                color: planInfo.plan === 'pro' ? '#818cf8' : planInfo.plan === 'team' ? '#22c55e' : 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: 0.5,
+              }}
+              title={planInfo.plan === 'free' ? 'Upgrade to Pro' : 'Manage subscription'}
+            >{planInfo.plan === 'free' && planInfo.billing ? 'Upgrade' : planInfo.plan || 'free'}</button>
           )}
-          {isCloud && <UserButton appearance={{ elements: { avatarBox: { width: 32, height: 32 } } }} />}
+          {isCloud && (
+            <UserButton appearance={{ elements: { avatarBox: { width: 32, height: 32 } } }}>
+              {planInfo?.billing && (
+                <UserButton.MenuItems>
+                  <UserButton.Action label="Manage subscription" labelIcon={<span style={{ fontSize: 14 }}>&#x2699;</span>} onClick={openBillingModal} />
+                </UserButton.MenuItems>
+              )}
+            </UserButton>
+          )}
         </div>
       </div>
 
@@ -342,7 +437,11 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
           }}>
             You've reached the {planInfo.limits.maxPresentations}-presentation limit on the Free plan.
             {planInfo.limits.expirationDays && ` Presentations expire after ${planInfo.limits.expirationDays} days.`}
-            {' '}Upgrade to Pro for unlimited presentations.
+            {planInfo.billing && (
+              <button onClick={handleUpgrade} style={{ marginLeft: 8, padding: '4px 12px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                Upgrade to Pro — $5/mo
+              </button>
+            )}
           </div>
         )}
         <h2>My Presentations</h2>
@@ -372,7 +471,7 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
                   <div
                     key={pres.id}
                     className="presentation-card"
-                    onClick={() => onOpen(pres.id)}
+                    onClick={() => onOpen(pres.id, false, pres.title)}
                   >
                     <div className="card-preview" style={bgProp}>
                       {(!pres.thumbnail || pres.thumbnail.type === 'none') && (
@@ -395,7 +494,7 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
                       <button
                         className="btn-icon"
                         title="Edit"
-                        onClick={(e) => { e.stopPropagation(); onOpen(pres.id) }}
+                        onClick={(e) => { e.stopPropagation(); onOpen(pres.id, false, pres.title) }}
                       >
                         <Pencil size={14} />
                       </button>
@@ -605,6 +704,89 @@ export default function HomePage({ onOpen, theme, onToggleTheme }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Billing modal */}
+      {showBillingModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setShowBillingModal(false)}>
+          <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 12, padding: 28, width: 400, maxWidth: '90vw', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700 }}>Subscription</h3>
+
+            {billingLoading ? (
+              <div style={{ color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>Loading...</div>
+            ) : (
+              <>
+                {/* Current plan */}
+                <div style={{ background: 'var(--bg-primary)', borderRadius: 8, padding: 16, marginBottom: 16, border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>Current plan</span>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, textTransform: 'uppercase',
+                      background: planInfo?.plan === 'pro' ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.08)',
+                      color: planInfo?.plan === 'pro' ? '#818cf8' : 'var(--text-muted)',
+                    }}>{planInfo?.plan || 'free'}</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    {planInfo?.plan === 'free' ? (
+                      <>
+                        <div>{planInfo.limits?.maxPresentations || 3} presentations, 100 MB storage</div>
+                        <div>Presentations expire after {planInfo.limits?.expirationDays || 30} days</div>
+                      </>
+                    ) : (
+                      <>
+                        <div>Unlimited presentations, 5 GB storage</div>
+                        <div>No expiration</div>
+                      </>
+                    )}
+                  </div>
+                  {planInfo?.plan !== 'free' && billingStatus?.currentPeriodEnd && (
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                      {billingStatus.cancelAtPeriodEnd
+                        ? `Cancels on ${new Date(billingStatus.currentPeriodEnd).toLocaleDateString()}`
+                        : `Renews on ${new Date(billingStatus.currentPeriodEnd).toLocaleDateString()}`
+                      }
+                    </div>
+                  )}
+                </div>
+
+                {/* Usage */}
+                <div style={{ background: 'var(--bg-primary)', borderRadius: 8, padding: 16, marginBottom: 20, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Usage</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span>Presentations</span>
+                      <span>{planInfo?.presentationCount || 0}{planInfo?.limits?.maxPresentations ? ` / ${planInfo.limits.maxPresentations}` : ''}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Storage</span>
+                      <span>{((planInfo?.storageUsed || 0) / 1024 / 1024).toFixed(1)} MB{planInfo?.limits?.storageBytes ? ` / ${(planInfo.limits.storageBytes / 1024 / 1024 / 1024).toFixed(0)} GB` : ''}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {planInfo?.plan === 'free' ? (
+                    <button onClick={handleUpgradeFromModal} style={{ flex: 1, padding: '10px 16px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                      Upgrade to Pro — $5/mo
+                    </button>
+                  ) : billingStatus?.cancelAtPeriodEnd ? (
+                    <button onClick={handleResumeSubscription} style={{ flex: 1, padding: '10px 16px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                      Resume subscription
+                    </button>
+                  ) : (
+                    <button onClick={handleCancelSubscription} style={{ flex: 1, padding: '10px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer' }}>
+                      Cancel renewal
+                    </button>
+                  )}
+                  <button onClick={() => setShowBillingModal(false)} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer' }}>
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

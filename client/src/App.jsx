@@ -3,9 +3,14 @@ import { useAuth, SignIn, SignedIn, SignedOut } from '@clerk/clerk-react'
 import HomePage from './pages/HomePage'
 import EditorPage from './pages/EditorPage'
 import LandingPage from './pages/LandingPage'
+import DocsPage from './components/DocsPage'
 import { setTokenGetter } from './utils/api'
 
 const isCloud = import.meta.env.VITE_PARALLAX_MODE === 'cloud'
+
+function slugify(str) {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'untitled'
+}
 
 function TokenBridge() {
   const { getToken } = useAuth()
@@ -13,42 +18,62 @@ function TokenBridge() {
   return null
 }
 
+function SignInPage() {
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: 32,
+      background: 'var(--bg-primary, #0f0f1a)',
+    }}>
+      <div style={{ textAlign: 'center' }}>
+        <h1 style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-primary, #fff)', margin: 0, cursor: 'pointer' }}
+            onClick={() => { window.location.href = '/' }}>
+          <span style={{ color: 'var(--accent, #6366f1)' }}>P</span>arallax
+        </h1>
+        <p style={{ color: 'var(--text-muted, #888)', marginTop: 8, fontSize: 15 }}>
+          Sign in to create and manage presentations
+        </p>
+      </div>
+      <SignIn routing="hash" afterSignInUrl="/dashboard" appearance={{
+        variables: { colorPrimary: '#6366f1', colorBackground: '#2a2a3e', colorText: '#f0f0f0', colorInputBackground: '#3a3a52', colorInputText: '#f0f0f0' },
+        elements: { socialButtonsBlockButton: { backgroundColor: '#ffffff', color: '#1a1a2e', borderColor: '#e0e0e0' } },
+      }} />
+      <button onClick={() => { window.location.href = '/' }}
+        style={{ color: 'var(--text-muted)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}>
+        &larr; Back to home
+      </button>
+    </div>
+  )
+}
+
 function AuthGateCloud({ children }) {
-  const [showAuth, setShowAuth] = useState(false)
+  const path = window.location.pathname
+  const isLanding = path === '/' || path === ''
+  const isSignIn = path === '/sign-in'
 
   return (
     <>
       <TokenBridge />
-      <SignedOut>
-        {showAuth ? (
-          <div style={{
-            minHeight: '100vh', display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: 32,
-            background: 'var(--bg-primary, #0f0f1a)',
-          }}>
-            <div style={{ textAlign: 'center' }}>
-              <h1 style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-primary, #fff)', margin: 0, cursor: 'pointer' }}
-                  onClick={() => setShowAuth(false)}>
-                <span style={{ color: 'var(--accent, #6366f1)' }}>P</span>arallax
-              </h1>
-              <p style={{ color: 'var(--text-muted, #888)', marginTop: 8, fontSize: 15 }}>
-                Sign in to create and manage presentations
-              </p>
-            </div>
-            <SignIn routing="hash" appearance={{
-              variables: { colorPrimary: '#6366f1', colorBackground: '#2a2a3e', colorText: '#f0f0f0', colorInputBackground: '#3a3a52', colorInputText: '#f0f0f0' },
-              elements: { socialButtonsBlockButton: { backgroundColor: '#ffffff', color: '#1a1a2e', borderColor: '#e0e0e0' } },
-            }} />
-            <button onClick={() => setShowAuth(false)}
-              style={{ color: 'var(--text-muted)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}>
-              &larr; Back to home
-            </button>
-          </div>
-        ) : (
-          <LandingPage onSignIn={() => setShowAuth(true)} />
-        )}
-      </SignedOut>
-      <SignedIn>{children}</SignedIn>
+      {isLanding ? (
+        <>
+          <SignedOut>
+            <LandingPage onSignIn={() => { window.location.href = '/sign-in' }} />
+          </SignedOut>
+          <SignedIn>
+            <LandingPage onSignIn={() => { window.location.href = '/dashboard' }} />
+          </SignedIn>
+        </>
+      ) : isSignIn ? (
+        <>
+          <SignedOut><SignInPage /></SignedOut>
+          <SignedIn>{(() => { window.location.href = '/dashboard'; return null })()}</SignedIn>
+        </>
+      ) : (
+        <>
+          <SignedOut><SignInPage /></SignedOut>
+          <SignedIn>{children}</SignedIn>
+        </>
+      )}
     </>
   )
 }
@@ -59,26 +84,98 @@ function AuthGateSelfHosted({ children }) {
 
 const AuthGate = isCloud ? AuthGateCloud : AuthGateSelfHosted
 
+function DocsOverlay({ onClose, initialPage }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column' }}>
+      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(15,15,30,0.95)', backdropFilter: 'blur(12px)' }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}><span style={{ color: 'var(--accent)' }}>P</span>arallax Docs</div>
+        <button onClick={onClose} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: '6px 14px', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 13 }}>Back to app</button>
+      </nav>
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <DocsPage initialPage={initialPage} />
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [page, setPage] = useState('home')
   const [presentationId, setPresentationId] = useState(null)
   const [isTemplate, setIsTemplate] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('editor-theme') || 'dark')
+  const [docsOverlay, setDocsOverlay] = useState(null)
+  const [initialSlug, setInitialSlug] = useState(() => {
+    const path = window.location.pathname
+    const match = path.match(/^\/dashboard\/(.+)/)
+    return match ? decodeURIComponent(match[1]) : null
+  })
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark')
     localStorage.setItem('editor-theme', theme)
   }, [theme])
 
-  const openEditor = (id, template = false) => { setPresentationId(id); setIsTemplate(template); setPage('editor') }
-  const goHome = () => { setPage('home'); setPresentationId(null); setIsTemplate(false) }
+  useEffect(() => {
+    const check = () => {
+      const hash = window.location.hash
+      if (hash.startsWith('#docs')) {
+        const p = hash.replace('#docs/', '').replace('#docs', '')
+        setDocsOverlay(p && p.includes('/') ? p : 'guide/getting-started')
+      }
+    }
+    check()
+    window.addEventListener('hashchange', check)
+    return () => window.removeEventListener('hashchange', check)
+  }, [])
+
+  useEffect(() => {
+    const handler = () => {
+      const path = window.location.pathname
+      const match = path.match(/^\/dashboard\/(.+)/)
+      if (match) {
+        setInitialSlug(decodeURIComponent(match[1]))
+        setPage('home')
+        setPresentationId(null)
+        setIsTemplate(false)
+      } else {
+        setPage('home')
+        setPresentationId(null)
+        setIsTemplate(false)
+      }
+    }
+    window.addEventListener('popstate', handler)
+    return () => window.removeEventListener('popstate', handler)
+  }, [])
+
+  const closeDocs = () => { setDocsOverlay(null); window.location.hash = '' }
+
+  const openEditor = (id, template = false, title = '') => {
+    setPresentationId(id)
+    setIsTemplate(template)
+    setPage('editor')
+    setInitialSlug(null)
+    if (title && !template) {
+      const targetPath = `/dashboard/${slugify(title)}`
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ presentationId: id }, '', targetPath)
+      }
+    }
+  }
+
+  const goHome = () => {
+    setPage('home')
+    setPresentationId(null)
+    setIsTemplate(false)
+    window.history.pushState(null, '', '/dashboard')
+  }
 
   return (
     <AuthGate>
       {page === 'home'
-        ? <HomePage onOpen={openEditor} theme={theme} onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} />
+        ? <HomePage onOpen={openEditor} theme={theme} onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} initialSlug={initialSlug} />
         : <EditorPage presentationId={presentationId} isTemplate={isTemplate} onGoHome={goHome} />
       }
+      {docsOverlay && <DocsOverlay onClose={closeDocs} initialPage={docsOverlay} />}
     </AuthGate>
   )
 }

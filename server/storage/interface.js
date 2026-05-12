@@ -28,6 +28,18 @@ class StorageInterface {
 
   async getGithubConfig(userId) { throw new Error('Not implemented') }
   async setGithubConfig(config, userId) { throw new Error('Not implemented') }
+
+  async listPlugins() { throw new Error('Not implemented') }
+  async getPlugin(slug) { throw new Error('Not implemented') }
+  async installPlugin(pluginId, userId) { throw new Error('Not implemented') }
+  async uninstallPlugin(pluginId, userId) { throw new Error('Not implemented') }
+  async getInstalledPlugins(userId) { throw new Error('Not implemented') }
+  async getPresentationPlugins(presentationId) { throw new Error('Not implemented') }
+  async enablePluginForPresentation(presentationId, pluginId, config) { throw new Error('Not implemented') }
+  async disablePluginForPresentation(presentationId, pluginId) { throw new Error('Not implemented') }
+  async getPluginStorage(userId, pluginId, key) { throw new Error('Not implemented') }
+  async setPluginStorage(userId, pluginId, key, value) { throw new Error('Not implemented') }
+  async deletePluginStorage(userId, pluginId, key) { throw new Error('Not implemented') }
 }
 
 module.exports = StorageInterface

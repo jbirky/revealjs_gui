@@ -44,9 +44,9 @@ function authStack() {
 }
 
 const PLAN_LIMITS = {
-  free: { maxPresentations: 3, expirationDays: 30 },
-  pro:  { maxPresentations: Infinity, expirationDays: null },
-  team: { maxPresentations: Infinity, expirationDays: null },
+  free: { maxPresentations: 3, expirationDays: 30, storageBytes: 100 * 1024 * 1024 },
+  pro:  { maxPresentations: Infinity, expirationDays: null, storageBytes: 5 * 1024 * 1024 * 1024 },
+  team: { maxPresentations: Infinity, expirationDays: null, storageBytes: 25 * 1024 * 1024 * 1024 },
 }
 
 module.exports = { authStack, requireUser, IS_CLOUD, PLAN_LIMITS }

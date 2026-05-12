@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Jessica Birky
 
-import { Pencil, Presentation, Layout, Code2, Download, Server, ArrowRight } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Pencil, Presentation, Layout, Code2, Download, Server, Check, ArrowRight, BookOpen } from 'lucide-react'
+import DocsPage from '../components/DocsPage'
 
 const FEATURES = [
   { icon: Pencil, title: 'WYSIWYG Editor', desc: 'Edit slides visually with a rich text editor. Drag, drop, and resize — no code required.' },
@@ -12,15 +14,68 @@ const FEATURES = [
   { icon: Server, title: 'Self-Hostable', desc: 'Run on your own server with Docker. Full data ownership, no vendor lock-in.' },
 ]
 
+const PLANS = [
+  {
+    name: 'Free',
+    price: '$0',
+    period: '',
+    features: ['3 presentations', '100 MB storage', '30-day expiration'],
+    cta: 'Get Started',
+    highlighted: false,
+  },
+  {
+    name: 'Pro',
+    price: '$5',
+    period: '/mo',
+    features: ['Unlimited presentations', '5 GB storage', 'No expiration', 'Priority support'],
+    cta: 'Upgrade to Pro',
+    highlighted: true,
+  },
+]
 
 export default function LandingPage({ onSignIn }) {
+  const [tab, setTab] = useState('home')
+  const [docsPage, setDocsPage] = useState(null)
+
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash.startsWith('#docs')) {
+      setTab('docs')
+      const page = hash.replace('#docs/', '').replace('#docs', '')
+      if (page && page.includes('/')) setDocsPage(page)
+    }
+    const onHash = () => {
+      const h = window.location.hash
+      if (h.startsWith('#docs')) {
+        setTab('docs')
+        const p = h.replace('#docs/', '').replace('#docs', '')
+        if (p && p.includes('/')) setDocsPage(p)
+      } else {
+        setTab('home')
+      }
+    }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  const switchTab = (t) => {
+    setTab(t)
+    window.location.hash = t === 'docs' ? 'docs' : ''
+  }
+
   return (
     <div className="landing-page">
       {/* Nav */}
       <nav className="landing-nav">
         <div className="landing-nav-inner">
-          <div className="landing-logo">
-            <span style={{ color: 'var(--accent)' }}>P</span>arallax
+          <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+            <div className="landing-logo" style={{ cursor: 'pointer' }} onClick={() => switchTab('home')}>
+              <span style={{ color: 'var(--accent)' }}>P</span>arallax
+            </div>
+            <div className="landing-nav-tabs">
+              <button className={`landing-nav-tab ${tab === 'home' ? 'landing-nav-tab-active' : ''}`} onClick={() => switchTab('home')}>Home</button>
+              <button className={`landing-nav-tab ${tab === 'docs' ? 'landing-nav-tab-active' : ''}`} onClick={() => switchTab('docs')}><BookOpen size={14} /> Docs</button>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <button className="landing-btn-ghost" onClick={onSignIn}>Sign In</button>
@@ -32,6 +87,9 @@ export default function LandingPage({ onSignIn }) {
       </nav>
 
       <div className="landing-scroll">
+        {tab === 'docs' ? (
+          <DocsPage initialPage={docsPage} />
+        ) : (<>
         {/* Hero */}
         <section className="landing-hero">
           <h1 className="landing-hero-title">
@@ -97,14 +155,28 @@ export default function LandingPage({ onSignIn }) {
           <p className="landing-section-sub">
             Create presentations with no account required in self-hosted mode, or sign in to save to the cloud.
           </p>
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button className="landing-btn-primary landing-btn-lg" onClick={onSignIn}>
-              Get Started <ArrowRight size={18} />
-            </button>
-            <a href="https://github.com/jbirky/revealjs_gui" target="_blank" rel="noopener noreferrer"
-              className="landing-btn-ghost landing-btn-lg">
-              View on GitHub
-            </a>
+          <div className="landing-pricing-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', maxWidth: 700, margin: '0 auto' }}>
+            {PLANS.map(plan => (
+              <div key={plan.name} className={`landing-price-card ${plan.highlighted ? 'landing-price-highlighted' : ''}`}>
+                {plan.highlighted && <div className="landing-price-badge">Most Popular</div>}
+                <h3>{plan.name}</h3>
+                <div className="landing-price-amount">
+                  {plan.price}<span>{plan.period}</span>
+                </div>
+                <ul>
+                  {plan.features.map(f => (
+                    <li key={f}><Check size={16} /> {f}</li>
+                  ))}
+                </ul>
+                <button
+                  className={plan.highlighted ? 'landing-btn-primary' : 'landing-btn-ghost'}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  onClick={onSignIn}
+                >
+                  {plan.cta}
+                </button>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -115,6 +187,7 @@ export default function LandingPage({ onSignIn }) {
           </div>
           <p>&copy; 2026 Jessica Birky. Licensed under AGPL-3.0.</p>
         </footer>
+        </>)}
       </div>
     </div>
   )

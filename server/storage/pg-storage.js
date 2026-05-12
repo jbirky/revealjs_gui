@@ -250,6 +250,89 @@ class PgStorage extends StorageInterface {
     )
     return updated
   }
+
+  // --- Plugins ---
+
+  _scanBundledPlugins() {
+    const dir = require('path').join(__dirname, '..', '..', 'plugins')
+    const fs = require('fs-extra')
+    if (!fs.existsSync(dir)) return []
+    return fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory()).map(entry => {
+      const mp = require('path').join(dir, entry.name, 'parallax-plugin.json')
+      if (!fs.existsSync(mp)) return null
+      const m = fs.readJsonSync(mp)
+      return { id: m.id, slug: entry.name, name: m.name, description: m.description, version: m.version, manifest: m }
+    }).filter(Boolean)
+  }
+
+  async listPlugins() {
+    const { rows } = await this.query(`SELECT id, slug, name, description, version, price_cents as "priceCents", manifest, published, downloads, avg_rating as "avgRating" FROM plugins WHERE published = true ORDER BY name`)
+    const bundled = this._scanBundledPlugins()
+    const seen = new Set(rows.map(r => r.slug))
+    return [...rows, ...bundled.filter(b => !seen.has(b.slug))]
+  }
+
+  async getPlugin(slug) {
+    const { rows } = await this.query(`SELECT id, slug, name, description, version, price_cents as "priceCents", manifest, published, downloads, avg_rating as "avgRating" FROM plugins WHERE slug = $1`, [slug])
+    if (rows[0]) return rows[0]
+    const bundled = this._scanBundledPlugins().find(b => b.slug === slug)
+    return bundled || null
+  }
+
+  async installPlugin(pluginId, userId) {
+    const licenseKey = require('crypto').randomUUID()
+    await this.query(
+      `INSERT INTO plugin_licenses (user_id, plugin_id, license_key, status) VALUES ($1, $2, $3, 'active') ON CONFLICT (user_id, plugin_id) DO UPDATE SET status = 'active'`,
+      [userId, pluginId, licenseKey]
+    )
+  }
+
+  async uninstallPlugin(pluginId, userId) {
+    await this.query(`DELETE FROM plugin_licenses WHERE user_id = $1 AND plugin_id = $2`, [userId, pluginId])
+  }
+
+  async getInstalledPlugins(userId) {
+    const { rows } = await this.query(
+      `SELECT p.id, p.slug, p.name, p.description, p.version, p.manifest FROM plugins p INNER JOIN plugin_licenses l ON l.plugin_id = p.id WHERE l.user_id = $1 AND l.status = 'active' ORDER BY p.name`,
+      [userId]
+    )
+    return rows
+  }
+
+  async getPresentationPlugins(presentationId) {
+    const { rows } = await this.query(
+      `SELECT p.id, p.slug, p.name, p.version, p.manifest, pp.config FROM plugins p INNER JOIN presentation_plugins pp ON pp.plugin_id = p.id WHERE pp.presentation_id = $1`,
+      [presentationId]
+    )
+    return rows
+  }
+
+  async enablePluginForPresentation(presentationId, pluginId, config = {}) {
+    await this.query(
+      `INSERT INTO presentation_plugins (presentation_id, plugin_id, config) VALUES ($1, $2, $3) ON CONFLICT (presentation_id, plugin_id) DO UPDATE SET config = $3`,
+      [presentationId, pluginId, JSON.stringify(config)]
+    )
+  }
+
+  async disablePluginForPresentation(presentationId, pluginId) {
+    await this.query(`DELETE FROM presentation_plugins WHERE presentation_id = $1 AND plugin_id = $2`, [presentationId, pluginId])
+  }
+
+  async getPluginStorage(userId, pluginId, key) {
+    const { rows } = await this.query(`SELECT value FROM plugin_storage WHERE user_id = $1 AND plugin_id = $2 AND key = $3`, [userId, pluginId, key])
+    return rows[0]?.value ?? null
+  }
+
+  async setPluginStorage(userId, pluginId, key, value) {
+    await this.query(
+      `INSERT INTO plugin_storage (user_id, plugin_id, key, value) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, plugin_id, key) DO UPDATE SET value = $4`,
+      [userId, pluginId, key, JSON.stringify(value)]
+    )
+  }
+
+  async deletePluginStorage(userId, pluginId, key) {
+    await this.query(`DELETE FROM plugin_storage WHERE user_id = $1 AND plugin_id = $2 AND key = $3`, [userId, pluginId, key])
+  }
 }
 
 module.exports = PgStorage

@@ -1,0 +1,54 @@
+{
+  "id": "com.parallax.animated-counter",
+  "name": "Animated Counter",
+  "version": "1.0.0",
+  "parallaxEngine": ">=1.0.0",
+  "author": {
+    "name": "Parallax",
+    "url": "https://parallax-presentations.com"
+  },
+  "license": "AGPL-3.0",
+  "description": "Displays a number that counts up with animation — great for statistics and key metrics in presentations.",
+  "main": "./plugin.js",
+  "sandbox": "./sandbox.html",
+  "contributes": {
+    "elementTypes": [
+      {
+        "type": "counter",
+        "label": "Animated Counter",
+        "defaultSize": { "width": 300, "height": 150 },
+        "defaultData": {
+          "value": 1000,
+          "prefix": "",
+          "suffix": "",
+          "duration": 2000,
+          "color": "#ffffff",
+          "fontSize": 64,
+          "label": "",
+          "labelSize": 16,
+          "labelColor": "rgba(255,255,255,0.6)",
+          "separator": true
+        },
+        "toolbar": {
+          "menu": "embed",
+          "position": "after:html"
+        }
+      }
+    ],
+    "propertyPanels": [
+      {
+        "id": "counter-settings",
+        "elementType": "counter",
+        "label": "Counter Settings"
+      }
+    ],
+    "exportHooks": [
+      {
+        "id": "counter-static",
+        "formats": ["html"],
+        "description": "Renders counter as static styled number"
+      }
+    ]
+  },
+  "permissions": []
+}

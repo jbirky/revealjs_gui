@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+  .manim-wrap {
+    width: 100%; height: 100%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family: -apple-system, 'Inter', sans-serif; color: rgba(255,255,255,0.5);
+  }
+  video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+  .placeholder { text-align: center; }
+  .placeholder .icon { font-size: 48px; margin-bottom: 8px; }
+  .placeholder .label { font-size: 14px; font-weight: 500; }
+  .placeholder .hint { font-size: 11px; opacity: 0.6; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="manim-wrap" id="wrap">
+  <div class="placeholder" id="placeholder">
+    <div class="icon">🎬</div>
+    <div class="label" id="scene-label">Manim: MyScene</div>
+    <div class="hint">Double-click to edit & render</div>
+  </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var api = window.parallax;
+  var wrap = document.getElementById('wrap');
+  var placeholder = document.getElementById('placeholder');
+  var sceneLabel = document.getElementById('scene-label');
+  var videoEl = null;
+
+  function render(data) {
+    sceneLabel.textContent = 'Manim: ' + (data.sceneName || 'MyScene');
+
+    if (data.rendered) {
+      if (!videoEl) {
+        videoEl = document.createElement('video');
+        videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block;background:#000;';
+      }
+      videoEl.src = data.rendered;
+      videoEl.autoplay = data.autoplay !== false;
+      videoEl.loop = data.loop !== false;
+      videoEl.muted = data.muted !== false;
+      videoEl.controls = !!data.controls;
+      placeholder.style.display = 'none';
+      if (!videoEl.parentNode) wrap.appendChild(videoEl);
+    } else {
+      placeholder.style.display = '';
+      if (videoEl && videoEl.parentNode) videoEl.parentNode.removeChild(videoEl);
+    }
+  }
+
+  if (api) {
+    render(api.data);
+    api.onDataChanged(render);
+  }
+});
+</script>
+</body>
+</html>

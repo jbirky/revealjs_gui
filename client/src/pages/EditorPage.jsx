@@ -49,6 +49,7 @@ import anOldHopeCSS from '../../../node_modules/highlight.js/styles/an-old-hope.
 import atomOneLightCSS from '../../../node_modules/highlight.js/styles/atom-one-light.min.css?raw'
 import githubCSS from '../../../node_modules/highlight.js/styles/github.min.css?raw'
 import vsCSS from '../../../node_modules/highlight.js/styles/vs.min.css?raw'
+import { loadPlugins, getInsertablePluginTypes, createPluginElement } from '../plugins/PluginLoader'
 
 const CODE_THEME_CSS = {
   'monokai': monokaiCSS,
@@ -334,6 +335,20 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
       setLoading(false)
     })
   }, [presentationId])
+
+  // Load plugins on mount
+  const [pluginsLoaded, setPluginsLoaded] = useState(false)
+  useEffect(() => {
+    loadPlugins({
+      getPresentation: () => presentation,
+      updateElement: (id, patch) => {
+        setPresentation(prev => {
+          if (!prev) return prev
+          return { ...prev, slides: prev.slides.map(s => ({ ...s, elements: (s.elements || []).map(el => el.id === id ? { ...el, ...patch } : el) })) }
+        })
+      },
+    }).then(() => setPluginsLoaded(true)).catch(() => setPluginsLoaded(true))
+  }, [])
 
   // Load GitHub config on mount
   useEffect(() => {
@@ -625,6 +640,38 @@ svg.selectAll('circle').data(data).join('circle')
   .attr('fill', (d,i) => d3.schemeTableau10[i%10]).attr('opacity', 0.8);
 <\/script>`
 
+  const DEFAULT_MANIM = `from manim import *
+
+class MyScene(Scene):
+    def construct(self):
+        circle = Circle(radius=2, color=BLUE)
+        square = Square(side_length=2, color=RED)
+
+        title = Text("Manim Animation", font_size=36).to_edge(UP)
+        self.play(Write(title))
+        self.play(Create(circle))
+        self.wait(0.5)
+        self.play(Transform(circle, square))
+        self.wait(1)
+`
+
+  const addPluginElement = useCallback((fullType) => {
+    const el = createPluginElement(fullType)
+    if (!el) return
+    if (fullType === 'plugin:manim') {
+      el.pluginData = { ...el.pluginData, content: DEFAULT_MANIM }
+    }
+    setPresentation(prev => {
+      if (!prev) return prev
+      return { ...prev, slides: prev.slides.map((s, i) => i === currentSlideIndexRef.current ? { ...s, elements: [...(s.elements || []), el] } : s) }
+    })
+    setSelectedElementIds([el.id])
+    if (fullType === 'plugin:manim') {
+      const d = el.pluginData
+      setManimEditorState({ elementId: el.id, content: d.content, sceneName: d.sceneName || 'MyScene', quality: d.quality || 'l', rendered: null, rendering: false, error: null, isPlugin: true })
+    }
+  }, [DEFAULT_MANIM])
+
   const addHtmlElement = useCallback(() => {
     const newEl = {
       id: crypto.randomUUID(),
@@ -665,11 +712,14 @@ svg.selectAll('circle').data(data).join('circle')
     setHtmlEditorState({ elementId: newEl.id, content: DEFAULT_D3 })
   }, [DEFAULT_D3])
 
-  const insertKineticText = useCallback((html) => {
+  const insertKineticText = useCallback((html, width, height) => {
+    const w = width || slideW - 80
+    const h = height || 120
     const newEl = {
       id: crypto.randomUUID(),
       type: 'html',
-      x: 40, y: 40, width: slideW - 80, height: 120, zIndex: 2,
+      x: Math.round((slideW - w) / 2), y: Math.round((slideH - h) / 2),
+      width: w, height: h, zIndex: 2,
       content: html
     }
     setPresentation(prev => {
@@ -1050,21 +1100,6 @@ function draw() {
     })
   }, [slideW, slideH])
 
-  const DEFAULT_MANIM = `from manim import *
-
-class MyScene(Scene):
-    def construct(self):
-        circle = Circle(radius=2, color=BLUE)
-        square = Square(side_length=2, color=RED)
-
-        title = Text("Manim Animation", font_size=36).to_edge(UP)
-        self.play(Write(title))
-        self.play(Create(circle))
-        self.wait(0.5)
-        self.play(Transform(circle, square))
-        self.wait(1)
-`
-
   const addManimElement = useCallback(() => {
     const newEl = {
       id: crypto.randomUUID(),
@@ -1095,20 +1130,32 @@ class MyScene(Scene):
   const openManimEditor = useCallback((elementId) => {
     const slide = presentation?.slides[currentSlideIndexRef.current]
     const element = slide?.elements?.find(el => el.id === elementId)
-    if (!element || element.type !== 'manim') return
-    setManimEditorState({ elementId, content: element.content || DEFAULT_MANIM, sceneName: element.sceneName || 'MyScene', quality: element.quality || 'l', rendered: element.rendered || null, rendering: false, error: null })
+    if (!element) return
+    if (element.type === 'manim') {
+      setManimEditorState({ elementId, content: element.content || DEFAULT_MANIM, sceneName: element.sceneName || 'MyScene', quality: element.quality || 'l', rendered: element.rendered || null, rendering: false, error: null })
+    } else if (element.type === 'plugin:manim') {
+      const d = element.pluginData || {}
+      setManimEditorState({ elementId, content: d.content || DEFAULT_MANIM, sceneName: d.sceneName || 'MyScene', quality: d.quality || 'l', rendered: d.rendered || null, rendering: false, error: null, isPlugin: true })
+    }
   }, [presentation, DEFAULT_MANIM])
 
   const commitManimEdit = useCallback(() => {
     if (!manimEditorState) return
-    updateElement(manimEditorState.elementId, {
+    const patch = {
       content: manimEditorState.content,
       sceneName: manimEditorState.sceneName,
       quality: manimEditorState.quality,
       rendered: manimEditorState.rendered,
-    })
+    }
+    if (manimEditorState.isPlugin) {
+      const slide = presentation?.slides[currentSlideIndexRef.current]
+      const element = slide?.elements?.find(el => el.id === manimEditorState.elementId)
+      updateElement(manimEditorState.elementId, { pluginData: { ...(element?.pluginData || {}), ...patch } })
+    } else {
+      updateElement(manimEditorState.elementId, patch)
+    }
     setManimEditorState(null)
-  }, [manimEditorState, updateElement])
+  }, [manimEditorState, updateElement, presentation])
 
   const renderManim = useCallback(async () => {
     if (!manimEditorState) return
@@ -2601,6 +2648,8 @@ class MyScene(Scene):
             onAddAudio={addAudioElement}
             onAddTable={addTableElement}
             onAddManim={addManimElement}
+            pluginTypes={pluginsLoaded ? getInsertablePluginTypes() : []}
+            onAddPluginElement={addPluginElement}
             selectedCount={selectedElementIds.length}
             onAlignElements={alignElements}
             smartGuidesEnabled={smartGuidesEnabled}

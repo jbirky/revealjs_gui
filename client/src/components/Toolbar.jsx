@@ -31,10 +31,11 @@ import {
   Ungroup,
   FileText,
   HelpCircle,
+  Puzzle,
 } from 'lucide-react'
 import { SHAPES } from '../utils/shapeUtils'
 
-const DOCS_BASE = '/revealjs_gui/tutorials/'
+const DOCS_BASE = '/#docs/tutorials/'
 const DocsLink = ({ page, onClose }) => (
   <>
     <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
@@ -67,7 +68,7 @@ const GRADIENT_PRESETS_BG = [
   'linear-gradient(135deg, #2c3e50, #3498db)'
 ]
 
-export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddTextPath, onAddImage, onAddImageUpload, onAddShape, onAddNonobjective, onAddModularGrid, onAddHtml, onAddD3, onAddKineticText, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, onAddManim, onAddP5, onAddMathGrid, onAddAnime, onAddThree, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers, guides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onImportPptx, drawTool, onSetDrawTool, onUndo, onRedo, canUndo, canRedo }) {
+export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddTextPath, onAddImage, onAddImageUpload, onAddShape, onAddNonobjective, onAddModularGrid, onAddHtml, onAddD3, onAddKineticText, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, onAddManim, onAddP5, onAddMathGrid, onAddAnime, onAddThree, pluginTypes = [], onAddPluginElement, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers, guides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onImportPptx, drawTool, onSetDrawTool, onUndo, onRedo, canUndo, canRedo }) {
   const [showTextMenu, setShowTextMenu] = useState(false)
   const [showImageMenu, setShowImageMenu] = useState(false)
   const [showEmbedMenu, setShowEmbedMenu] = useState(false)
@@ -77,6 +78,7 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
   const [showNonobjectiveMenu, setShowNonobjectiveMenu] = useState(false)
   const [showModularMenu, setShowModularMenu] = useState(false)
   const [showTableMenu, setShowTableMenu] = useState(false)
+  const [showPluginMenu, setShowPluginMenu] = useState(false)
   const [showColorPalette, setShowColorPalette] = useState(false)
   const [showHighlightPalette, setShowHighlightPalette] = useState(false)
   const [showBgMenu, setShowBgMenu] = useState(false)
@@ -329,9 +331,6 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
             </button>
             <button onClick={() => { setShowEmbedMenu(false); onAddP5() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
               <Code size={14} /> p5.js
-            </button>
-            <button onClick={() => { setShowEmbedMenu(false); onAddManim() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-              <span style={{ fontSize: 14, width: 14, textAlign: 'center' }}>🎬</span> Manim
             </button>
             <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
             <button onClick={() => { setShowEmbedMenu(false); onAddAnime?.() }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
@@ -689,21 +688,6 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
 
       {/* Chart docs */}
       {/* Table docs - handled inline */}
-
-      {/* Add Axis Line - legacy, now in Layout dropdown */}
-      <button
-        className="btn-icon"
-        onClick={() => {
-          const existing = slide?.axisLines || []
-          const id = crypto.randomUUID()
-          const axis = existing.length % 2 === 0 ? 'x' : 'y'
-          const position = axis === 'x' ? Math.round(960 / 3) : 270
-          onUpdateSlide({ axisLines: [...existing, { id, axis, position, visible: true, snap: true }] })
-        }}
-        title="Add axis line (composition guide)"
-      >
-        <Minus size={14} style={{ transform: 'rotate(90deg)' }} />
-      </button>
 
       {selectedCount >= 2 && (
         <>
@@ -1304,6 +1288,26 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
           </div>
         </div>
       )}
+
+      {/* Plugins dropdown — far right */}
+      {pluginTypes.length > 0 && (<>
+        <div style={{ flex: 1 }} />
+        <div style={{ position: 'relative' }}>
+          <button className="btn-icon" onClick={() => setShowPluginMenu(v => !v)} title="Plugins" style={{ width: 'auto', padding: '0 8px', fontSize: 12, gap: 4, display: 'flex', alignItems: 'center' }}>
+            <Puzzle size={14} /> Plugins <span style={{ fontSize: 9, marginLeft: 1, opacity: 0.6 }}>&#9660;</span>
+          </button>
+          {showPluginMenu && (<>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowPluginMenu(false)} />
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, minWidth: 180, overflow: 'hidden', padding: '4px 0' }}>
+              {pluginTypes.map(pt => (
+                <button key={pt.type} onClick={() => { setShowPluginMenu(false); onAddPluginElement?.(pt.type) }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                  <Puzzle size={13} style={{ opacity: 0.5 }} /> {pt.label}
+                </button>
+              ))}
+            </div>
+          </>)}
+        </div>
+      </>)}
     </div>
   )
 }

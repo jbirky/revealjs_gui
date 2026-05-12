@@ -2,6 +2,8 @@
 // Copyright (c) 2026 Jessica Birky
 
 import { useRef, useEffect, useState, useCallback } from 'react'
+import PluginSandbox from '../plugins/PluginSandbox'
+import registry from '../plugins/PluginRegistry'
 
 function buildHtmlEmbed(userHtml, embedW, embedH) {
   const initScript = `<script>const EMBED_WIDTH=${embedW},EMBED_HEIGHT=${embedH};(function(){function fit(){document.querySelectorAll('svg').forEach(function(s){if(s._vb)return;var w=s.getAttribute('width'),h=s.getAttribute('height');if(w&&h&&!s.getAttribute('viewBox'))s.setAttribute('viewBox','0 0 '+parseFloat(w)+' '+parseFloat(h));if(s.getAttribute('viewBox')){s.setAttribute('width','100%');s.setAttribute('height','100%');s._vb=1;}});}window.addEventListener('load',fit);setTimeout(fit,100);setTimeout(fit,400);new MutationObserver(fit).observe(document.documentElement,{childList:true,subtree:true});})();<\/script>`
@@ -1014,7 +1016,7 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
               else if (element.type === 'html') onOpenHtmlEditor?.(element.id)
               else if (element.type === 'code') onOpenCodeEditor?.(element.id)
               else if (element.type === 'latex') onOpenLatexEditor?.(element.id)
-              else if (element.type === 'manim') onOpenManimEditor?.(element.id)
+              else if (element.type === 'manim' || element.type === 'plugin:manim') onOpenManimEditor?.(element.id)
               else if (element.type === 'p5') onOpenP5Editor?.(element.id)
               else if (element.type === 'textpath') onStartEdit(element.id)
             }}
@@ -1607,6 +1609,25 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
           </svg>
         )
         return editOverlay(svgH, preview)
+      })()}
+
+      {element.type?.startsWith('plugin:') && (() => {
+        const etDef = registry.getElementType(element.type)
+        const pluginEntry = etDef ? registry.getPlugin(etDef.pluginId) : null
+        const slug = pluginEntry?.slug
+        const sandboxUrl = pluginEntry?.manifest?.sandbox && slug
+          ? `/api/plugins/${slug}/assets/${pluginEntry.manifest.sandbox.replace(/^\.\//, '')}`
+          : null
+        return (
+          <PluginSandbox
+            sandboxUrl={sandboxUrl}
+            pluginData={element.pluginData}
+            width={element.width}
+            height={element.height}
+            isSelected={isSelected}
+            onDataUpdate={(patch) => onUpdateElement?.(element.id, { pluginData: { ...(element.pluginData || {}), ...patch } })}
+          />
+        )
       })()}
 
       {/* Fragment badge */}
