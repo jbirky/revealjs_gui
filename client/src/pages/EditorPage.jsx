@@ -640,6 +640,21 @@ svg.selectAll('circle').data(data).join('circle')
   .attr('fill', (d,i) => d3.schemeTableau10[i%10]).attr('opacity', 0.8);
 <\/script>`
 
+  const DEFAULT_MANIM = `from manim import *
+
+class MyScene(Scene):
+    def construct(self):
+        circle = Circle(radius=2, color=BLUE)
+        square = Square(side_length=2, color=RED)
+
+        title = Text("Manim Animation", font_size=36).to_edge(UP)
+        self.play(Write(title))
+        self.play(Create(circle))
+        self.wait(0.5)
+        self.play(Transform(circle, square))
+        self.wait(1)
+`
+
   const addPluginElement = useCallback((fullType) => {
     const el = createPluginElement(fullType)
     if (!el) return
@@ -1081,21 +1096,6 @@ function draw() {
       return { ...prev, slides }
     })
   }, [slideW, slideH])
-
-  const DEFAULT_MANIM = `from manim import *
-
-class MyScene(Scene):
-    def construct(self):
-        circle = Circle(radius=2, color=BLUE)
-        square = Square(side_length=2, color=RED)
-
-        title = Text("Manim Animation", font_size=36).to_edge(UP)
-        self.play(Write(title))
-        self.play(Create(circle))
-        self.wait(0.5)
-        self.play(Transform(circle, square))
-        self.wait(1)
-`
 
   const addManimElement = useCallback(() => {
     const newEl = {
