@@ -405,18 +405,6 @@ export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) 
             <Plus size={16} />
             New Presentation
           </button>
-          {isCloud && planInfo && (
-            <button
-              onClick={planInfo.billing ? openBillingModal : undefined}
-              style={{
-                fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, border: 'none', cursor: planInfo.billing ? 'pointer' : 'default',
-                background: planInfo.plan === 'pro' ? 'rgba(99,102,241,0.15)' : planInfo.plan === 'team' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.08)',
-                color: planInfo.plan === 'pro' ? '#818cf8' : planInfo.plan === 'team' ? '#22c55e' : 'var(--text-muted)',
-                textTransform: 'uppercase', letterSpacing: 0.5,
-              }}
-              title={planInfo.plan === 'free' ? 'Upgrade to Pro' : 'Manage subscription'}
-            >{planInfo.plan === 'free' && planInfo.billing ? 'Upgrade' : planInfo.plan || 'free'}</button>
-          )}
           {isCloud && (
             <UserButton appearance={{ elements: { avatarBox: { width: 32, height: 32 } } }}>
               {planInfo?.billing && (

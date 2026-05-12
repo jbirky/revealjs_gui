@@ -23,14 +23,6 @@ const PLANS = [
     cta: 'Get Started',
     highlighted: false,
   },
-  {
-    name: 'Pro',
-    price: '$5',
-    period: '/mo',
-    features: ['Unlimited presentations', '5 GB storage', 'No expiration', 'Priority support'],
-    cta: 'Upgrade to Pro',
-    highlighted: true,
-  },
 ]
 
 export default function LandingPage({ onSignIn }) {
@@ -155,7 +147,7 @@ export default function LandingPage({ onSignIn }) {
           <p className="landing-section-sub">
             Create presentations with no account required in self-hosted mode, or sign in to save to the cloud.
           </p>
-          <div className="landing-pricing-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', maxWidth: 700, margin: '0 auto' }}>
+          <div className="landing-pricing-grid" style={{ gridTemplateColumns: '1fr', maxWidth: 350, margin: '0 auto' }}>
             {PLANS.map(plan => (
               <div key={plan.name} className={`landing-price-card ${plan.highlighted ? 'landing-price-highlighted' : ''}`}>
                 {plan.highlighted && <div className="landing-price-badge">Most Popular</div>}

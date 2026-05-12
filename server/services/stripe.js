@@ -14,7 +14,7 @@ function getStripe() {
 }
 
 function isEnabled() {
-  return !!(STRIPE_SECRET_KEY && STRIPE_PRO_PRICE_ID)
+  return false
 }
 
 async function getOrCreateCustomer(storage, userId, email, name) {
