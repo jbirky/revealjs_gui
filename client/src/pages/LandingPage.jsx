@@ -147,29 +147,13 @@ export default function LandingPage({ onSignIn }) {
           <p className="landing-section-sub">
             Create presentations with no account required in self-hosted mode, or sign in to save to the cloud.
           </p>
-          <div className="landing-pricing-grid" style={{ gridTemplateColumns: '1fr', maxWidth: 350, margin: '0 auto' }}>
-            {PLANS.map(plan => (
-              <div key={plan.name} className={`landing-price-card ${plan.highlighted ? 'landing-price-highlighted' : ''}`}>
-                {plan.highlighted && <div className="landing-price-badge">Most Popular</div>}
-                <h3>{plan.name}</h3>
-                <div className="landing-price-amount">
-                  {plan.price}<span>{plan.period}</span>
-                </div>
-                <ul>
-                  {plan.features.map(f => (
-                    <li key={f}><Check size={16} /> {f}</li>
-                  ))}
-                </ul>
-                <button
-                  className={plan.highlighted ? 'landing-btn-primary' : 'landing-btn-ghost'}
-                  style={{ width: '100%', justifyContent: 'center' }}
-                  onClick={onSignIn}
-                >
-                  {plan.cta}
-                </button>
-              </div>
-            ))}
-          </div>
+          <button
+            className="landing-btn-primary"
+            style={{ margin: '24px auto 0', justifyContent: 'center' }}
+            onClick={onSignIn}
+          >
+            Get Started <ArrowRight size={16} />
+          </button>
         </section>
 
         {/* Footer */}
