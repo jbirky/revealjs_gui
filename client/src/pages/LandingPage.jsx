@@ -99,6 +99,10 @@ export default function LandingPage({ onSignIn }) {
             />
           </div>
 
+          <div style={{ margin: '32px auto', display: 'flex', justifyContent: 'center' }}>
+            <ArrowRight size={28} style={{ transform: 'rotate(90deg)', color: 'var(--text-muted, #888)' }} />
+          </div>
+
           {/* Interactive demo */}
           <div style={{ width: '100%', maxWidth: 900, margin: '40px auto 0' }}>
             <iframe
