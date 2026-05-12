@@ -70,10 +70,11 @@ export default function LandingPage({ onSignIn }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <a href="https://github.com/jbirky/parallax-presentations" target="_blank" rel="noopener noreferrer"
+              className="landing-btn-ghost" style={{ textDecoration: 'none' }}>
+              GitHub
+            </a>
             <button className="landing-btn-ghost" onClick={onSignIn}>Sign In</button>
-            <button className="landing-btn-primary" onClick={onSignIn}>
-              Get Started <ArrowRight size={16} />
-            </button>
           </div>
         </div>
       </nav>
@@ -85,40 +86,17 @@ export default function LandingPage({ onSignIn }) {
         {/* Hero */}
         <section className="landing-hero">
           <h1 className="landing-hero-title">
-            Create stunning presentations,<br />
-            <span style={{ color: 'var(--accent)' }}>effortlessly.</span>
+            Create interactive and intuitive slides<br />
+            <span style={{ color: 'var(--accent)' }}>for complex concepts.</span>
           </h1>
-          <p className="landing-hero-sub">
-            A powerful WYSIWYG editor powered by reveal.js. Design beautiful slides
-            with drag-and-drop, rich media, and professional themes.
-          </p>
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button className="landing-btn-primary landing-btn-lg" onClick={onSignIn}>
-              Get Started Free <ArrowRight size={18} />
-            </button>
-            <a href="https://github.com/jbirky/revealjs_gui" target="_blank" rel="noopener noreferrer"
-              className="landing-btn-ghost landing-btn-lg">
-              View on GitHub
-            </a>
-          </div>
 
-          {/* Hero visual */}
+          {/* Editor screenshot */}
           <div className="landing-hero-visual">
-            <div className="landing-mockup">
-              <div className="landing-mockup-toolbar">
-                <div className="landing-mockup-dot" style={{ background: '#ef4444' }} />
-                <div className="landing-mockup-dot" style={{ background: '#eab308' }} />
-                <div className="landing-mockup-dot" style={{ background: '#22c55e' }} />
-              </div>
-              <div className="landing-mockup-slide">
-                <div style={{ width: '60%', height: 12, background: 'rgba(255,255,255,0.8)', borderRadius: 6, marginBottom: 12 }} />
-                <div style={{ width: '40%', height: 8, background: 'rgba(255,255,255,0.3)', borderRadius: 4, marginBottom: 20 }} />
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <div style={{ flex: 1, height: 60, background: 'rgba(99,102,241,0.2)', borderRadius: 6, border: '1px solid rgba(99,102,241,0.3)' }} />
-                  <div style={{ flex: 1, height: 60, background: 'rgba(99,102,241,0.15)', borderRadius: 6, border: '1px solid rgba(99,102,241,0.2)' }} />
-                </div>
-              </div>
-            </div>
+            <img
+              src="/editor-screenshot.png"
+              alt="Parallax editor interface"
+              style={{ width: '100%', maxWidth: 900, borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
+            />
           </div>
         </section>
 
@@ -160,7 +138,7 @@ export default function LandingPage({ onSignIn }) {
           </p>
           <button
             className="landing-btn-ghost"
-            style={{ margin: '12px auto 0', justifyContent: 'center' }}
+            style={{ margin: '12px auto 0', justifyContent: 'center', color: '#888', borderColor: '#555' }}
             onClick={onSignIn}
           >
             Try the Demo <ArrowRight size={16} />
