@@ -55,14 +55,7 @@ function AuthGateCloud({ children }) {
     <>
       <TokenBridge />
       {isLanding ? (
-        <>
-          <SignedOut>
-            <LandingPage onSignIn={() => { window.location.href = '/sign-in' }} />
-          </SignedOut>
-          <SignedIn>
-            <LandingPage onSignIn={() => { window.location.href = '/dashboard' }} />
-          </SignedIn>
-        </>
+        <LandingPage onSignIn={() => { window.location.href = '/sign-in' }} />
       ) : isSignIn ? (
         <>
           <SignedOut><SignInPage /></SignedOut>
