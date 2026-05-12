@@ -143,16 +143,27 @@ export default function LandingPage({ onSignIn }) {
 
         {/* Get Started */}
         <section className="landing-section" style={{ textAlign: 'center' }}>
-          <h2 className="landing-section-title">Get started for free</h2>
-          <p className="landing-section-sub">
-            Create presentations with no account required in self-hosted mode, or sign in to save to the cloud.
+          <h2 className="landing-section-title">Get started</h2>
+          <p className="landing-section-sub" style={{ maxWidth: 600, margin: '0 auto' }}>
+            For the best experience, we recommend self-hosting Parallax on your own server with Docker.
+            You get full data ownership, no usage limits, and no account required.
+          </p>
+          <a
+            href="#docs/guide/installation"
+            className="landing-btn-primary"
+            style={{ margin: '24px auto 0', justifyContent: 'center', textDecoration: 'none' }}
+          >
+            <Server size={16} /> Self-Hosting Guide
+          </a>
+          <p style={{ color: 'var(--text-muted, #888)', fontSize: 14, marginTop: 32, maxWidth: 480, margin: '32px auto 0' }}>
+            Want to try it out first? You can demo a prototype of the app by signing up here.
           </p>
           <button
-            className="landing-btn-primary"
-            style={{ margin: '24px auto 0', justifyContent: 'center' }}
+            className="landing-btn-ghost"
+            style={{ margin: '12px auto 0', justifyContent: 'center' }}
             onClick={onSignIn}
           >
-            Get Started <ArrowRight size={16} />
+            Try the Demo <ArrowRight size={16} />
           </button>
         </section>
 
