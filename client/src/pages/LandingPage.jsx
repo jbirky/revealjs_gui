@@ -98,6 +98,16 @@ export default function LandingPage({ onSignIn }) {
               style={{ width: '100%', maxWidth: 900, borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
             />
           </div>
+
+          {/* Interactive demo */}
+          <div style={{ width: '100%', maxWidth: 900, margin: '40px auto 0' }}>
+            <iframe
+              src="/demo-slide.html"
+              title="Interactive demo presentation"
+              style={{ width: '100%', aspectRatio: '16/9', border: 'none', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
+              sandbox="allow-scripts allow-same-origin"
+            />
+          </div>
         </section>
 
         {/* Features */}

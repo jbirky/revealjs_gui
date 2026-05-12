@@ -1,0 +1,568 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>demo</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/monokai.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Roboto:wght@100;300;400;500;700;900&family=Open+Sans:wght@300;400;500;600;700;800&family=Source+Sans+Pro:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700;1,900&family=Playfair+Display:wght@400;500;600;700;800;900&family=Merriweather:wght@300;400;700;900&family=Fira+Code:wght@300;400;500;600;700&family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@300;400;500;600;700&family=Questrial&family=Didact+Gothic&family=Nunito:wght@300;400;500;600;700;800;900&family=Nunito+Sans:wght@300;400;500;600;700;800;900&family=Quicksand:wght@300;400;500;600;700&family=Dosis:wght@300;400;500;600;700;800&family=M+PLUS+Rounded+1c:wght@300;400;500;700;900&family=Jura:wght@300;400;500;600;700&family=Codystar:wght@300;400&family=Barlow:wght@300;400;500;600;700;800;900&family=Barlow+Condensed:wght@300;400;500;600;700;800;900&family=Asap+Condensed:wght@400;500;600;700;900&family=Istok+Web:wght@400;700&family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@300;400;500;600;700;800;900&family=Source+Sans+3:wght@300;400;500;600;700;800;900&family=Fira+Sans:wght@300;400;500;600;700;800;900&family=Roboto+Condensed:wght@300;400;500;700&family=Roboto+Mono:wght@300;400;500;600;700&family=Rubik:wght@300;400;500;600;700;800;900&family=Ubuntu:wght@300;400;500;700&family=Manrope:wght@300;400;500;600;700;800&family=Bebas+Neue&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Roboto+Flex:wght@300;400;500;600;700&family=Inter+Tight:wght@300;400;500;600;700;800;900&family=Geist:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&family=Figtree:wght@300;400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/fonts.css">
+  <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/futura-pt">
+  <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/bauhaus-93">
+  <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/national-park">
+  <style>
+    @font-face { font-family: 'Latin Modern Roman'; font-style: normal; font-weight: 400; src: url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-regular.woff2') format('woff2'), url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-regular.woff') format('woff'); }
+    @font-face { font-family: 'Latin Modern Roman'; font-style: normal; font-weight: 700; src: url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-bold.woff2') format('woff2'), url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-bold.woff') format('woff'); }
+    @font-face { font-family: 'Latin Modern Roman'; font-style: italic; font-weight: 400; src: url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-italic.woff2') format('woff2'), url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-italic.woff') format('woff'); }
+  </style>
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; background: #000; }
+    /* Reset reveal.js section padding/alignment so absolute positions match the 960x540 editor canvas exactly */
+    .reveal .slides section { padding: 0 !important; text-align: left !important; }
+    /* Neutralise theme typography overrides so presentation matches editor exactly */
+    /* font-family only on section (inherited) so KaTeX's explicit rules take precedence */
+    .reveal .slides section { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .reveal .slides section * { text-transform: none !important; letter-spacing: normal !important; }
+    /* Explicit heading sizes — override theme so present mode matches editor exactly */
+    .reveal .slides section h1 { font-size: 2.5em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
+    .reveal .slides section h2 { font-size: 1.6em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
+    .reveal .slides section h3 { font-size: 1.3em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
+    .reveal .slides section h4 { font-size: 1em;   font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
+    .reveal .slides section p  { margin: 0 0 0.4em; }
+    .reveal .slides section ul,
+    .reveal .slides section ol { padding-left: 1.5em; margin: 0 0 0.4em; }
+    .reveal .slides section li { margin-bottom: 0.2em; }
+    .reveal .slides section a  { text-decoration: underline; }
+    /* reveal.js constrains/decorates section imgs — reset everything */
+    .reveal .slides section img { margin: 0 !important; border: none !important; background: none !important; box-shadow: none !important; max-width: none !important; max-height: none !important; }
+    /* Footer — explicit CSS rule with high specificity so reveal.js theme cannot override */
+    /* color only on the container so per-span inline colors (inactive sections) are not overridden */
+    .reveal .slides section .reveal-footer { color: #5e5c64 !important; }
+    .reveal .slides section .reveal-footer,
+    .reveal .slides section .reveal-footer * { font-family: -apple-system,sans-serif !important; font-size: 14px !important; }
+    #fs-btn {
+      position: fixed; bottom: 16px; right: 16px; z-index: 9999;
+      background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px;
+      backdrop-filter: blur(4px); transition: background 0.15s;
+    }
+    #fs-btn:hover { background: rgba(0,0,0,0.75); }
+    :fullscreen #fs-btn, :-webkit-full-screen #fs-btn { display: none; }
+    [data-expand] { transition:box-shadow 0.2s, outline 0.2s; outline:2px solid transparent; outline-offset:2px; }
+    [data-expand]:hover { outline-color:rgba(99,102,241,0.6); box-shadow:0 0 16px rgba(99,102,241,0.25); }
+    .expand-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.92);z-index:10000;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity 0.2s; }
+    .expand-overlay.active { opacity:1; }
+    .expand-overlay img { max-width:90vw;max-height:90vh;object-fit:contain;cursor:default;border-radius:4px; }
+    .image-popup { position:fixed;z-index:10001;background:rgba(20,20,30,0.95);color:#fff;padding:12px 18px;border-radius:8px;font-family:-apple-system,sans-serif;font-size:15px;line-height:1.5;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);opacity:0;transition:opacity 0.2s;white-space:pre-wrap;pointer-events:auto; }
+    .image-popup.active { opacity:1; }
+    [data-popup] { transition:box-shadow 0.2s, outline 0.2s; outline:2px solid transparent; outline-offset:2px; }
+    [data-popup]:hover { outline-color:rgba(251,191,36,0.5); box-shadow:0 0 12px rgba(251,191,36,0.2); }
+    .image-caption { position:absolute;left:0;right:0;top:100%;font-size:10px;color:rgba(255,255,255,0.5);font-family:-apple-system,sans-serif;line-height:1.3;padding:3px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .image-caption a { color:rgba(255,255,255,0.5);text-decoration:underline;text-decoration-color:rgba(255,255,255,0.25); }
+    .cite-sup { position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.55);color:rgba(255,255,255,0.85);font-size:10px;font-weight:700;font-family:-apple-system,sans-serif;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px;pointer-events:none;line-height:1; }
+    .slide-citations { position:absolute;right:2px;top:0;bottom:0;z-index:890;display:flex;align-items:center;pointer-events:none; }
+    .slide-citations-text { writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;color:rgba(255,255,255,0.45);font-family:-apple-system,sans-serif;line-height:1.3;white-space:nowrap; }
+    .slide-citations-text a { color:rgba(255,255,255,0.45);text-decoration:underline; }
+    /* Custom fragment animations */
+    .fragment.slide-up { transform:translateY(40px); transition:transform 0.5s ease, opacity 0.5s ease; }
+    .fragment.slide-down { transform:translateY(-40px); transition:transform 0.5s ease, opacity 0.5s ease; }
+    .fragment.slide-left { transform:translateX(40px); transition:transform 0.5s ease, opacity 0.5s ease; }
+    .fragment.slide-right { transform:translateX(-40px); transition:transform 0.5s ease, opacity 0.5s ease; }
+    .fragment.slide-up,.fragment.slide-down,.fragment.slide-left,.fragment.slide-right { opacity:0; }
+    .fragment.slide-up.visible,.fragment.slide-down.visible,.fragment.slide-left.visible,.fragment.slide-right.visible { transform:none; opacity:1; }
+    .fragment.flip-up { transform:perspective(600px) rotateX(90deg); opacity:0; transition:transform 0.6s ease, opacity 0.3s ease; }
+    .fragment.flip-down { transform:perspective(600px) rotateX(-90deg); opacity:0; transition:transform 0.6s ease, opacity 0.3s ease; }
+    .fragment.flip-up.visible,.fragment.flip-down.visible { transform:none; opacity:1; }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+    <section data-background-color="#1e1e2e" style="padding:0;width:960px;height:540px;overflow:hidden;font-size:42px;">
+<iframe srcdoc="<!DOCTYPE html>
+<html>
+<head><script>const EMBED_WIDTH=960,EMBED_HEIGHT=540;(function(){function fit(){document.querySelectorAll('svg').forEach(function(s){if(s._vb)return;var w=s.getAttribute('width'),h=s.getAttribute('height');if(w&amp;&amp;h&amp;&amp;!s.getAttribute('viewBox'))s.setAttribute('viewBox','0 0 '+parseFloat(w)+' '+parseFloat(h));if(s.getAttribute('viewBox')){s.setAttribute('width','100%');s.setAttribute('height','100%');s._vb=1;}});}window.addEventListener('load',fit);setTimeout(fit,100);setTimeout(fit,400);new MutationObserver(fit).observe(document.documentElement,{childList:true,subtree:true});})();</script><style>html,body{margin:0;padding:0;overflow:hidden;width:100%;height:100%;box-sizing:border-box;}canvas{display:block;}svg{display:block;}</style>
+<meta charset=&quot;utf-8&quot;>
+<title>Fourier Decomposition</title>
+<link rel=&quot;stylesheet&quot; href=&quot;https://cdnjs.cloudflare.com/ajax/libs/jsxgraph/1.4.6/jsxgraph.min.css&quot;>
+<script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/jsxgraph/1.4.6/jsxgraphcore.js&quot;></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Georgia, serif; background: #fff; padding: 24px; }
+#wrap     { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+h2        { font-size: 18px; font-weight: normal; color: #333; letter-spacing: 0.03em; }
+.sub      { font-size: 12px; color: #888; }
+#panels   { display: flex; gap: 24px; align-items: flex-start; }
+.panel    { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ptitle   { font-size: 13px; color: #555; letter-spacing: 0.03em; }
+#b1       { width: 530px; height: 310px; }
+#b2       { width: 370px; height: 310px; }
+#controls { display: flex; align-items: center; gap: 40px; }
+.slrow    { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.slrow label { font-size: 14px; color: #333; }
+.slrow input[type=range] { width: 320px; cursor: pointer; accent-color: #BF4040; }
+.val      { color: #BF4040; font-weight: bold; }
+.chk      { font-size: 13px; color: #555; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 5px; }
+.chk input { accent-color: #BF4040; cursor: pointer; }
+.legend   { display: flex; gap: 18px; font-size: 12px; color: #555; flex-wrap: wrap; }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.lsw      { display: inline-block; width: 20px; height: 3px; }
+</style>
+</head>
+<body>
+<div id=&quot;wrap&quot;>
+  <div style=&quot;text-align:center&quot;>
+    <h2>Fourier Decomposition</h2>
+    <div class=&quot;sub&quot;>Building a periodic signal from harmonic components</div>
+  </div>
+  <div class=&quot;legend&quot;>
+    <span><span class=&quot;lsw&quot; style=&quot;background:#bbb;border-top:1px dashed #999&quot;></span> Target signal</span>
+    <span><span class=&quot;lsw&quot; style=&quot;background:#333;height:3px&quot;></span> Reconstruction (n harmonics)</span>
+  </div>
+  <div id=&quot;panels&quot;>
+    <div class=&quot;panel&quot;>
+      <div class=&quot;ptitle&quot;>Time series</div>
+      <div id=&quot;b1&quot;></div>
+    </div>
+    <div class=&quot;panel&quot;>
+      <div class=&quot;ptitle&quot;>Amplitude spectrum</div>
+      <div id=&quot;b2&quot;></div>
+    </div>
+  </div>
+  <div id=&quot;controls&quot;>
+    <div class=&quot;slrow&quot;>
+      <label>Harmonics &amp;nbsp; n = <span class=&quot;val&quot; id=&quot;nv&quot;>0</span>
+        &amp;nbsp;&amp;nbsp;·&amp;nbsp;&amp;nbsp;
+        Power captured: <span class=&quot;val&quot; id=&quot;pv&quot;>0.0</span>%</label>
+      <input type=&quot;range&quot; id=&quot;sl&quot; min=&quot;0&quot; max=&quot;10&quot; value=&quot;0&quot; step=&quot;1&quot;>
+    </div>
+    <label class=&quot;chk&quot;>
+      <input type=&quot;checkbox&quot; id=&quot;showComp&quot;> Show components
+    </label>
+  </div>
+</div>
+
+<script>
+&quot;use strict&quot;;
+
+// ── Signal definition ────────────────────────────────────────────
+const maxN = 10;
+const amps   = [1.0, 0.55, 0.38, 0.25, 0.18, 0.14, 0.10, 0.07, 0.05, 0.03];
+const phases = [0, Math.PI/3, -Math.PI/4, Math.PI/2, -Math.PI/6,
+                Math.PI/5, -Math.PI/3, Math.PI/4, -Math.PI/7, Math.PI/6];
+const HC = ['#2166AC','#B2182B','#1B7837','#E08214','#7B3294',
+            '#00796B','#C2185B','#1565C0','#6A1B9A','#D84315'];
+
+const totalPower = amps.reduce((s, a) => s + a * a, 0);
+
+function signal(t, n) {
+    let s = 0;
+    for (let k = 0; k < n; k++)
+        s += amps[k] * Math.cos(2 * Math.PI * (k + 1) * t + phases[k]);
+    return s;
+}
+
+// ── State ────────────────────────────────────────────────────────
+let nHarm = 0, showComp = false;
+
+// Pre-compute time points
+const NP = 500;
+const tPts = Array.from({length: NP}, (_, i) => i * 3 / (NP - 1));
+
+// Pre-compute target signal (static)
+const targetY = tPts.map(t => signal(t, maxN));
+
+// ── Board 1: Time series ─────────────────────────────────────────
+const B1 = JXG.JSXGraph.initBoard('b1', {
+    boundingbox: [-0.35, 2.3, 3.2, -2.5],
+    axis: false, grid: false,
+    showNavigation: false, showCopyright: false,
+    pan: { enabled: false }, zoom: { enabled: false },
+});
+
+// Axes
+B1.create('segment', [[0, -2.3], [0, 2.2]], {
+    strokeColor: '#444', strokeWidth: 1, highlight: false, fixed: true });
+B1.create('segment', [[-0.1, 0], [3.1, 0]], {
+    strokeColor: '#444', strokeWidth: 1, highlight: false, fixed: true });
+
+// Y ticks
+[-2, -1, 1, 2].forEach(v => {
+    B1.create('segment', [[-0.06, v], [0, v]], {
+        strokeColor: '#444', strokeWidth: 0.7, highlight: false, fixed: true });
+    B1.create('text', [-0.12, v, String(v)], {
+        fontSize: 10, color: '#666', anchorX: 'right', anchorY: 'middle',
+        fixed: true, highlight: false });
+});
+
+// X ticks
+[1, 2, 3].forEach(v => {
+    B1.create('segment', [[v, 0], [v, -0.06]], {
+        strokeColor: '#444', strokeWidth: 0.7, highlight: false, fixed: true });
+    B1.create('text', [v, -0.15, String(v)], {
+        fontSize: 10, color: '#666', anchorX: 'middle', anchorY: 'top',
+        fixed: true, highlight: false });
+});
+
+// Grid
+[-2, -1, 1, 2].forEach(v => {
+    B1.create('segment', [[0, v], [3, v]], {
+        strokeColor: '#f0f0f0', strokeWidth: 0.5, highlight: false, fixed: true });
+});
+[1, 2].forEach(v => {
+    B1.create('segment', [[v, -2.2], [v, 2.2]], {
+        strokeColor: '#f0f0f0', strokeWidth: 0.5, highlight: false, fixed: true });
+});
+
+// Axis labels
+B1.create('text', [1.5, -2.35, 'Time (period = 1)'], {
+    fontSize: 11, color: '#555', anchorX: 'middle', fixed: true, highlight: false });
+
+// Target curve (dashed gray)
+const targetCurve = B1.create('curve', [[], []], {
+    strokeColor: '#bbb', strokeWidth: 1.5, dash: 2, highlight: false });
+targetCurve.updateDataArray = function () {
+    this.dataX = tPts; this.dataY = targetY;
+};
+
+// Individual harmonic curves
+const harmCurves = [];
+for (let k = 0; k < maxN; k++) {
+    const kk = k;
+    const hc = B1.create('curve', [[], []], {
+        strokeColor: HC[kk], strokeWidth: 1.2, strokeOpacity: 0.4, highlight: false });
+    hc.updateDataArray = function () {
+        if (kk >= nHarm || !showComp) { this.dataX = []; this.dataY = []; return; }
+        this.dataX = tPts;
+        this.dataY = tPts.map(t => amps[kk] * Math.cos(2 * Math.PI * (kk + 1) * t + phases[kk]));
+    };
+    harmCurves.push(hc);
+}
+
+// Reconstruction curve (on top)
+const reconCurve = B1.create('curve', [[], []], {
+    strokeColor: '#333', strokeWidth: 2.8, highlight: false });
+reconCurve.updateDataArray = function () {
+    this.dataX = tPts;
+    this.dataY = tPts.map(t => signal(t, nHarm));
+};
+
+// ── Board 2: Amplitude spectrum ──────────────────────────────────
+const B2 = JXG.JSXGraph.initBoard('b2', {
+    boundingbox: [-0.5, 1.18, 11.3, -0.22],
+    axis: false, grid: false,
+    showNavigation: false, showCopyright: false,
+    pan: { enabled: false }, zoom: { enabled: false },
+});
+
+// Axes
+B2.create('segment', [[0.5, -0.05], [0.5, 1.12]], {
+    strokeColor: '#444', strokeWidth: 1, highlight: false, fixed: true });
+B2.create('segment', [[0.5, 0], [11, 0]], {
+    strokeColor: '#444', strokeWidth: 1, highlight: false, fixed: true });
+
+// Y ticks
+[0.2, 0.4, 0.6, 0.8, 1.0].forEach(v => {
+    B2.create('segment', [[0.5, v], [0.38, v]], {
+        strokeColor: '#444', strokeWidth: 0.7, highlight: false, fixed: true });
+    B2.create('text', [0.25, v, v.toFixed(1)], {
+        fontSize: 10, color: '#666', anchorX: 'right', anchorY: 'middle',
+        fixed: true, highlight: false });
+    B2.create('segment', [[0.5, v], [10.5, v]], {
+        strokeColor: '#f0f0f0', strokeWidth: 0.5, highlight: false, fixed: true });
+});
+
+// X labels
+for (let k = 1; k <= maxN; k++) {
+    B2.create('segment', [[k, 0], [k, -0.025]], {
+        strokeColor: '#444', strokeWidth: 0.7, highlight: false, fixed: true });
+    B2.create('text', [k, -0.08, String(k)], {
+        fontSize: 10, color: '#666', anchorX: 'middle',
+        fixed: true, highlight: false });
+}
+
+// Axis labels
+B2.create('text', [5.5, -0.18, 'Harmonic n'], {
+    fontSize: 11, color: '#555', anchorX: 'middle', fixed: true, highlight: false });
+B2.create('text', [-0.2, 0.56, 'Amplitude'], {
+    fontSize: 11, color: '#555', anchorX: 'middle', anchorY: 'middle',
+    rotate: 90, fixed: true, highlight: false });
+
+// Background bars (full spectrum, gray)
+const barW = 0.30;
+for (let k = 0; k < maxN; k++) {
+    B2.create('curve', [
+        [k+1 - barW, k+1 + barW, k+1 + barW, k+1 - barW, k+1 - barW],
+        [0, 0, amps[k], amps[k], 0]
+    ], {
+        strokeColor: '#ddd', strokeWidth: 0.5,
+        fillColor: '#f0f0f0', fillOpacity: 0.5,
+        highlight: false,
+    });
+}
+
+// Foreground bars (active harmonics, colored)
+for (let k = 0; k < maxN; k++) {
+    const kk = k;
+    const bar = B2.create('curve', [[], []], {
+        strokeColor: HC[kk], strokeWidth: 0.8,
+        fillColor: HC[kk], fillOpacity: 0.65,
+        highlight: false,
+    });
+    bar.updateDataArray = function () {
+        if (kk >= nHarm) { this.dataX = []; this.dataY = []; return; }
+        this.dataX = [kk+1 - barW, kk+1 + barW, kk+1 + barW, kk+1 - barW, kk+1 - barW];
+        this.dataY = [0, 0, amps[kk], amps[kk], 0];
+    };
+}
+
+// ── Refresh ──────────────────────────────────────────────────────
+function refresh() {
+    nHarm = +document.getElementById('sl').value;
+    showComp = document.getElementById('showComp').checked;
+    document.getElementById('nv').textContent = nHarm;
+
+    let pf = 0;
+    for (let k = 0; k < nHarm; k++) pf += amps[k] * amps[k];
+    document.getElementById('pv').textContent = (pf / totalPower * 100).toFixed(1);
+
+    B1.update();
+    B2.update();
+}
+
+document.getElementById('sl').addEventListener('input', refresh);
+document.getElementById('showComp').addEventListener('change', refresh);
+refresh();
+</script>
+</body>
+</html>
+" style="position:absolute;left:0px;top:0px;width:960px;height:540px;z-index:2;overflow:hidden;box-sizing:border-box;border:none;background:transparent;" scrolling="no"></iframe>
+      <div class="reveal-footer" style="position:absolute;bottom:6px;left:16px;right:16px;z-index:900;display:flex;justify-content:center;align-items:center;pointer-events:none;box-sizing:border-box;"><span class="reveal-time-widget" style="flex-shrink:0;"></span><div style="display:flex;flex:1;justify-content:space-evenly;align-items:center;"><span style="color:#94a3b8;font-weight:400;">Introduction</span><span style="color:#3584e4;font-weight:700;">Methods</span><span style="color:#94a3b8;font-weight:400;">Conclusion</span></div><span style="margin-left:12px;flex-shrink:0;">1 / 1</span></div>
+
+
+      
+    </section>
+    </div>
+  </div>
+  <button id="fs-btn" title="Enter fullscreen (F)" onclick="document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()">&#x26F6; Fullscreen</button>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script>
+    var _customTransitions = ['differential-rotation'];
+    var _globalTransition = 'slide';
+    var _isGlobalCustom = _customTransitions.indexOf(_globalTransition) !== -1;
+    Reveal.initialize({
+      hash: true,
+      width: 960,
+      height: 540,
+      margin: 0,
+      minScale: 0,
+      maxScale: 10,
+      center: false,
+      transition: _isGlobalCustom ? 'none' : _globalTransition,
+      plugins: [ RevealNotes, RevealHighlight ]
+    });
+    Reveal.on('ready', function() {
+      document.querySelectorAll('span[data-math-latex]').forEach(function(el) {
+        try {
+          katex.render(el.getAttribute('data-math-latex'), el, {
+            displayMode: el.getAttribute('data-math-display') === 'true',
+            throwOnError: false
+          });
+        } catch(e) {}
+      });
+    });
+
+    // ── GSAP element entry animations ─────────────────────────────────────────
+    var GSAP_PRESETS = {
+      fadeIn:     function(el, dur, delay) { gsap.fromTo(el, { opacity: 0 },                              { opacity: 1,            duration: dur, delay: delay, ease: 'power2.out', clearProps: 'opacity' }); },
+      fadeUp:     function(el, dur, delay) { gsap.fromTo(el, { opacity: 0, y: 48 },                       { opacity: 1, y: 0,      duration: dur, delay: delay, ease: 'power3.out', clearProps: 'opacity,transform' }); },
+      fadeDown:   function(el, dur, delay) { gsap.fromTo(el, { opacity: 0, y: -48 },                      { opacity: 1, y: 0,      duration: dur, delay: delay, ease: 'power3.out', clearProps: 'opacity,transform' }); },
+      fadeLeft:   function(el, dur, delay) { gsap.fromTo(el, { opacity: 0, x: 48 },                       { opacity: 1, x: 0,      duration: dur, delay: delay, ease: 'power3.out', clearProps: 'opacity,transform' }); },
+      fadeRight:  function(el, dur, delay) { gsap.fromTo(el, { opacity: 0, x: -48 },                      { opacity: 1, x: 0,      duration: dur, delay: delay, ease: 'power3.out', clearProps: 'opacity,transform' }); },
+      zoomIn:     function(el, dur, delay) { gsap.fromTo(el, { opacity: 0, scale: 0.7 },                  { opacity: 1, scale: 1,  duration: dur, delay: delay, ease: 'back.out(1.4)', clearProps: 'opacity,transform' }); },
+      zoomOut:    function(el, dur, delay) { gsap.fromTo(el, { opacity: 0, scale: 1.3 },                  { opacity: 1, scale: 1,  duration: dur, delay: delay, ease: 'power2.out', clearProps: 'opacity,transform' }); },
+      slideUp:    function(el, dur, delay) { gsap.fromTo(el, { y: 560 },                                  { y: 0,                  duration: dur, delay: delay, ease: 'power3.out', clearProps: 'transform' }); },
+      slideDown:  function(el, dur, delay) { gsap.fromTo(el, { y: -560 },                                 { y: 0,                  duration: dur, delay: delay, ease: 'power3.out', clearProps: 'transform' }); },
+      slideLeft:  function(el, dur, delay) { gsap.fromTo(el, { x: 980 },                                  { x: 0,                  duration: dur, delay: delay, ease: 'power3.out', clearProps: 'transform' }); },
+      slideRight: function(el, dur, delay) { gsap.fromTo(el, { x: -980 },                                 { x: 0,                  duration: dur, delay: delay, ease: 'power3.out', clearProps: 'transform' }); },
+      flipX:      function(el, dur, delay) { gsap.fromTo(el, { rotationX: 90, opacity: 0, transformPerspective: 600 }, { rotationX: 0, opacity: 1, duration: dur, delay: delay, ease: 'power2.out', clearProps: 'opacity,transform' }); },
+      flipY:      function(el, dur, delay) { gsap.fromTo(el, { rotationY: 90, opacity: 0, transformPerspective: 600 }, { rotationY: 0, opacity: 1, duration: dur, delay: delay, ease: 'power2.out', clearProps: 'opacity,transform' }); },
+    };
+    function runSlideAnimations(slide) {
+      if (!slide) return;
+      slide.querySelectorAll('[data-gsap-enter]').forEach(function(el) {
+        var type     = el.getAttribute('data-gsap-enter');
+        var delay    = parseFloat(el.getAttribute('data-gsap-delay')    || 0)   / 1000;
+        var duration = parseFloat(el.getAttribute('data-gsap-duration') || 600) / 1000;
+        var fn = GSAP_PRESETS[type];
+        if (fn) fn(el, duration, delay);
+      });
+    }
+    Reveal.on('ready',        function(e) { runSlideAnimations(e.currentSlide); });
+    Reveal.on('slidechanged', function(e) { runSlideAnimations(e.currentSlide); });
+
+    // Dispatch resize into HTML/p5 iframes when their slide becomes active,
+    // so D3 figures that use window.addEventListener('resize', ...) re-render.
+    function notifyIframes(slide) {
+      if (!slide) return;
+      slide.querySelectorAll('iframe').forEach(function(fr) {
+        try { fr.contentWindow.dispatchEvent(new Event('resize')); } catch(ex) {}
+      });
+    }
+    Reveal.on('ready',        function(e) { notifyIframes(e.currentSlide); });
+    Reveal.on('slidechanged', function(e) { notifyIframes(e.currentSlide); });
+
+    // ── Custom transitions (differential rotation) ───────────────────────
+    (function() {
+      var prevH = 0, prevV = 0;
+      Reveal.on('ready', function(e) { prevH = e.indexh || 0; prevV = e.indexv || 0; });
+      Reveal.on('slidechanged', function(e) {
+        var prev = e.previousSlide;
+        var transName = null;
+        if (prev && prev.getAttribute('data-custom-transition'))
+          transName = prev.getAttribute('data-custom-transition');
+        else if (_isGlobalCustom)
+          transName = _globalTransition;
+        var dir = 1;
+        if ((e.indexh || 0) < prevH || ((e.indexh || 0) === prevH && (e.indexv || 0) < prevV)) dir = -1;
+        prevH = e.indexh || 0;
+        prevV = e.indexv || 0;
+        if (transName === 'differential-rotation') drTransition(dir);
+      });
+      function drTransition(dir) {
+        var N = 16;
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var bh = vh / N;
+        var BAUHAUS = ['#CC0000', '#003399', '#FFCC00'];
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9998;pointer-events:none;overflow:hidden;';
+        var pending = N;
+        for (var i = 0; i < N; i++) {
+          var band = document.createElement('div');
+          band.style.cssText = 'position:absolute;left:0;width:100%;background:#000;box-sizing:border-box;';
+          band.style.top = (i * bh) + 'px';
+          band.style.height = (bh + 0.5) + 'px';
+          if (i < N - 1) {
+            band.style.borderBottom = '1.5px solid ' + BAUHAUS[i % 3];
+          }
+          overlay.appendChild(band);
+          var lat = Math.PI * ((i + 0.5) / N - 0.5);
+          var cos2 = Math.cos(lat); cos2 = cos2 * cos2;
+          var dur = 0.4 + 1.0 * (1 - cos2);
+          gsap.to(band, {
+            x: dir * (vw + 20),
+            duration: dur,
+            ease: 'none',
+            onComplete: function() { pending--; if (pending <= 0) overlay.remove(); }
+          });
+        }
+        document.body.appendChild(overlay);
+      }
+    })();
+
+    // ── Image click interactions (popup + expand) ─────────────────────
+    (function() {
+      function dismissAll() {
+        var p = document.querySelector('.image-popup');
+        if (p) { p.classList.remove('active'); setTimeout(function() { p.remove(); }, 200); }
+        var ov = document.querySelector('.expand-overlay');
+        if (ov) { ov.classList.remove('active'); setTimeout(function() { ov.remove(); }, 200); }
+      }
+      function showPopup(el, anchor) {
+        var old = document.querySelector('.image-popup');
+        if (old) old.remove();
+        var text = el.getAttribute('data-popup');
+        var pos = el.getAttribute('data-popup-pos') || 'below';
+        var fs = el.getAttribute('data-popup-fs') || '15';
+        var rect = anchor.getBoundingClientRect();
+        var p = document.createElement('div');
+        p.className = 'image-popup';
+        p.textContent = text;
+        p.style.fontSize = fs + 'px';
+        if (pos === 'center') {
+          p.style.left = (rect.left + rect.width/2) + 'px';
+          p.style.top = (rect.top + rect.height/2) + 'px';
+          p.style.transform = 'translate(-50%,-50%)';
+        } else if (pos === 'side') {
+          p.style.top = (rect.top + rect.height/2) + 'px';
+          if (rect.right + 320 < window.innerWidth) {
+            p.style.left = (rect.right + 12) + 'px';
+            p.style.transform = 'translateY(-50%)';
+          } else {
+            p.style.left = (rect.left - 12) + 'px';
+            p.style.transform = 'translate(-100%,-50%)';
+          }
+        } else {
+          p.style.left = (rect.left + rect.width/2) + 'px';
+          p.style.top = (rect.bottom + 12) + 'px';
+          p.style.transform = 'translateX(-50%)';
+        }
+        document.body.appendChild(p);
+        requestAnimationFrame(function() { p.classList.add('active'); });
+      }
+      document.addEventListener('click', function(e) {
+        if (e.target.closest('.image-popup')) return;
+        var ov = e.target.closest('.expand-overlay');
+        if (ov) {
+          if (e.target.tagName === 'IMG') return;
+          dismissAll(); return;
+        }
+        var el = e.target.closest('[data-popup],[data-expand]');
+        if (!el) { dismissAll(); return; }
+        e.stopPropagation();
+        dismissAll();
+        var hasPopup = el.hasAttribute('data-popup');
+        var hasExpand = el.hasAttribute('data-expand');
+        var img = el.querySelector('img');
+        if (hasExpand && img) {
+          var overlay = document.createElement('div');
+          overlay.className = 'expand-overlay';
+          var big = document.createElement('img');
+          big.src = img.src;
+          big.onclick = function(ev) { ev.stopPropagation(); };
+          overlay.appendChild(big);
+          document.body.appendChild(overlay);
+          requestAnimationFrame(function() {
+            overlay.classList.add('active');
+            if (hasPopup) showPopup(el, big);
+          });
+        } else if (hasPopup) {
+          showPopup(el, el);
+        }
+      });
+      document.addEventListener('keydown', function(e) { if (e.key === 'Escape') dismissAll(); });
+    })();
+
+
+    // Time widget (clock or timer)
+    (function() {
+      var mode = 'clock24';
+      var timerDur = 20 * 60;
+      var timerStart = Date.now();
+      function pad(n) { return n < 10 ? '0' + n : '' + n; }
+      function fmt() {
+        if (mode === 'clock12') return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        if (mode === 'clock24') return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        var elapsed = Math.floor((Date.now() - timerStart) / 1000);
+        var secs = mode === 'timer-down' ? Math.max(0, timerDur - elapsed) : elapsed;
+        var h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+        return h > 0 ? h + ':' + pad(m) + ':' + pad(s) : pad(m) + ':' + pad(s);
+      }
+      function update() { document.querySelectorAll('.reveal-time-widget').forEach(function(el) { el.textContent = fmt(); }); }
+      update();
+      setInterval(update, 1000);
+    })();
+
+  </script>
+</body>
+</html>
