@@ -109,7 +109,7 @@ export default function LandingPage({ onSignIn }) {
               src="/demo-slide.html"
               title="Interactive demo presentation"
               style={{ width: '100%', aspectRatio: '16/9', border: 'none', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
-              sandbox="allow-scripts allow-same-origin"
+
             />
           </div>
         </section>
