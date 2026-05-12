@@ -2657,14 +2657,25 @@ class MyScene(Scene):
               pageNumber={(() => {
                 if (!presentation.showPageNumbers) return null
                 if (currentSlide?.showPageNumber === false) return null
-                // Count only slides with showPageNumber !== false up to current
                 let num = 0
+                const groupSeen = new Set()
                 for (let i = 0; i <= currentSlideIndex; i++) {
-                  if (presentation.slides[i]?.showPageNumber !== false) num++
+                  const s = presentation.slides[i]
+                  if (s?.showPageNumber === false) continue
+                  if (s?.slideGroup && groupSeen.has(s.slideGroup)) continue
+                  num++
+                  if (s?.slideGroup) groupSeen.add(s.slideGroup)
                 }
                 return num
               })()}
-              totalSlides={presentation.slides.filter(s => s.showPageNumber !== false).length}
+              totalSlides={(() => {
+                const seen = new Set()
+                return presentation.slides.filter(s => {
+                  if (s.showPageNumber === false) return false
+                  if (s.slideGroup) { if (seen.has(s.slideGroup)) return false; seen.add(s.slideGroup) }
+                  return true
+                }).length
+              })()}
               sectionName={currentSlide?.section || ''}
               footerFontSize={presentation.footerFontSize || 14}
               footerFontFamily={presentation.footerFontFamily || '-apple-system,sans-serif'}
