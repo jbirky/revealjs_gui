@@ -232,6 +232,43 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 </body>
 </html>`
 
+function computeElementSize(templateId, params, slideW, slideH, isCustomCode) {
+  if (templateId === 'custom' || isCustomCode) {
+    return { width: slideW - 80, height: Math.round(slideH * 0.3) }
+  }
+
+  const size = params.fontSize || 48
+  const text = params.text || ''
+
+  if (templateId === 'circular') {
+    const radius = Math.max(60, size * 1.5)
+    const dim = Math.ceil((radius * 2 + size) / 10) + 40
+    return { width: Math.min(dim, slideW - 20), height: Math.min(dim, slideH - 20) }
+  }
+
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  const weight = params.bold ? Math.max(params.fontWeight || 700, 700) : (params.fontWeight || 400)
+  const family = params.fontFamily ? params.fontFamily.replace(/'/g, '') : 'sans-serif'
+  ctx.font = `${weight} ${size}px ${family}`
+  const textWidth = ctx.measureText(text).width
+
+  let extraH = 0
+  if (templateId === 'wave') extraH = size * 0.5
+  if (templateId === 'bounce') extraH = size * 0.6
+
+  const pad = size * 0.4
+  let width = Math.ceil(textWidth + pad * 2)
+  let height = Math.ceil(size * 1.6 + extraH + pad)
+
+  width = Math.max(width, 100)
+  height = Math.max(height, Math.ceil(size * 1.5))
+  width = Math.min(width, slideW - 20)
+  height = Math.min(height, slideH - 20)
+
+  return { width, height }
+}
+
 export default function KineticTextModal({ onInsert, onClose, slideW = 960, slideH = 540 }) {
   const [selected, setSelected] = useState('typewriter')
   const [customCode, setCustomCode] = useState(DEFAULT_CUSTOM)
@@ -269,7 +306,9 @@ export default function KineticTextModal({ onInsert, onClose, slideW = 960, slid
   }
 
   const handleInsert = () => {
-    onInsert(isEditingCode ? customCode : previewHtml)
+    const html = isEditingCode ? customCode : previewHtml
+    const { width, height } = computeElementSize(selected, params, slideW, slideH, isEditingCode)
+    onInsert(html, width, height)
   }
 
   const isCustomTemplate = selected === 'custom'

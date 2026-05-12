@@ -712,11 +712,14 @@ class MyScene(Scene):
     setHtmlEditorState({ elementId: newEl.id, content: DEFAULT_D3 })
   }, [DEFAULT_D3])
 
-  const insertKineticText = useCallback((html) => {
+  const insertKineticText = useCallback((html, width, height) => {
+    const w = width || slideW - 80
+    const h = height || 120
     const newEl = {
       id: crypto.randomUUID(),
       type: 'html',
-      x: 40, y: 40, width: slideW - 80, height: 120, zIndex: 2,
+      x: Math.round((slideW - w) / 2), y: Math.round((slideH - h) / 2),
+      width: w, height: h, zIndex: 2,
       content: html
     }
     setPresentation(prev => {
