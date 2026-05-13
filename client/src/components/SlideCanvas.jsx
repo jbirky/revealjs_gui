@@ -2012,10 +2012,17 @@ function TimelineRenderer({ element }) {
               onClick={(e) => { if (item.image || item.detailedDescription) { e.stopPropagation(); setExpandedId(isExpanded ? null : item.id) } }}>
               <line x1={x} y1={connY1} x2={x} y2={connY2} stroke={lineColor} strokeWidth={1} strokeDasharray="3,2" opacity={0.5} />
               <circle cx={x} cy={lineY} r={isExpanded ? 6 : 4} fill={dotColor} stroke={isExpanded ? textColor : 'none'} strokeWidth={1.5} />
-              {item.image && <image href={item.image} x={x - 40} y={cardY} width={80} height={imgH} preserveAspectRatio="xMidYMid meet" clipPath={`inset(0 round 4px)`} />}
-              <text x={x} y={cardY + imgH + fs + 2} textAnchor="middle" fill={textColor} fontSize={fs} fontWeight={600}>{item.label}</text>
-              {item.description && <text x={x} y={cardY + imgH + fs * 2 + 4} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.6}>{item.description}</text>}
-              <text x={x} y={cardY + imgH + fs * (item.description ? 3 : 2) + 6} textAnchor="middle" fill={textColor} fontSize={fs - 2} opacity={0.35}>{itemDateLabel(item.date)}</text>
+              {isTop ? (<>
+                <text x={x} y={cardY + fs} textAnchor="middle" fill={textColor} fontSize={fs - 2} opacity={0.35}>{itemDateLabel(item.date)}</text>
+                <text x={x} y={cardY + fs + (fs + 2)} textAnchor="middle" fill={textColor} fontSize={fs} fontWeight={600}>{item.label}</text>
+                {item.description && <text x={x} y={cardY + fs + (fs + 2) * 2} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.6}>{item.description}</text>}
+                {item.image && <image href={item.image} x={x - 40} y={cardY + cardH - imgH} width={80} height={imgH} preserveAspectRatio="xMidYMid meet" clipPath={`inset(0 round 4px)`} />}
+              </>) : (<>
+                {item.image && <image href={item.image} x={x - 40} y={cardY} width={80} height={imgH} preserveAspectRatio="xMidYMid meet" clipPath={`inset(0 round 4px)`} />}
+                <text x={x} y={cardY + imgH + fs + 2} textAnchor="middle" fill={textColor} fontSize={fs} fontWeight={600}>{item.label}</text>
+                {item.description && <text x={x} y={cardY + imgH + fs * 2 + 4} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.6}>{item.description}</text>}
+                <text x={x} y={cardY + imgH + fs * (item.description ? 3 : 2) + 6} textAnchor="middle" fill={textColor} fontSize={fs - 2} opacity={0.35}>{itemDateLabel(item.date)}</text>
+              </>)}
             </g>
           )
         })}
