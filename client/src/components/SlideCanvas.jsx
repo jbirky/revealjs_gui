@@ -1491,95 +1491,9 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
       {element.type === 'markdown' && (
         <MarkdownRenderer element={element} />
       )}
-      {element.type === 'timeline' && (() => {
-        const w = element.width, h = element.height
-        const spacing = element.tickSpacing || 'auto'
-        const yearMode = ['year','10year','100year','1000year'].includes(spacing)
-        const lineY = h * 0.5
-        const pad = 30
-        const lineColor = element.lineColor || '#6366f1'
-        const dotColor = element.dotColor || lineColor
-        const textColor = element.textColor || '#fff'
-        const fs = element.fontSize || 11
-        const items = element.items || []
-        const parseVal = (v) => { const n = Number(v); if (!isNaN(n) && String(v).match(/^-?\d+$/)) return n; return new Date(v).getTime() }
-        const ticks = []
-        let datePos
-        if (yearMode || (spacing === 'auto' && String(element.startDate).match(/^-?\d+$/))) {
-          const y0 = parseInt(element.startDate) || 0, y1 = parseInt(element.endDate) || 0
-          const yr = y1 - y0 || 1
-          datePos = (d) => { const v = parseInt(d) || 0; return pad + ((v - y0) / yr) * (w - pad * 2) }
-          const step = spacing === '1000year' ? 1000 : spacing === '100year' ? 100 : spacing === '10year' ? 10 : Math.abs(yr) > 8 ? 2 : 1
-          const sY = y0 < y1 ? Math.ceil(y0 / step) * step : Math.floor(y0 / step) * step
-          for (let y = sY; y0 < y1 ? y <= y1 : y >= y1; y += y0 < y1 ? step : -step) ticks.push({ date: String(y), label: String(y) })
-        } else {
-          const t0 = new Date(element.startDate).getTime(), t1 = new Date(element.endDate).getTime()
-          const range = t1 - t0 || 1
-          datePos = (d) => pad + ((new Date(d).getTime() - t0) / range) * (w - pad * 2)
-          const d0 = new Date(element.startDate), d1 = new Date(element.endDate)
-          if (spacing === 'day') {
-            const step = 86400000
-            for (let t = d0.getTime(); t <= d1.getTime(); t += step) { const d = new Date(t); ticks.push({ date: d.toISOString().split('T')[0], label: `${d.getMonth()+1}/${d.getDate()}` }) }
-          } else if (spacing === 'month') {
-            for (let d = new Date(d0.getFullYear(), d0.getMonth(), 1); d <= d1; d.setMonth(d.getMonth() + 1)) { ticks.push({ date: d.toISOString().split('T')[0], label: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` }) }
-          } else {
-            const yearSpan = (t1 - t0) / (365.25 * 24 * 3600000)
-            const step = yearSpan > 8 ? 2 : 1
-            for (let y = d0.getFullYear(); y <= d1.getFullYear(); y += step) ticks.push({ date: `${y}-01-01`, label: String(y) })
-          }
-        }
-        const useYearLabels = yearMode || (spacing === 'auto' && String(element.startDate).match(/^-?\d+$/))
-        const itemDateLabel = (d) => useYearLabels ? String(parseInt(d) || d) : d
-        const [expandedId, setExpandedId] = React.useState(null)
-        const expandedItem = expandedId ? items.find(i => i.id === expandedId) : null
-        return (
-          <div style={{ position: 'relative', width: w, height: h }}>
-            <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block', overflow: 'visible' }}>
-              <line x1={pad} y1={lineY} x2={w - pad} y2={lineY} stroke={lineColor} strokeWidth={2} />
-              {ticks.map((t, i) => {
-                const x = datePos(t.date)
-                return <g key={i}><line x1={x} y1={lineY - 4} x2={x} y2={lineY + 4} stroke={lineColor} strokeWidth={1.5} /><text x={x} y={lineY + 14} textAnchor="end" fill={textColor} fontSize={fs - 1} opacity={0.5} transform={`rotate(-45,${x},${lineY + 14})`}>{t.label}</text></g>
-              })}
-              {items.map((item) => {
-                const x = datePos(item.date)
-                const isTop = item.side !== 'bottom'
-                const cardY = isTop ? 8 : lineY + 28
-                const cardH = isTop ? lineY - 36 : h - lineY - 36
-                const connY1 = isTop ? cardY + cardH : lineY
-                const connY2 = isTop ? lineY : cardY
-                const imgH = item.image ? Math.min(cardH * 0.55, 60) : 0
-                const isExpanded = expandedId === item.id
-                return (
-                  <g key={item.id} style={{ cursor: (item.image || item.detailedDescription) ? 'pointer' : 'default' }}
-                    onClick={(e) => { if (item.image || item.detailedDescription) { e.stopPropagation(); setExpandedId(isExpanded ? null : item.id) } }}>
-                    <line x1={x} y1={connY1} x2={x} y2={connY2} stroke={lineColor} strokeWidth={1} strokeDasharray="3,2" opacity={0.5} />
-                    <circle cx={x} cy={lineY} r={isExpanded ? 6 : 4} fill={dotColor} stroke={isExpanded ? textColor : 'none'} strokeWidth={1.5} />
-                    {item.image && <image href={item.image} x={x - 40} y={cardY} width={80} height={imgH} preserveAspectRatio="xMidYMid meet" clipPath={`inset(0 round 4px)`} />}
-                    <text x={x} y={cardY + imgH + fs + 2} textAnchor="middle" fill={textColor} fontSize={fs} fontWeight={600}>{item.label}</text>
-                    {item.description && <text x={x} y={cardY + imgH + fs * 2 + 4} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.6}>{item.description}</text>}
-                    <text x={x} y={cardY + imgH + fs * (item.description ? 3 : 2) + 6} textAnchor="middle" fill={textColor} fontSize={fs - 2} opacity={0.35}>{itemDateLabel(item.date)}</text>
-                  </g>
-                )
-              })}
-            </svg>
-            {expandedItem && (expandedItem.image || expandedItem.detailedDescription) && (
-              <div onClick={(e) => { e.stopPropagation(); setExpandedId(null) }}
-                style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 16, cursor: 'pointer', zIndex: 10 }}>
-                {expandedItem.image && (
-                  <img src={expandedItem.image} alt={expandedItem.label}
-                    style={{ maxWidth: expandedItem.detailedDescription ? '45%' : '80%', maxHeight: '85%', objectFit: 'contain', borderRadius: 6, flexShrink: 0 }} />
-                )}
-                <div style={{ flex: expandedItem.image ? 1 : undefined, maxWidth: expandedItem.image ? '45%' : '80%', overflow: 'auto', maxHeight: '85%' }}>
-                  <div style={{ color: textColor, fontWeight: 700, fontSize: fs + 4, marginBottom: 4 }}>{expandedItem.label}</div>
-                  <div style={{ color: textColor, opacity: 0.5, fontSize: fs - 1, marginBottom: 8 }}>{itemDateLabel(expandedItem.date)}</div>
-                  {expandedItem.description && <div style={{ color: textColor, opacity: 0.7, fontSize: fs, marginBottom: 8 }}>{expandedItem.description}</div>}
-                  {expandedItem.detailedDescription && <div style={{ color: textColor, opacity: 0.85, fontSize: fs + 1, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{expandedItem.detailedDescription}</div>}
-                </div>
-              </div>
-            )}
-          </div>
-        )
-      })()}
+      {element.type === 'timeline' && (
+        <TimelineRenderer element={element} />
+      )}
       {element.type === 'chart' && (
         <ChartRenderer element={element} isSelected={isSelected} />
       )}
@@ -2045,6 +1959,82 @@ function IconRenderer({ element }) {
   )
 }
 
+
+function TimelineRenderer({ element }) {
+  const [expandedId, setExpandedId] = useState(null)
+  const w = element.width, h = element.height
+  const spacing = element.tickSpacing || 'auto'
+  const yearMode = ['year','10year','100year','1000year'].includes(spacing)
+  const lineY = h * 0.5, pad = 30
+  const lineColor = element.lineColor || '#6366f1'
+  const dotColor = element.dotColor || lineColor
+  const textColor = element.textColor || '#fff'
+  const fs = element.fontSize || 11
+  const items = element.items || []
+  const ticks = []
+  let datePos
+  if (yearMode || (spacing === 'auto' && String(element.startDate).match(/^-?\d+$/))) {
+    const y0 = parseInt(element.startDate) || 0, y1 = parseInt(element.endDate) || 0, yr = y1 - y0 || 1
+    datePos = (d) => pad + (((parseInt(d) || 0) - y0) / yr) * (w - pad * 2)
+    const step = spacing === '1000year' ? 1000 : spacing === '100year' ? 100 : spacing === '10year' ? 10 : Math.abs(yr) > 8 ? 2 : 1
+    const sY = y0 < y1 ? Math.ceil(y0 / step) * step : Math.floor(y0 / step) * step
+    for (let y = sY; y0 < y1 ? y <= y1 : y >= y1; y += y0 < y1 ? step : -step) ticks.push({ date: String(y), label: String(y) })
+  } else {
+    const t0 = new Date(element.startDate).getTime(), t1 = new Date(element.endDate).getTime(), range = t1 - t0 || 1
+    datePos = (d) => pad + ((new Date(d).getTime() - t0) / range) * (w - pad * 2)
+    const d0 = new Date(element.startDate), d1 = new Date(element.endDate)
+    if (spacing === 'day') { const step = 86400000; for (let t = d0.getTime(); t <= d1.getTime(); t += step) { const d = new Date(t); ticks.push({ date: d.toISOString().split('T')[0], label: `${d.getMonth()+1}/${d.getDate()}` }) } }
+    else if (spacing === 'month') { for (let d = new Date(d0.getFullYear(), d0.getMonth(), 1); d <= d1; d.setMonth(d.getMonth() + 1)) ticks.push({ date: d.toISOString().split('T')[0], label: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` }) }
+    else { const yearSpan = (t1 - t0) / (365.25 * 24 * 3600000); const step = yearSpan > 8 ? 2 : 1; for (let y = d0.getFullYear(); y <= d1.getFullYear(); y += step) ticks.push({ date: `${y}-01-01`, label: String(y) }) }
+  }
+  const useYearLabels = yearMode || (spacing === 'auto' && String(element.startDate).match(/^-?\d+$/))
+  const itemDateLabel = (d) => useYearLabels ? String(parseInt(d) || d) : d
+  const expandedItem = expandedId ? items.find(i => i.id === expandedId) : null
+  return (
+    <div style={{ position: 'relative', width: w, height: h }}>
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block', overflow: 'visible' }}>
+        <line x1={pad} y1={lineY} x2={w - pad} y2={lineY} stroke={lineColor} strokeWidth={2} />
+        {ticks.map((t, i) => {
+          const x = datePos(t.date)
+          return <g key={i}><line x1={x} y1={lineY - 4} x2={x} y2={lineY + 4} stroke={lineColor} strokeWidth={1.5} /><text x={x} y={lineY + 14} textAnchor="end" fill={textColor} fontSize={fs - 1} opacity={0.5} transform={`rotate(-45,${x},${lineY + 14})`}>{t.label}</text></g>
+        })}
+        {items.map((item) => {
+          const x = datePos(item.date), isTop = item.side !== 'bottom'
+          const cardY = isTop ? 8 : lineY + 28, cardH = isTop ? lineY - 36 : h - lineY - 36
+          const connY1 = isTop ? cardY + cardH : lineY, connY2 = isTop ? lineY : cardY
+          const imgH = item.image ? Math.min(cardH * 0.55, 60) : 0
+          const isExpanded = expandedId === item.id
+          return (
+            <g key={item.id} style={{ cursor: (item.image || item.detailedDescription) ? 'pointer' : 'default' }}
+              onClick={(e) => { if (item.image || item.detailedDescription) { e.stopPropagation(); setExpandedId(isExpanded ? null : item.id) } }}>
+              <line x1={x} y1={connY1} x2={x} y2={connY2} stroke={lineColor} strokeWidth={1} strokeDasharray="3,2" opacity={0.5} />
+              <circle cx={x} cy={lineY} r={isExpanded ? 6 : 4} fill={dotColor} stroke={isExpanded ? textColor : 'none'} strokeWidth={1.5} />
+              {item.image && <image href={item.image} x={x - 40} y={cardY} width={80} height={imgH} preserveAspectRatio="xMidYMid meet" clipPath={`inset(0 round 4px)`} />}
+              <text x={x} y={cardY + imgH + fs + 2} textAnchor="middle" fill={textColor} fontSize={fs} fontWeight={600}>{item.label}</text>
+              {item.description && <text x={x} y={cardY + imgH + fs * 2 + 4} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.6}>{item.description}</text>}
+              <text x={x} y={cardY + imgH + fs * (item.description ? 3 : 2) + 6} textAnchor="middle" fill={textColor} fontSize={fs - 2} opacity={0.35}>{itemDateLabel(item.date)}</text>
+            </g>
+          )
+        })}
+      </svg>
+      {expandedItem && (expandedItem.image || expandedItem.detailedDescription) && (
+        <div onClick={(e) => { e.stopPropagation(); setExpandedId(null) }}
+          style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 16, cursor: 'pointer', zIndex: 10 }}>
+          {expandedItem.image && (
+            <img src={expandedItem.image} alt={expandedItem.label}
+              style={{ maxWidth: expandedItem.detailedDescription ? '45%' : '80%', maxHeight: '85%', objectFit: 'contain', borderRadius: 6, flexShrink: 0 }} />
+          )}
+          <div style={{ flex: expandedItem.image ? 1 : undefined, maxWidth: expandedItem.image ? '45%' : '80%', overflow: 'auto', maxHeight: '85%' }}>
+            <div style={{ color: textColor, fontWeight: 700, fontSize: fs + 4, marginBottom: 4 }}>{expandedItem.label}</div>
+            <div style={{ color: textColor, opacity: 0.5, fontSize: fs - 1, marginBottom: 8 }}>{itemDateLabel(expandedItem.date)}</div>
+            {expandedItem.description && <div style={{ color: textColor, opacity: 0.7, fontSize: fs, marginBottom: 8 }}>{expandedItem.description}</div>}
+            {expandedItem.detailedDescription && <div style={{ color: textColor, opacity: 0.85, fontSize: fs + 1, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{expandedItem.detailedDescription}</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function LatexRenderer({ element, isSelected }) {
   const html = generateLatexIframeHtml(element.content || '', element.textColor, element.fontSize)
