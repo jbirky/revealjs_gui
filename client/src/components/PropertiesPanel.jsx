@@ -996,6 +996,18 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                   <input className="prop-input" type="date" value={selectedElement.endDate || ''} onChange={e => onUpdateElement({ endDate: e.target.value })} />
                 </div>
               </div>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Tick Spacing</div>
+                <select className="prop-input" value={selectedElement.tickSpacing || 'auto'} onChange={e => onUpdateElement({ tickSpacing: e.target.value })} style={{ padding: '4px 6px' }}>
+                  <option value="auto">Auto</option>
+                  <option value="day">1 Day</option>
+                  <option value="month">1 Month</option>
+                  <option value="year">1 Year</option>
+                  <option value="10year">10 Years</option>
+                  <option value="100year">100 Years</option>
+                  <option value="1000year">1000 Years</option>
+                </select>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
                 <div>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Line</div>

@@ -541,11 +541,18 @@ function generateRevealHTML(presentation) {
           const range = t1 - t0 || 1, pad = 30, lineY = h * 0.5
           const lc = el.lineColor || '#6366f1', dc = el.dotColor || lc, tc = el.textColor || '#fff', fs = el.fontSize || 11
           const datePos = (d) => pad + ((new Date(d).getTime() - t0) / range) * (w - pad * 2)
-          const yearSpan = (t1 - t0) / (365.25 * 24 * 3600000), tickInt = yearSpan > 8 ? 2 : 1
-          const sY = new Date(el.startDate).getFullYear(), eY = new Date(el.endDate).getFullYear()
+          const spacing = el.tickSpacing || 'auto'
+          const yearSpan = (t1 - t0) / (365.25 * 24 * 3600000)
+          const useYearLabels = spacing === 'auto' ? yearSpan >= 1 : ['year','10year','100year','1000year'].includes(spacing)
+          const d0 = new Date(el.startDate), d1 = new Date(el.endDate)
+          const ticks = []
+          if (spacing === 'day') { const step = 86400000; for (let t = d0.getTime(); t <= d1.getTime(); t += step) { const d = new Date(t); ticks.push({ date: d.toISOString().split('T')[0], label: `${d.getMonth()+1}/${d.getDate()}` }) } }
+          else if (spacing === 'month') { for (let d = new Date(d0.getFullYear(), d0.getMonth(), 1); d <= d1; d.setMonth(d.getMonth() + 1)) ticks.push({ date: d.toISOString().split('T')[0], label: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` }) }
+          else { const step = spacing === '1000year' ? 1000 : spacing === '100year' ? 100 : spacing === '10year' ? 10 : yearSpan > 8 ? 2 : 1; const sY = Math.ceil(d0.getFullYear() / step) * step; for (let y = sY; y <= d1.getFullYear(); y += step) ticks.push({ date: `${y}-01-01`, label: String(y) }) }
+          const itemDateLabel = (d) => useYearLabels ? new Date(d).getFullYear().toString() : d
           let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
           svg += `<line x1="${pad}" y1="${lineY}" x2="${w-pad}" y2="${lineY}" stroke="${lc}" stroke-width="2"/>`
-          for (let y = sY; y <= eY; y += tickInt) { const x = datePos(`${y}-01-01`); svg += `<line x1="${x}" y1="${lineY-4}" x2="${x}" y2="${lineY+4}" stroke="${lc}" stroke-width="1.5"/><text x="${x}" y="${lineY+18}" text-anchor="middle" fill="${tc}" font-size="${fs-1}" opacity="0.5">${y}</text>` }
+          for (const t of ticks) { const x = datePos(t.date); svg += `<line x1="${x}" y1="${lineY-4}" x2="${x}" y2="${lineY+4}" stroke="${lc}" stroke-width="1.5"/><text x="${x}" y="${lineY+18}" text-anchor="middle" fill="${tc}" font-size="${fs-1}" opacity="0.5">${t.label}</text>` }
           for (const item of el.items || []) {
             const x = datePos(item.date), isTop = item.side !== 'bottom', esc = (s) => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
             const cardY = isTop ? 8 : lineY + 28, cardH = isTop ? lineY - 36 : h - lineY - 36
@@ -556,7 +563,7 @@ function generateRevealHTML(presentation) {
             if (item.image) svg += `<image href="${item.image}" x="${x-40}" y="${cardY}" width="80" height="${imgH}" preserveAspectRatio="xMidYMid meet"/>`
             svg += `<text x="${x}" y="${cardY+imgH+fs+2}" text-anchor="middle" fill="${tc}" font-size="${fs}" font-weight="600">${esc(item.label)}</text>`
             if (item.description) svg += `<text x="${x}" y="${cardY+imgH+fs*2+4}" text-anchor="middle" fill="${tc}" font-size="${fs-1}" opacity="0.6">${esc(item.description)}</text>`
-            svg += `<text x="${x}" y="${cardY+imgH+fs*(item.description?3:2)+6}" text-anchor="middle" fill="${tc}" font-size="${fs-2}" opacity="0.35">${item.date}</text>`
+            svg += `<text x="${x}" y="${cardY+imgH+fs*(item.description?3:2)+6}" text-anchor="middle" fill="${tc}" font-size="${fs-2}" opacity="0.35">${itemDateLabel(item.date)}</text>`
           }
           svg += '</svg>'
           return `<div${fragClass}${fragIdx} style="${style}">${svg}</div>`
