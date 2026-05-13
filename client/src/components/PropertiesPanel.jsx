@@ -1008,14 +1008,10 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
           {selectedElement.type === 'timeline' && (() => {
             const spacing = selectedElement.tickSpacing || 'auto'
             const yearStep = spacing === '1000year' ? 1000 : spacing === '100year' ? 100 : spacing === '10year' ? 10 : spacing === 'year' ? 1 : 0
-            const useYearSelect = yearStep >= 1
-            const startYear = useYearSelect ? new Date(selectedElement.startDate).getFullYear() : 0
-            const endYear = useYearSelect ? new Date(selectedElement.endDate).getFullYear() : 0
-            const roundTo = (y, step) => Math.round(y / step) * step
-            const rangeMin = useYearSelect ? roundTo(startYear - yearStep * 20, yearStep) : 0
-            const rangeMax = useYearSelect ? roundTo(endYear + yearStep * 20, yearStep) : 0
-            const yearOptions = []
-            if (useYearSelect) { for (let y = rangeMin; y <= rangeMax; y += yearStep) yearOptions.push(y) }
+            const useYearMode = yearStep >= 1
+            const parseYear = (v) => { const n = parseInt(v); return isNaN(n) ? 0 : n }
+            const startYear = parseYear(selectedElement.startDate)
+            const endYear = parseYear(selectedElement.endDate)
             return (
             <div style={{ marginBottom: 10 }}>
               <div style={{ marginBottom: 8 }}>
@@ -1032,21 +1028,17 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
                 <div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Start</div>
-                  {useYearSelect ? (
-                    <select className="prop-input" value={roundTo(startYear, yearStep)} onChange={e => onUpdateElement({ startDate: `${e.target.value}-01-01` })} style={{ padding: '4px 6px' }}>
-                      {yearOptions.filter(y => y < endYear).map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Start{useYearMode ? ' (year)' : ''}</div>
+                  {useYearMode ? (
+                    <input className="prop-input" type="number" value={startYear} onChange={e => onUpdateElement({ startDate: String(parseInt(e.target.value) || 0) })} style={{ width: '100%', padding: '4px 6px' }} />
                   ) : (
                     <input className="prop-input" type="date" value={selectedElement.startDate || ''} onChange={e => onUpdateElement({ startDate: e.target.value })} />
                   )}
                 </div>
                 <div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>End</div>
-                  {useYearSelect ? (
-                    <select className="prop-input" value={roundTo(endYear, yearStep)} onChange={e => onUpdateElement({ endDate: `${e.target.value}-01-01` })} style={{ padding: '4px 6px' }}>
-                      {yearOptions.filter(y => y > startYear).map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>End{useYearMode ? ' (year)' : ''}</div>
+                  {useYearMode ? (
+                    <input className="prop-input" type="number" value={endYear} onChange={e => onUpdateElement({ endDate: String(parseInt(e.target.value) || 0) })} style={{ width: '100%', padding: '4px 6px' }} />
                   ) : (
                     <input className="prop-input" type="date" value={selectedElement.endDate || ''} onChange={e => onUpdateElement({ endDate: e.target.value })} />
                   )}
@@ -1082,7 +1074,11 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                         style={{ background: 'none', border: 'none', color: 'var(--danger, #ef4444)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>×</button>
                     </div>
                   </div>
-                  <input className="prop-input" type="date" value={item.date || ''} onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], date: e.target.value }; onUpdateElement({ items }) }} style={{ marginBottom: 3, fontSize: 11 }} />
+                  {useYearMode ? (
+                    <input className="prop-input" type="number" value={parseInt(item.date) || 0} onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], date: String(parseInt(e.target.value) || 0) }; onUpdateElement({ items }) }} placeholder="Year" style={{ marginBottom: 3, fontSize: 11 }} />
+                  ) : (
+                    <input className="prop-input" type="date" value={item.date || ''} onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], date: e.target.value }; onUpdateElement({ items }) }} style={{ marginBottom: 3, fontSize: 11 }} />
+                  )}
                   <input className="prop-input" type="text" value={item.label || ''} placeholder="Label" onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], label: e.target.value }; onUpdateElement({ items }) }} style={{ marginBottom: 3, fontSize: 11 }} />
                   <input className="prop-input" type="text" value={item.description || ''} placeholder="Description (optional)" onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], description: e.target.value }; onUpdateElement({ items }) }} style={{ marginBottom: 3, fontSize: 11 }} />
                   <input className="prop-input" type="text" value={item.image || ''} placeholder="Image URL (optional)" onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], image: e.target.value }; onUpdateElement({ items }) }} style={{ fontSize: 11 }} />
@@ -1091,8 +1087,14 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
               <button className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', fontSize: 11, padding: '5px 8px' }}
                 onClick={() => {
                   const items = [...(selectedElement.items || [])]
-                  const mid = new Date((new Date(selectedElement.startDate).getTime() + new Date(selectedElement.endDate).getTime()) / 2)
-                  items.push({ id: crypto.randomUUID(), date: mid.toISOString().split('T')[0], label: 'New Event', description: '', image: '', side: items.length % 2 === 0 ? 'top' : 'bottom' })
+                  let midDate
+                  if (useYearMode) {
+                    midDate = String(Math.round((startYear + endYear) / 2))
+                  } else {
+                    const mid = new Date((new Date(selectedElement.startDate).getTime() + new Date(selectedElement.endDate).getTime()) / 2)
+                    midDate = mid.toISOString().split('T')[0]
+                  }
+                  items.push({ id: crypto.randomUUID(), date: midDate, label: 'New Event', description: '', image: '', side: items.length % 2 === 0 ? 'top' : 'bottom' })
                   onUpdateElement({ items })
                 }}>
                 + Add Event

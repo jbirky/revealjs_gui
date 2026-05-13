@@ -164,20 +164,28 @@ export function generateRevealHTML(presentation) {
           return `<iframe${dataId}${fragClass}${fragIdx}${gsapAttrs} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
         if (el.type === 'timeline') {
-          const w = el.width, h = el.height
-          const t0 = new Date(el.startDate).getTime(), t1 = new Date(el.endDate).getTime()
-          const range = t1 - t0 || 1, pad = 30, lineY = h * 0.5
+          const w = el.width, h = el.height, pad = 30, lineY = h * 0.5
           const lc = el.lineColor || '#6366f1', dc = el.dotColor || lc, tc = el.textColor || '#fff', fs = el.fontSize || 11
-          const datePos = (d) => pad + ((new Date(d).getTime() - t0) / range) * (w - pad * 2)
           const spacing = el.tickSpacing || 'auto'
-          const yearSpan = (t1 - t0) / (365.25 * 24 * 3600000)
-          const useYearLabels = spacing === 'auto' ? yearSpan >= 1 : ['year','10year','100year','1000year'].includes(spacing)
-          const d0 = new Date(el.startDate), d1 = new Date(el.endDate)
+          const yearMode = ['year','10year','100year','1000year'].includes(spacing) || (spacing === 'auto' && String(el.startDate).match(/^-?\d+$/))
           const ticks = []
-          if (spacing === 'day') { const step = 86400000; for (let t = d0.getTime(); t <= d1.getTime(); t += step) { const d = new Date(t); ticks.push({ date: d.toISOString().split('T')[0], label: `${d.getMonth()+1}/${d.getDate()}` }) } }
-          else if (spacing === 'month') { for (let d = new Date(d0.getFullYear(), d0.getMonth(), 1); d <= d1; d.setMonth(d.getMonth() + 1)) ticks.push({ date: d.toISOString().split('T')[0], label: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` }) }
-          else { const step = spacing === '1000year' ? 1000 : spacing === '100year' ? 100 : spacing === '10year' ? 10 : yearSpan > 8 ? 2 : 1; const sY = Math.ceil(d0.getFullYear() / step) * step; for (let y = sY; y <= d1.getFullYear(); y += step) ticks.push({ date: `${y}-01-01`, label: String(y) }) }
-          const itemDateLabel = (d) => useYearLabels ? new Date(d).getFullYear().toString() : d
+          let datePos, itemDateLabel
+          if (yearMode) {
+            const y0 = parseInt(el.startDate) || 0, y1 = parseInt(el.endDate) || 0, yr = y1 - y0 || 1
+            datePos = (d) => pad + ((parseInt(d) - y0) / yr) * (w - pad * 2)
+            itemDateLabel = (d) => String(parseInt(d) || d)
+            const step = spacing === '1000year' ? 1000 : spacing === '100year' ? 100 : spacing === '10year' ? 10 : Math.abs(yr) > 8 ? 2 : 1
+            const sY = Math.ceil(y0 / step) * step
+            for (let y = sY; y <= y1; y += step) ticks.push({ date: String(y), label: String(y) })
+          } else {
+            const t0 = new Date(el.startDate).getTime(), t1 = new Date(el.endDate).getTime(), range = t1 - t0 || 1
+            datePos = (d) => pad + ((new Date(d).getTime() - t0) / range) * (w - pad * 2)
+            itemDateLabel = (d) => d
+            const d0 = new Date(el.startDate), d1 = new Date(el.endDate)
+            if (spacing === 'day') { const step = 86400000; for (let t = d0.getTime(); t <= d1.getTime(); t += step) { const d = new Date(t); ticks.push({ date: d.toISOString().split('T')[0], label: `${d.getMonth()+1}/${d.getDate()}` }) } }
+            else if (spacing === 'month') { for (let d = new Date(d0.getFullYear(), d0.getMonth(), 1); d <= d1; d.setMonth(d.getMonth() + 1)) ticks.push({ date: d.toISOString().split('T')[0], label: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` }) }
+            else { const yearSpan = (t1 - t0) / (365.25 * 24 * 3600000); const step = yearSpan > 8 ? 2 : 1; for (let y = d0.getFullYear(); y <= d1.getFullYear(); y += step) ticks.push({ date: `${y}-01-01`, label: String(y) }) }
+          }
           let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
           svg += `<line x1="${pad}" y1="${lineY}" x2="${w-pad}" y2="${lineY}" stroke="${lc}" stroke-width="2"/>`
           for (const t of ticks) { const x = datePos(t.date); svg += `<line x1="${x}" y1="${lineY-4}" x2="${x}" y2="${lineY+4}" stroke="${lc}" stroke-width="1.5"/><text x="${x}" y="${lineY+18}" text-anchor="middle" fill="${tc}" font-size="${fs-1}" opacity="0.5">${t.label}</text>` }
