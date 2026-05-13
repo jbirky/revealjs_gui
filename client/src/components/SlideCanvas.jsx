@@ -1530,33 +1530,54 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
         }
         const useYearLabels = yearMode || (spacing === 'auto' && String(element.startDate).match(/^-?\d+$/))
         const itemDateLabel = (d) => useYearLabels ? String(parseInt(d) || d) : d
+        const [expandedId, setExpandedId] = React.useState(null)
+        const expandedItem = expandedId ? items.find(i => i.id === expandedId) : null
         return (
-          <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block', overflow: 'visible' }}>
-            <line x1={pad} y1={lineY} x2={w - pad} y2={lineY} stroke={lineColor} strokeWidth={2} />
-            {ticks.map((t, i) => {
-              const x = datePos(t.date)
-              return <g key={i}><line x1={x} y1={lineY - 4} x2={x} y2={lineY + 4} stroke={lineColor} strokeWidth={1.5} /><text x={x} y={lineY + 18} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.5}>{t.label}</text></g>
-            })}
-            {items.map((item) => {
-              const x = datePos(item.date)
-              const isTop = item.side !== 'bottom'
-              const cardY = isTop ? 8 : lineY + 28
-              const cardH = isTop ? lineY - 36 : h - lineY - 36
-              const connY1 = isTop ? cardY + cardH : lineY
-              const connY2 = isTop ? lineY : cardY
-              const imgH = item.image ? Math.min(cardH * 0.55, 60) : 0
-              return (
-                <g key={item.id}>
-                  <line x1={x} y1={connY1} x2={x} y2={connY2} stroke={lineColor} strokeWidth={1} strokeDasharray="3,2" opacity={0.5} />
-                  <circle cx={x} cy={lineY} r={4} fill={dotColor} />
-                  {item.image && <image href={item.image} x={x - 40} y={cardY} width={80} height={imgH} preserveAspectRatio="xMidYMid meet" clipPath={`inset(0 round 4px)`} />}
-                  <text x={x} y={cardY + imgH + fs + 2} textAnchor="middle" fill={textColor} fontSize={fs} fontWeight={600}>{item.label}</text>
-                  {item.description && <text x={x} y={cardY + imgH + fs * 2 + 4} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.6}>{item.description}</text>}
-                  <text x={x} y={cardY + imgH + fs * (item.description ? 3 : 2) + 6} textAnchor="middle" fill={textColor} fontSize={fs - 2} opacity={0.35}>{itemDateLabel(item.date)}</text>
-                </g>
-              )
-            })}
-          </svg>
+          <div style={{ position: 'relative', width: w, height: h }}>
+            <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block', overflow: 'visible' }}>
+              <line x1={pad} y1={lineY} x2={w - pad} y2={lineY} stroke={lineColor} strokeWidth={2} />
+              {ticks.map((t, i) => {
+                const x = datePos(t.date)
+                return <g key={i}><line x1={x} y1={lineY - 4} x2={x} y2={lineY + 4} stroke={lineColor} strokeWidth={1.5} /><text x={x} y={lineY + 14} textAnchor="end" fill={textColor} fontSize={fs - 1} opacity={0.5} transform={`rotate(-45,${x},${lineY + 14})`}>{t.label}</text></g>
+              })}
+              {items.map((item) => {
+                const x = datePos(item.date)
+                const isTop = item.side !== 'bottom'
+                const cardY = isTop ? 8 : lineY + 28
+                const cardH = isTop ? lineY - 36 : h - lineY - 36
+                const connY1 = isTop ? cardY + cardH : lineY
+                const connY2 = isTop ? lineY : cardY
+                const imgH = item.image ? Math.min(cardH * 0.55, 60) : 0
+                const isExpanded = expandedId === item.id
+                return (
+                  <g key={item.id} style={{ cursor: (item.image || item.detailedDescription) ? 'pointer' : 'default' }}
+                    onClick={(e) => { if (item.image || item.detailedDescription) { e.stopPropagation(); setExpandedId(isExpanded ? null : item.id) } }}>
+                    <line x1={x} y1={connY1} x2={x} y2={connY2} stroke={lineColor} strokeWidth={1} strokeDasharray="3,2" opacity={0.5} />
+                    <circle cx={x} cy={lineY} r={isExpanded ? 6 : 4} fill={dotColor} stroke={isExpanded ? textColor : 'none'} strokeWidth={1.5} />
+                    {item.image && <image href={item.image} x={x - 40} y={cardY} width={80} height={imgH} preserveAspectRatio="xMidYMid meet" clipPath={`inset(0 round 4px)`} />}
+                    <text x={x} y={cardY + imgH + fs + 2} textAnchor="middle" fill={textColor} fontSize={fs} fontWeight={600}>{item.label}</text>
+                    {item.description && <text x={x} y={cardY + imgH + fs * 2 + 4} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.6}>{item.description}</text>}
+                    <text x={x} y={cardY + imgH + fs * (item.description ? 3 : 2) + 6} textAnchor="middle" fill={textColor} fontSize={fs - 2} opacity={0.35}>{itemDateLabel(item.date)}</text>
+                  </g>
+                )
+              })}
+            </svg>
+            {expandedItem && (expandedItem.image || expandedItem.detailedDescription) && (
+              <div onClick={(e) => { e.stopPropagation(); setExpandedId(null) }}
+                style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 16, cursor: 'pointer', zIndex: 10 }}>
+                {expandedItem.image && (
+                  <img src={expandedItem.image} alt={expandedItem.label}
+                    style={{ maxWidth: expandedItem.detailedDescription ? '45%' : '80%', maxHeight: '85%', objectFit: 'contain', borderRadius: 6, flexShrink: 0 }} />
+                )}
+                <div style={{ flex: expandedItem.image ? 1 : undefined, maxWidth: expandedItem.image ? '45%' : '80%', overflow: 'auto', maxHeight: '85%' }}>
+                  <div style={{ color: textColor, fontWeight: 700, fontSize: fs + 4, marginBottom: 4 }}>{expandedItem.label}</div>
+                  <div style={{ color: textColor, opacity: 0.5, fontSize: fs - 1, marginBottom: 8 }}>{itemDateLabel(expandedItem.date)}</div>
+                  {expandedItem.description && <div style={{ color: textColor, opacity: 0.7, fontSize: fs, marginBottom: 8 }}>{expandedItem.description}</div>}
+                  {expandedItem.detailedDescription && <div style={{ color: textColor, opacity: 0.85, fontSize: fs + 1, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{expandedItem.detailedDescription}</div>}
+                </div>
+              </div>
+            )}
+          </div>
         )
       })()}
       {element.type === 'chart' && (

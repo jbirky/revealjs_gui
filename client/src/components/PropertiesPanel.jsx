@@ -1081,7 +1081,8 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                   )}
                   <input className="prop-input" type="text" value={item.label || ''} placeholder="Label" onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], label: e.target.value }; onUpdateElement({ items }) }} style={{ marginBottom: 3, fontSize: 11 }} />
                   <input className="prop-input" type="text" value={item.description || ''} placeholder="Description (optional)" onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], description: e.target.value }; onUpdateElement({ items }) }} style={{ marginBottom: 3, fontSize: 11 }} />
-                  <input className="prop-input" type="text" value={item.image || ''} placeholder="Image URL (optional)" onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], image: e.target.value }; onUpdateElement({ items }) }} style={{ fontSize: 11 }} />
+                  <input className="prop-input" type="text" value={item.image || ''} placeholder="Image URL (optional)" onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], image: e.target.value }; onUpdateElement({ items }) }} style={{ marginBottom: 3, fontSize: 11 }} />
+                  <textarea className="prop-input" value={item.detailedDescription || ''} placeholder="Detailed description (shown on expand)" onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], detailedDescription: e.target.value }; onUpdateElement({ items }) }} rows={2} style={{ fontSize: 11, resize: 'vertical', fontFamily: 'inherit' }} />
                 </div>
               ))}
               <button className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', fontSize: 11, padding: '5px 8px' }}

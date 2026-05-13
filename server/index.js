@@ -560,23 +560,33 @@ function generateRevealHTML(presentation) {
             else if (spacing === 'month') { for (let d = new Date(d0.getFullYear(), d0.getMonth(), 1); d <= d1; d.setMonth(d.getMonth() + 1)) ticks.push({ date: d.toISOString().split('T')[0], label: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` }) }
             else { const yearSpan = (t1 - t0) / (365.25 * 24 * 3600000); const step = yearSpan > 8 ? 2 : 1; for (let y = d0.getFullYear(); y <= d1.getFullYear(); y += step) ticks.push({ date: `${y}-01-01`, label: String(y) }) }
           }
+          const esc = (s) => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
           let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
           svg += `<line x1="${pad}" y1="${lineY}" x2="${w-pad}" y2="${lineY}" stroke="${lc}" stroke-width="2"/>`
-          for (const t of ticks) { const x = datePos(t.date); svg += `<line x1="${x}" y1="${lineY-4}" x2="${x}" y2="${lineY+4}" stroke="${lc}" stroke-width="1.5"/><text x="${x}" y="${lineY+18}" text-anchor="middle" fill="${tc}" font-size="${fs-1}" opacity="0.5">${t.label}</text>` }
+          for (const t of ticks) { const x = datePos(t.date); svg += `<line x1="${x}" y1="${lineY-4}" x2="${x}" y2="${lineY+4}" stroke="${lc}" stroke-width="1.5"/><text x="${x}" y="${lineY+14}" text-anchor="end" fill="${tc}" font-size="${fs-1}" opacity="0.5" transform="rotate(-45,${x},${lineY+14})">${t.label}</text>` }
           for (const item of el.items || []) {
-            const x = datePos(item.date), isTop = item.side !== 'bottom', esc = (s) => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            const x = datePos(item.date), isTop = item.side !== 'bottom'
             const cardY = isTop ? 8 : lineY + 28, cardH = isTop ? lineY - 36 : h - lineY - 36
             const connY1 = isTop ? cardY + cardH : lineY, connY2 = isTop ? lineY : cardY
             const imgH = item.image ? Math.min(cardH * 0.55, 60) : 0
+            const hasExpand = item.image || item.detailedDescription
+            svg += `<g${hasExpand ? ` class="tl-event" data-tl-id="${item.id}" style="cursor:pointer"` : ''}>`
             svg += `<line x1="${x}" y1="${connY1}" x2="${x}" y2="${connY2}" stroke="${lc}" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>`
             svg += `<circle cx="${x}" cy="${lineY}" r="4" fill="${dc}"/>`
             if (item.image) svg += `<image href="${item.image}" x="${x-40}" y="${cardY}" width="80" height="${imgH}" preserveAspectRatio="xMidYMid meet"/>`
             svg += `<text x="${x}" y="${cardY+imgH+fs+2}" text-anchor="middle" fill="${tc}" font-size="${fs}" font-weight="600">${esc(item.label)}</text>`
             if (item.description) svg += `<text x="${x}" y="${cardY+imgH+fs*2+4}" text-anchor="middle" fill="${tc}" font-size="${fs-1}" opacity="0.6">${esc(item.description)}</text>`
             svg += `<text x="${x}" y="${cardY+imgH+fs*(item.description?3:2)+6}" text-anchor="middle" fill="${tc}" font-size="${fs-2}" opacity="0.35">${itemDateLabel(item.date)}</text>`
+            svg += '</g>'
           }
           svg += '</svg>'
-          return `<div${fragClass}${fragIdx} style="${style}">${svg}</div>`
+          const expandItems = (el.items || []).filter(i => i.image || i.detailedDescription)
+          let expandData = ''
+          if (expandItems.length) {
+            const itemsJson = JSON.stringify(expandItems.map(i => ({ id: i.id, label: i.label, date: itemDateLabel(i.date), description: i.description, detailedDescription: i.detailedDescription, image: i.image || '' })))
+            expandData = `<div class="tl-overlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,0.75);border-radius:6px;z-index:10;cursor:pointer;padding:16px;align-items:center;justify-content:center;gap:16px"></div><script>(function(){var el=document.currentScript.parentElement;var overlay=el.querySelector('.tl-overlay');var items=${itemsJson};el.querySelectorAll('.tl-event').forEach(function(g){g.addEventListener('click',function(e){e.stopPropagation();var id=g.getAttribute('data-tl-id');var item=items.find(function(i){return i.id===id});if(!item)return;var h='';if(item.image)h+='<img src="'+item.image+'" style="max-width:'+(item.detailedDescription?'45%':'80%')+';max-height:85%;object-fit:contain;border-radius:6px;flex-shrink:0">';h+='<div style="flex:'+(item.image?1:'none')+';max-width:'+(item.image?'45%':'80%')+';overflow:auto;max-height:85%">';h+='<div style="color:${tc};font-weight:700;font-size:${fs+4}px;margin-bottom:4px">'+item.label+'<\\/div>';h+='<div style="color:${tc};opacity:0.5;font-size:${fs-1}px;margin-bottom:8px">'+item.date+'<\\/div>';if(item.description)h+='<div style="color:${tc};opacity:0.7;font-size:${fs}px;margin-bottom:8px">'+item.description+'<\\/div>';if(item.detailedDescription)h+='<div style="color:${tc};opacity:0.85;font-size:${fs+1}px;line-height:1.5;white-space:pre-wrap">'+item.detailedDescription+'<\\/div>';h+='<\\/div>';overlay.innerHTML=h;overlay.style.display='flex';})});overlay.addEventListener('click',function(){overlay.style.display='none'});}());<\/script>`
+          }
+          return `<div${fragClass}${fragIdx} style="${style}position:relative;">${svg}${expandData}</div>`
         }
         if (el.type === 'chart') {
           const { chartType = 'bar', chartData = {} } = el
