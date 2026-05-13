@@ -2012,12 +2012,16 @@ function TimelineRenderer({ element }) {
               onClick={(e) => { if (item.image || item.detailedDescription) { e.stopPropagation(); setExpandedId(isExpanded ? null : item.id) } }}>
               <line x1={x} y1={connY1} x2={x} y2={connY2} stroke={lineColor} strokeWidth={1} strokeDasharray="3,2" opacity={0.5} />
               <circle cx={x} cy={lineY} r={isExpanded ? 6 : 4} fill={dotColor} stroke={isExpanded ? textColor : 'none'} strokeWidth={1.5} />
-              {isTop ? (<>
-                <text x={x} y={cardY + fs} textAnchor="middle" fill={textColor} fontSize={fs - 2} opacity={0.35}>{itemDateLabel(item.date)}</text>
-                <text x={x} y={cardY + fs + (fs + 2)} textAnchor="middle" fill={textColor} fontSize={fs} fontWeight={600}>{item.label}</text>
-                {item.description && <text x={x} y={cardY + fs + (fs + 2) * 2} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.6}>{item.description}</text>}
-                {item.image && <image href={item.image} x={x - 40} y={cardY + cardH - imgH} width={80} height={imgH} preserveAspectRatio="xMidYMid meet" clipPath={`inset(0 round 4px)`} />}
-              </>) : (<>
+              {isTop ? (() => {
+                let ty = cardY + fs
+                const textLines = []
+                textLines.push(<text key="l" x={x} y={ty} textAnchor="middle" fill={textColor} fontSize={fs} fontWeight={600}>{item.label}</text>)
+                ty += fs + 2
+                if (item.description) { textLines.push(<text key="d" x={x} y={ty} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.6}>{item.description}</text>); ty += fs }
+                textLines.push(<text key="dt" x={x} y={ty} textAnchor="middle" fill={textColor} fontSize={fs - 2} opacity={0.35}>{itemDateLabel(item.date)}</text>)
+                ty += 4
+                return <>{textLines}{item.image && <image href={item.image} x={x - 40} y={ty} width={80} height={imgH} preserveAspectRatio="xMidYMid meet" clipPath={`inset(0 round 4px)`} />}</>
+              })() : (<>
                 {item.image && <image href={item.image} x={x - 40} y={cardY} width={80} height={imgH} preserveAspectRatio="xMidYMid meet" clipPath={`inset(0 round 4px)`} />}
                 <text x={x} y={cardY + imgH + fs + 2} textAnchor="middle" fill={textColor} fontSize={fs} fontWeight={600}>{item.label}</text>
                 {item.description && <text x={x} y={cardY + imgH + fs * 2 + 4} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.6}>{item.description}</text>}
