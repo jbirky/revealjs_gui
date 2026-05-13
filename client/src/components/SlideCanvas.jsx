@@ -1201,6 +1201,29 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
               }}>
                 ↺ Reset crop
               </button>
+              <button onClick={() => {
+                const el = slide?.elements?.find(e => e.id === contextMenu.elementId)
+                if (el?.src) {
+                  const url = el.src.startsWith('http') ? el.src : `${window.location.origin}${el.src}`
+                  navigator.clipboard.writeText(url)
+                }
+                setContextMenu(null)
+              }}>
+                📋 Copy URL
+              </button>
+              <div className="canvas-context-menu-separator" />
+            </>)}
+            {contextMenu.elementType === 'video' && (<>
+              <button onClick={() => {
+                const el = slide?.elements?.find(e => e.id === contextMenu.elementId)
+                if (el?.src) {
+                  const url = el.src.startsWith('http') ? el.src : `${window.location.origin}${el.src}`
+                  navigator.clipboard.writeText(url)
+                }
+                setContextMenu(null)
+              }}>
+                📋 Copy URL
+              </button>
               <div className="canvas-context-menu-separator" />
             </>)}
             <div style={{ padding: '4px 8px 2px', fontSize: 10, color: 'var(--text-muted)', userSelect: 'none' }}>Snap Reference</div>
