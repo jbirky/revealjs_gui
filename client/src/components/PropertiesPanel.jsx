@@ -1014,6 +1014,10 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
               <select className="prop-input" value={selectedElement.objectFit || 'contain'} onChange={e => onUpdateElement({ objectFit: e.target.value })} style={{ padding: '4px 6px', marginBottom: 8 }}>
                 {['contain', 'cover', 'fill', 'none'].map(v => <option key={v} value={v}>{v}</option>)}
               </select>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3, marginTop: 8 }}>Playback Speed</div>
+              <select className="prop-input" value={selectedElement.playbackRate || 1} onChange={e => onUpdateElement({ playbackRate: Number(e.target.value) })} style={{ padding: '4px 6px', marginBottom: 8 }}>
+                {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3].map(v => <option key={v} value={v}>{v}x</option>)}
+              </select>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {[
                   ['controls', 'Show controls'],

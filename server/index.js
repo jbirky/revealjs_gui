@@ -585,8 +585,9 @@ function generateRevealHTML(presentation) {
           if (el.loop) attrs.push('loop')
           if (el.muted) attrs.push('muted')
           const posterAttr = el.poster ? ` poster="${el.poster}"` : ''
-          const videoMime = /\.webm$/i.test(el.src) ? 'video/webm' : /\.ogg$/i.test(el.src) ? 'video/ogg' : 'video/mp4'
-          return `<div${fragClass}${fragIdx} style="${style}"><video ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:${el.objectFit||'contain'};display:block;"><source src="${el.src}" type="${videoMime}"></video></div>`
+          const videoMime = /\.webm$/i.test(el.src) ? 'video/webm' : /\.og[gv]$/i.test(el.src) ? 'video/ogg' : 'video/mp4'
+          const rateScript = el.playbackRate && el.playbackRate !== 1 ? `<script>document.currentScript.previousElementSibling.playbackRate=${el.playbackRate}</script>` : ''
+          return `<div${fragClass}${fragIdx} style="${style}"><video ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:${el.objectFit||'contain'};display:block;"><source src="${el.src}" type="${videoMime}"></video>${rateScript}</div>`
         }
         if (el.type === 'audio') {
           const attrs = ['controls']

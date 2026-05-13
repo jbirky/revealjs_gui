@@ -1425,13 +1425,14 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
       )}
       {element.type === 'video' && (
         <video
+          ref={el => { if (el) el.playbackRate = element.playbackRate || 1 }}
           controls={element.controls !== false}
           muted={element.muted || false}
           loop={element.loop || false}
           poster={element.poster || undefined}
           style={{ width: '100%', height: '100%', objectFit: element.objectFit || 'contain', display: 'block', pointerEvents: isSelected ? 'auto' : 'none' }}
         >
-          <source src={element.src} type={/\.webm$/i.test(element.src) ? 'video/webm' : /\.ogg$/i.test(element.src) ? 'video/ogg' : 'video/mp4'} />
+          <source src={element.src} type={/\.webm$/i.test(element.src) ? 'video/webm' : /\.og[gv]$/i.test(element.src) ? 'video/ogg' : 'video/mp4'} />
         </video>
       )}
       {element.type === 'audio' && (
