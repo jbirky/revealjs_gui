@@ -32,6 +32,7 @@ import {
   FileText,
   HelpCircle,
   Puzzle,
+  Clock,
 } from 'lucide-react'
 import { SHAPES } from '../utils/shapeUtils'
 
