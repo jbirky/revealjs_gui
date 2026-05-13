@@ -92,6 +92,8 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pptxLoading, setPptxLoading] = useState(false)
   const pptxInputRef = useRef(null)
+  const [linkModal, setLinkModal] = useState(null)
+  const linkInputRef = useRef(null)
 
   async function handlePdfUpload(file) {
     if (!file) return
@@ -169,15 +171,33 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
 
   function handleLink() {
     if (!editor) return
-    const previousUrl = editor.getAttributes('link').href
-    const url = window.prompt('Enter URL:', previousUrl || 'https://')
-    if (url === null) return
-    if (url === '') {
+    const previousUrl = editor.getAttributes('link').href || ''
+    setLinkModal({ url: previousUrl || 'https://', isEdit: !!previousUrl })
+    setTimeout(() => linkInputRef.current?.select(), 50)
+  }
+
+  function submitLink() {
+    if (!editor || !linkModal) return
+    const url = linkModal.url.trim()
+    if (url === '' || url === 'https://') {
       editor.chain().focus().unsetLink().run()
     } else {
-      editor.chain().focus().toggleLink({ href: url }).run()
+      editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
     }
+    setLinkModal(null)
   }
+
+  useEffect(() => {
+    if (!editor || !editingElementId) return
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        handleLink()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [editor, editingElementId])
 
   function handleImage() {
     if (!editor) return
@@ -1312,6 +1332,45 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
           </>)}
         </div>
       </>)}
+
+      {linkModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}
+          onClick={e => { if (e.target === e.currentTarget) setLinkModal(null) }}>
+          <div style={{ background: 'var(--bg-card, #1e1e2e)', borderRadius: 10, padding: '20px 24px', width: 380, maxWidth: '90vw', border: '1px solid var(--border, #333)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #fff)', marginBottom: 12 }}>
+              {linkModal.isEdit ? 'Edit Link' : 'Insert Link'}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted, #888)', marginBottom: 4 }}>URL</div>
+            <input
+              ref={linkInputRef}
+              type="text"
+              value={linkModal.url}
+              onChange={e => setLinkModal(prev => ({ ...prev, url: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitLink() } else if (e.key === 'Escape') setLinkModal(null) }}
+              placeholder="https://..."
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border, #333)', background: 'var(--bg-hover, #252530)', color: 'var(--text-primary, #fff)', fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
+              autoFocus
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+              {linkModal.isEdit && (
+                <button onClick={() => { editor?.chain().focus().unsetLink().run(); setLinkModal(null) }}
+                  style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid var(--border, #333)', background: 'none', color: 'var(--danger, #ef4444)', cursor: 'pointer', fontSize: 12 }}>
+                  Remove Link
+                </button>
+              )}
+              <button onClick={() => setLinkModal(null)}
+                style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid var(--border, #333)', background: 'none', color: 'var(--text-primary, #fff)', cursor: 'pointer', fontSize: 12 }}>
+                Cancel
+              </button>
+              <button onClick={submitLink}
+                style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--accent, #6366f1)', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                {linkModal.isEdit ? 'Update' : 'Insert'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
