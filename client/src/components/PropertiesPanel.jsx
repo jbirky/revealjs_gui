@@ -302,6 +302,12 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
               >
                 Edit LaTeX / TikZ
               </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Font Color</div>
+                <input type="color" value={selectedElement.textColor || '#ffffff'}
+                  onChange={e => onUpdateElement({ textColor: e.target.value })}
+                  style={{ width: 28, height: 22, border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', padding: 0 }} />
+              </div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Double-click element to open editor</p>
             </div>
           )}

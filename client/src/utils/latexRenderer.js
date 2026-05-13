@@ -1,7 +1,8 @@
 // Shared LaTeX iframe HTML generator
 // Supports: KaTeX math, LaTeX tables via LaTeX.js, TikZ diagrams via TikZJax
 
-export function generateLatexIframeHtml(content) {
+export function generateLatexIframeHtml(content, textColor) {
+  const c = textColor || 'white'
   const hasTikz = /\\begin\{tikzpicture\}|\\tikz\s*[{[]/.test(content)
   const hasTable = /\\begin\{(tabular\*?|table\*?|longtable|tabularx|tabulary)\}/.test(content)
 
@@ -12,7 +13,7 @@ export function generateLatexIframeHtml(content) {
 <script src="https://tikzjax.com/v1/tikzjax.js"><\/script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: transparent; overflow: auto; color: white; }
+  html, body { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: transparent; overflow: auto; color: ${c}; }
   svg { max-width: 100%; max-height: 100%; }
 </style>
 </head><body><script type="text/tikz">${content}<\/script></body></html>`
@@ -27,11 +28,11 @@ export function generateLatexIframeHtml(content) {
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/latex.js@0.12.6/dist/base.css">
 <style>
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 8px; background: transparent; color: white !important; width: 100%; height: 100%; overflow: auto; font-family: 'Computer Modern', Georgia, serif; }
-  table { border-collapse: collapse; color: white; }
-  td, th { padding: 3px 10px; color: white !important; }
-  p, span, div, .latex-table { color: white !important; }
-  body > * { color: white !important; }
+  html, body { margin: 0; padding: 8px; background: transparent; color: ${c} !important; width: 100%; height: 100%; overflow: auto; font-family: 'Computer Modern', Georgia, serif; }
+  table { border-collapse: collapse; color: ${c}; }
+  td, th { padding: 3px 10px; color: ${c} !important; }
+  p, span, div, .latex-table { color: ${c} !important; }
+  body > * { color: ${c} !important; }
 </style>
 </head><body>
 <div id="out"></div>
@@ -53,8 +54,8 @@ export function generateLatexIframeHtml(content) {
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\/script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: transparent; overflow: hidden; color: white; }
-  .katex { font-size: 1.4em; }
+  html, body { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: transparent; overflow: hidden; color: ${c}; }
+  .katex { font-size: 1.4em; color: ${c}; }
   svg { max-width: 100%; max-height: 100%; }
 </style>
 </head><body>
