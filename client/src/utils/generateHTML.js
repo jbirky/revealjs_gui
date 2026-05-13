@@ -143,8 +143,9 @@ export function generateRevealHTML(presentation) {
           return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}${opacityStyle}">${shapeSvgString(el)}</div>`
         }
         if (el.type === 'html') {
-          const srcdoc = buildHtmlEmbed(el.content || '', el.width, el.height).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-          return `<iframe${dataId}${fragClass}${fragIdx}${gsapAttrs} srcdoc="${srcdoc}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+          const embedHtml = buildHtmlEmbed(el.content || '', el.width, el.height)
+          const encoded = btoa(unescape(encodeURIComponent(embedHtml)))
+          return `<iframe${dataId}${fragClass}${fragIdx}${gsapAttrs} data-html-embed="${encoded}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
         if (el.type === 'p5') {
           const p5Doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:transparent;overflow:hidden;}canvas{display:block;}</style><script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"><\/script></head><body><script>${el.content || ''}<\/script></body></html>`
@@ -536,6 +537,13 @@ ${slidesHtml}
             displayMode: el.getAttribute('data-math-display') === 'true',
             throwOnError: false
           });
+        } catch(e) {}
+      });
+      document.querySelectorAll('iframe[data-html-embed]').forEach(function(iframe) {
+        try {
+          var html = decodeURIComponent(escape(atob(iframe.getAttribute('data-html-embed'))));
+          var blob = new Blob([html], {type: 'text/html'});
+          iframe.src = URL.createObjectURL(blob);
         } catch(e) {}
       });
       document.querySelectorAll('[data-latex-block]').forEach(function(el) {
