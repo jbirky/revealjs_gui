@@ -56,17 +56,24 @@
     <span class="dot yellow"></span>
     <span class="dot green"></span>
   </div>
-  <pre><code class="language-python">import numpy as np
+  <pre><code class="language-python">
+# integration example
+# https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.odeint.html
+   
+import numpy as np
 from scipy.integrate import odeint
 
-def tidal_evolution(y, t, Q):
-    a, e = y
-    da_dt = -6.3 * (1/Q) * a**(-7)
-    de_dt = -2.1 * (1/Q) * e * a**(-8)
-    return [da_dt, de_dt]
+def pend(y, t, b, c):
+    theta, omega = y
+    dydt = [omega, -b*omega - c*np.sin(theta)]
+    return dydt
 
-t = np.linspace(0, 1e9, 10000)
-sol = odeint(tidal_evolution, [0.05, 0.3], t, args=(1e6,))</code></pre>
+b = 1.0
+c = 3.0
+y0 = [np.pi - 0.1, 0.0]
+t = np.linspace(0, 10, 101)
+   
+sol = odeint(pend, y0, t, args=(b, c))</code></pre>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>hljs.highlightAll();</script>
