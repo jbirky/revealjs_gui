@@ -524,8 +524,8 @@ function generateRevealHTML(presentation) {
         }
         if (el.type === 'html') {
           const embedHtml = buildHtmlEmbed(el.content || '', el.width, el.height)
-          const encoded = Buffer.from(embedHtml, 'utf-8').toString('base64')
-          return `<iframe${fragClass}${fragIdx} data-html-embed="${encoded}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
+          const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(embedHtml)}`
+          return `<iframe${fragClass}${fragIdx} src="${dataUrl}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
         if (el.type === 'code') {
           const lang = el.language || 'plaintext'
@@ -868,13 +868,6 @@ ${slidesHtml}
             displayMode: el.getAttribute('data-math-display') === 'true',
             throwOnError: false
           });
-        } catch(e) {}
-      });
-      document.querySelectorAll('iframe[data-html-embed]').forEach(function(iframe) {
-        try {
-          var html = decodeURIComponent(escape(atob(iframe.getAttribute('data-html-embed'))));
-          var blob = new Blob([html], {type: 'text/html'});
-          iframe.src = URL.createObjectURL(blob);
         } catch(e) {}
       });
       document.querySelectorAll('[data-latex-block]').forEach(function(el) {
