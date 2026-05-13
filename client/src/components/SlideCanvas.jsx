@@ -1992,7 +1992,7 @@ function IconRenderer({ element }) {
 
 
 function LatexRenderer({ element, isSelected }) {
-  const html = generateLatexIframeHtml(element.content || '', element.textColor)
+  const html = generateLatexIframeHtml(element.content || '', element.textColor, element.fontSize)
   return (
     <iframe
       srcDoc={html}

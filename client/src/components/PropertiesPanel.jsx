@@ -302,11 +302,20 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
               >
                 Edit LaTeX / TikZ
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Font Color</div>
-                <input type="color" value={selectedElement.textColor || '#ffffff'}
-                  onChange={e => onUpdateElement({ textColor: e.target.value })}
-                  style={{ width: 28, height: 22, border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', padding: 0 }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Size</div>
+                  <input className="prop-input" type="number" min={8} max={80} step={1}
+                    value={selectedElement.fontSize || 20}
+                    onChange={e => onUpdateElement({ fontSize: Number(e.target.value) || 20 })}
+                    style={{ width: 50, padding: '2px 4px', fontSize: 11 }} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Color</div>
+                  <input type="color" value={selectedElement.textColor || '#ffffff'}
+                    onChange={e => onUpdateElement({ textColor: e.target.value })}
+                    style={{ width: 28, height: 22, border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', padding: 0 }} />
+                </div>
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Double-click element to open editor</p>
             </div>

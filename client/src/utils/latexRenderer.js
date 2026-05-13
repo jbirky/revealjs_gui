@@ -1,8 +1,9 @@
 // Shared LaTeX iframe HTML generator
 // Supports: KaTeX math, LaTeX tables via LaTeX.js, TikZ diagrams via TikZJax
 
-export function generateLatexIframeHtml(content, textColor) {
+export function generateLatexIframeHtml(content, textColor, fontSize) {
   const c = textColor || 'white'
+  const scale = fontSize ? (fontSize / 20) : 1
   const hasTikz = /\\begin\{tikzpicture\}|\\tikz\s*[{[]/.test(content)
   const hasTable = /\\begin\{(tabular\*?|table\*?|longtable|tabularx|tabulary)\}/.test(content)
 
@@ -14,6 +15,7 @@ export function generateLatexIframeHtml(content, textColor) {
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: transparent; overflow: auto; color: ${c}; }
+  body { transform: scale(${scale}); transform-origin: center center; }
   svg { max-width: 100%; max-height: 100%; }
 </style>
 </head><body><script type="text/tikz">${content}<\/script></body></html>`
@@ -28,7 +30,7 @@ export function generateLatexIframeHtml(content, textColor) {
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/latex.js@0.12.6/dist/base.css">
 <style>
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 8px; background: transparent; color: ${c} !important; width: 100%; height: 100%; overflow: auto; font-family: 'Computer Modern', Georgia, serif; }
+  html, body { margin: 0; padding: 8px; background: transparent; color: ${c} !important; width: 100%; height: 100%; overflow: auto; font-family: 'Computer Modern', Georgia, serif; transform: scale(${scale}); transform-origin: top left; }
   table { border-collapse: collapse; color: ${c}; }
   td, th { padding: 3px 10px; color: ${c} !important; }
   p, span, div, .latex-table { color: ${c} !important; }
@@ -55,7 +57,7 @@ export function generateLatexIframeHtml(content, textColor) {
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: transparent; overflow: hidden; color: ${c}; }
-  .katex { font-size: 1.4em; color: ${c}; }
+  .katex { font-size: ${scale * 1.4}em; color: ${c}; }
   svg { max-width: 100%; max-height: 100%; }
 </style>
 </head><body>
