@@ -1370,7 +1370,7 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
             </div>
           )}
           {hasCiteText && (
-            <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', fontSize: 10, color: 'rgba(255,255,255,0.5)', fontFamily: '-apple-system,sans-serif', lineHeight: 1.3, padding: '3px 2px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none', textAlign: element.citationAlign || 'left' }}>
+            <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', fontSize: 10, color: element.citationColor || 'rgba(255,255,255,0.5)', fontFamily: '-apple-system,sans-serif', lineHeight: 1.3, padding: '3px 2px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none', textAlign: element.citationAlign || 'left' }}>
               {element.citationText || element.citationLink}
             </div>
           )}

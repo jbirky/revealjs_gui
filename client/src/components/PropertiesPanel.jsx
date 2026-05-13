@@ -781,6 +781,12 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 {(selectedElement.citationText || selectedElement.citationLink) && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     <div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Color</div>
+                      <input type="color" value={selectedElement.citationColor || '#808080'}
+                        onChange={e => onUpdateElement({ citationColor: e.target.value })}
+                        style={{ width: '100%', height: 24, border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }} />
+                    </div>
+                    <div>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Display</div>
                       <select className="prop-input" value={selectedElement.citationMode || 'caption'}
                         onChange={e => onUpdateElement({ citationMode: e.target.value })}

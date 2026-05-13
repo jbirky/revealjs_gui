@@ -121,9 +121,10 @@ export function generateRevealHTML(presentation) {
           if (citeCaption) {
             const align = el.citationAlign || 'left'
             const ct = (el.citationText || el.citationLink || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            const cc = el.citationColor ? `color:${el.citationColor};` : ''
             capHtml = el.citationLink
-              ? `<div class="image-caption" style="text-align:${align};"><a href="${el.citationLink.replace(/"/g,'&quot;')}" target="_blank" rel="noopener">${ct}</a></div>`
-              : `<div class="image-caption" style="text-align:${align};">${ct}</div>`
+              ? `<div class="image-caption" style="text-align:${align};${cc}"><a href="${el.citationLink.replace(/"/g,'&quot;')}" target="_blank" rel="noopener" style="${cc}">${ct}</a></div>`
+              : `<div class="image-caption" style="text-align:${align};${cc}">${ct}</div>`
           }
           const sIdx = citeSide ? sideCitations.findIndex(c => c.id === el.id) : -1
           const sup = sIdx >= 0 ? `<span class="cite-sup">${sIdx + 1}</span>` : ''
