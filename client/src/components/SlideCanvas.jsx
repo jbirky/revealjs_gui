@@ -1425,10 +1425,23 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
       )}
       {element.type === 'video' && (
         <video
-          ref={el => { if (el) el.playbackRate = element.playbackRate || 1 }}
+          ref={el => {
+            if (!el) return
+            el.playbackRate = element.playbackRate || 1
+            const start = element.startTime ?? 0
+            const end = element.endTime
+            if (start && el.currentTime < start) el.currentTime = start
+            el.ontimeupdate = () => {
+              if (end != null && el.currentTime >= end) {
+                if (element.loop) { el.currentTime = start || 0 }
+                else el.pause()
+              }
+            }
+            el.onplay = () => { if (start && el.currentTime < start) el.currentTime = start }
+          }}
           controls={element.controls !== false}
           muted={element.muted || false}
-          loop={element.loop || false}
+          loop={false}
           poster={element.poster || undefined}
           style={{ width: '100%', height: '100%', objectFit: element.objectFit || 'contain', display: 'block', pointerEvents: isSelected ? 'auto' : 'none' }}
         >

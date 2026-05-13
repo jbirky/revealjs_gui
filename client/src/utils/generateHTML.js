@@ -210,8 +210,24 @@ export function generateRevealHTML(presentation) {
           if (el.type === 'manim') { if (el.controls) attrs.push('controls'); if (el.autoplay !== false) attrs.push('autoplay'); if (el.loop !== false) attrs.push('loop'); if (el.muted !== false) attrs.push('muted') }
           else { if (el.controls !== false) attrs.push('controls'); if (el.autoplay) attrs.push('autoplay'); if (el.loop) attrs.push('loop'); if (el.muted) attrs.push('muted') }
           const posterAttr = el.poster ? ` poster="${absoluteSrc(el.poster)}"` : ''
-          const rateScript = el.playbackRate && el.playbackRate !== 1 ? `<script>document.currentScript.previousElementSibling.playbackRate=${el.playbackRate}</script>` : ''
-          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}"><video src="${src}" ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:contain;display:block;background:#000;"></video>${rateScript}</div>`
+          const hasClip = (el.startTime != null && el.startTime > 0) || el.endTime != null
+          const rate = el.playbackRate && el.playbackRate !== 1 ? el.playbackRate : null
+          let vidScript = ''
+          if (rate || hasClip) {
+            const parts = []
+            parts.push('var v=document.currentScript.previousElementSibling')
+            if (rate) parts.push(`v.playbackRate=${rate}`)
+            if (hasClip) {
+              const s = el.startTime || 0
+              const looping = el.loop
+              if (s > 0) parts.push(`v.addEventListener('loadedmetadata',function(){v.currentTime=${s}})`)
+              if (el.endTime != null) parts.push(`v.addEventListener('timeupdate',function(){if(v.currentTime>=${el.endTime}){${looping ? `v.currentTime=${s};v.play()` : 'v.pause()'}}})`)
+              if (s > 0) parts.push(`v.addEventListener('play',function(){if(v.currentTime<${s})v.currentTime=${s}})`)
+            }
+            vidScript = `<script>${parts.join(';')}</script>`
+          }
+          if (hasClip && el.loop) attrs.splice(attrs.indexOf('loop'), attrs.indexOf('loop') >= 0 ? 1 : 0)
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}"><video src="${src}" ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:contain;display:block;background:#000;"></video>${vidScript}</div>`
         }
         if (el.type === 'manim' && !el.rendered) return '' // not yet rendered — omit from export
         if (el.type === 'audio') {

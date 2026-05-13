@@ -586,8 +586,22 @@ function generateRevealHTML(presentation) {
           if (el.muted) attrs.push('muted')
           const posterAttr = el.poster ? ` poster="${el.poster}"` : ''
           const videoMime = /\.webm$/i.test(el.src) ? 'video/webm' : /\.og[gv]$/i.test(el.src) ? 'video/ogg' : 'video/mp4'
-          const rateScript = el.playbackRate && el.playbackRate !== 1 ? `<script>document.currentScript.previousElementSibling.playbackRate=${el.playbackRate}</script>` : ''
-          return `<div${fragClass}${fragIdx} style="${style}"><video ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:${el.objectFit||'contain'};display:block;"><source src="${el.src}" type="${videoMime}"></video>${rateScript}</div>`
+          const hasClip = (el.startTime != null && el.startTime > 0) || el.endTime != null
+          const rate = el.playbackRate && el.playbackRate !== 1 ? el.playbackRate : null
+          let vidScript = ''
+          if (rate || hasClip) {
+            const parts = ['var v=document.currentScript.previousElementSibling']
+            if (rate) parts.push(`v.playbackRate=${rate}`)
+            if (hasClip) {
+              const s = el.startTime || 0
+              if (s > 0) parts.push(`v.addEventListener('loadedmetadata',function(){v.currentTime=${s}})`)
+              if (el.endTime != null) parts.push(`v.addEventListener('timeupdate',function(){if(v.currentTime>=${el.endTime}){${el.loop ? `v.currentTime=${s};v.play()` : 'v.pause()'}}})`)
+              if (s > 0) parts.push(`v.addEventListener('play',function(){if(v.currentTime<${s})v.currentTime=${s}})`)
+            }
+            vidScript = `<script>${parts.join(';')}</script>`
+          }
+          if (hasClip && el.loop) { const li = attrs.indexOf('loop'); if (li >= 0) attrs.splice(li, 1) }
+          return `<div${fragClass}${fragIdx} style="${style}"><video ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:${el.objectFit||'contain'};display:block;"><source src="${el.src}" type="${videoMime}"></video>${vidScript}</div>`
         }
         if (el.type === 'audio') {
           const attrs = ['controls']
