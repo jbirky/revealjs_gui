@@ -1065,11 +1065,14 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 <div key={item.id} style={{ background: 'var(--bg-hover)', borderRadius: 6, padding: '6px 8px', marginBottom: 6, border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>#{idx + 1}</span>
-                    <div style={{ display: 'flex', gap: 4 }}>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                       <select style={{ fontSize: 10, padding: '1px 4px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text-secondary)', cursor: 'pointer' }}
                         value={item.side || 'top'} onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], side: e.target.value }; onUpdateElement({ items }) }}>
                         <option value="top">Top</option><option value="bottom">Bottom</option>
                       </select>
+                      <input type="number" title="Connector offset" value={item.connectorLength ?? 0}
+                        onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], connectorLength: Number(e.target.value) || 0 }; onUpdateElement({ items }) }}
+                        style={{ width: 36, fontSize: 10, padding: '1px 3px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text-secondary)', textAlign: 'center' }} />
                       <button onClick={() => { const items = selectedElement.items.filter((_, i) => i !== idx); onUpdateElement({ items }) }}
                         style={{ background: 'none', border: 'none', color: 'var(--danger, #ef4444)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>×</button>
                     </div>

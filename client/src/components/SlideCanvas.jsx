@@ -2000,7 +2000,8 @@ function TimelineRenderer({ element }) {
         })}
         {items.map((item) => {
           const x = datePos(item.date), isTop = item.side !== 'bottom'
-          const cardY = isTop ? 8 : lineY + 28, cardH = isTop ? lineY - 36 : h - lineY - 36
+          const cl = item.connectorLength ?? 0
+          const cardY = isTop ? 8 - cl : lineY + 28 + cl, cardH = isTop ? lineY - 36 : h - lineY - 36
           const connY1 = isTop ? cardY + cardH : lineY, connY2 = isTop ? lineY : cardY
           const imgH = item.image ? Math.min(cardH * 0.55, 60) : 0
           const isExpanded = expandedId === item.id

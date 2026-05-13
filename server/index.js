@@ -565,8 +565,8 @@ function generateRevealHTML(presentation) {
           svg += `<line x1="${pad}" y1="${lineY}" x2="${w-pad}" y2="${lineY}" stroke="${lc}" stroke-width="2"/>`
           for (const t of ticks) { const x = datePos(t.date); svg += `<line x1="${x}" y1="${lineY-4}" x2="${x}" y2="${lineY+4}" stroke="${lc}" stroke-width="1.5"/><text x="${x}" y="${lineY+14}" text-anchor="end" fill="${tc}" font-size="${fs-1}" opacity="0.5" transform="rotate(-45,${x},${lineY+14})">${t.label}</text>` }
           for (const item of el.items || []) {
-            const x = datePos(item.date), isTop = item.side !== 'bottom'
-            const cardY = isTop ? 8 : lineY + 28, cardH = isTop ? lineY - 36 : h - lineY - 36
+            const x = datePos(item.date), isTop = item.side !== 'bottom', cl = item.connectorLength ?? 0
+            const cardY = isTop ? 8 - cl : lineY + 28 + cl, cardH = isTop ? lineY - 36 : h - lineY - 36
             const connY1 = isTop ? cardY + cardH : lineY, connY2 = isTop ? lineY : cardY
             const imgH = item.image ? Math.min(cardH * 0.55, 60) : 0
             const hasExpand = item.image || item.detailedDescription
