@@ -990,21 +990,22 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
           )}
 
           {/* Timeline options */}
-          {selectedElement.type === 'timeline' && (
+          {selectedElement.type === 'timeline' && (() => {
+            const spacing = selectedElement.tickSpacing || 'auto'
+            const yearStep = spacing === '1000year' ? 1000 : spacing === '100year' ? 100 : spacing === '10year' ? 10 : spacing === 'year' ? 1 : 0
+            const useYearSelect = yearStep >= 1
+            const startYear = useYearSelect ? new Date(selectedElement.startDate).getFullYear() : 0
+            const endYear = useYearSelect ? new Date(selectedElement.endDate).getFullYear() : 0
+            const roundTo = (y, step) => Math.round(y / step) * step
+            const rangeMin = useYearSelect ? roundTo(startYear - yearStep * 20, yearStep) : 0
+            const rangeMax = useYearSelect ? roundTo(endYear + yearStep * 20, yearStep) : 0
+            const yearOptions = []
+            if (useYearSelect) { for (let y = rangeMin; y <= rangeMax; y += yearStep) yearOptions.push(y) }
+            return (
             <div style={{ marginBottom: 10 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Start Date</div>
-                  <input className="prop-input" type="date" value={selectedElement.startDate || ''} onChange={e => onUpdateElement({ startDate: e.target.value })} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>End Date</div>
-                  <input className="prop-input" type="date" value={selectedElement.endDate || ''} onChange={e => onUpdateElement({ endDate: e.target.value })} />
-                </div>
-              </div>
               <div style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Tick Spacing</div>
-                <select className="prop-input" value={selectedElement.tickSpacing || 'auto'} onChange={e => onUpdateElement({ tickSpacing: e.target.value })} style={{ padding: '4px 6px' }}>
+                <select className="prop-input" value={spacing} onChange={e => onUpdateElement({ tickSpacing: e.target.value })} style={{ padding: '4px 6px' }}>
                   <option value="auto">Auto</option>
                   <option value="day">1 Day</option>
                   <option value="month">1 Month</option>
@@ -1013,6 +1014,28 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                   <option value="100year">100 Years</option>
                   <option value="1000year">1000 Years</option>
                 </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Start</div>
+                  {useYearSelect ? (
+                    <select className="prop-input" value={roundTo(startYear, yearStep)} onChange={e => onUpdateElement({ startDate: `${e.target.value}-01-01` })} style={{ padding: '4px 6px' }}>
+                      {yearOptions.filter(y => y < endYear).map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  ) : (
+                    <input className="prop-input" type="date" value={selectedElement.startDate || ''} onChange={e => onUpdateElement({ startDate: e.target.value })} />
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>End</div>
+                  {useYearSelect ? (
+                    <select className="prop-input" value={roundTo(endYear, yearStep)} onChange={e => onUpdateElement({ endDate: `${e.target.value}-01-01` })} style={{ padding: '4px 6px' }}>
+                      {yearOptions.filter(y => y > startYear).map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  ) : (
+                    <input className="prop-input" type="date" value={selectedElement.endDate || ''} onChange={e => onUpdateElement({ endDate: e.target.value })} />
+                  )}
+                </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
                 <div>
@@ -1060,7 +1083,7 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 + Add Event
               </button>
             </div>
-          )}
+          )})()}
 
           {/* Video options */}
           {selectedElement.type === 'video' && (
