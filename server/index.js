@@ -614,7 +614,7 @@ function generateRevealHTML(presentation) {
             return `<iframe${fragClass}${fragIdx} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
           }
           const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-          return `<div${fragClass}${fragIdx} data-latex-block="${escaped}" style="${style}display:flex;align-items:center;justify-content:center;overflow:hidden;"><span class="katex-block" style="font-size:${sc*1.4}em;color:${lc};"></span></div>`
+          return `<div${fragClass}${fragIdx} data-latex-block="${escaped}" style="${style}display:flex;align-items:center;justify-content:center;overflow:hidden;"><span class="katex-block" style="font-size:${Math.round(sc * 22)}px;color:${lc};"></span></div>`
         }
         if (el.type === 'video') {
           const attrs = []
@@ -764,14 +764,14 @@ function generateRevealHTML(presentation) {
     .reveal .slides section { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     .reveal .slides section * { text-transform: none !important; letter-spacing: normal !important; }
     /* Explicit heading sizes — override theme so present mode matches editor exactly */
-    .reveal .slides section h1 { font-size: 2.5em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
-    .reveal .slides section h2 { font-size: 1.6em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
-    .reveal .slides section h3 { font-size: 1.3em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
-    .reveal .slides section h4 { font-size: 1em;   font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
-    .reveal .slides section p  { margin: 0 0 0.4em; line-height: 1.5; }
+    .reveal .slides section h1 { font-size: 2.5em; font-weight: bold; line-height: 1.2; margin: 0 0 6px; }
+    .reveal .slides section h2 { font-size: 1.6em; font-weight: bold; line-height: 1.2; margin: 0 0 6px; }
+    .reveal .slides section h3 { font-size: 1.3em; font-weight: bold; line-height: 1.2; margin: 0 0 6px; }
+    .reveal .slides section h4 { font-size: 1em;   font-weight: bold; line-height: 1.2; margin: 0 0 6px; }
+    .reveal .slides section p  { margin: 0 0 6px; line-height: 1.5; }
     .reveal .slides section ul,
-    .reveal .slides section ol { padding-left: 1.5em; margin: 0 0 0.4em; }
-    .reveal .slides section li { margin-bottom: 0.2em; line-height: 1.5; }
+    .reveal .slides section ol { padding-left: 24px; margin: 0 0 6px; }
+    .reveal .slides section li { margin-bottom: 3px; line-height: 1.5; }
     .reveal .slides section a  { text-decoration: underline; }
     /* reveal.js constrains/decorates section imgs — reset everything */
     .reveal .slides section img { margin: 0 !important; border: none !important; background: none !important; box-shadow: none !important; max-width: none !important; max-height: none !important; }
