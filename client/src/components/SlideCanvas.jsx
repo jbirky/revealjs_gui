@@ -219,7 +219,7 @@ function getBgStyle(bg) {
   return { backgroundColor: '#1e1e2e' }
 }
 
-export default function SlideCanvas({ editor, slide, selectedElementIds, editingElementId, showGrid, gridSize = 40, showFooter, showPageNumbers, footerTimeMode = 'none', timerDuration = 20, pageNumberFormat, pageNumber, totalSlides, sectionName, footerFontSize = 14, footerFontFamily = '-apple-system,sans-serif', footerColor = 'rgba(255,255,255,0.65)', footerInactiveColor = 'rgba(255,255,255,0.25)', smartGuidesEnabled = true, footerMode = 'basic', sequenceSections = [], activeSection = null, showRulers = false, persistentGuides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onToggleSelectElement, onStartEdit, onStopEdit, onUpdateElement, onUpdateElements, onDeleteElement, onDeleteSelectedElements, onAddImage, onOpenHtmlEditor, onOpenCodeEditor, onOpenLatexEditor, onOpenManimEditor, onOpenP5Editor, slideW = 960, slideH = 540, drawTool = null, onAddDrawingStroke, globalFont = '', onUpdateAxisLines }) {
+export default function SlideCanvas({ editor, slide, selectedElementIds, editingElementId, showGrid, gridSize = 40, showFooter, showPageNumbers, footerTimeMode = 'none', timerDuration = 20, pageNumberFormat, pageNumber, totalSlides, sectionName, footerFontSize = 14, footerFontFamily = '-apple-system,sans-serif', footerColor = 'rgba(255,255,255,0.65)', footerInactiveColor = 'rgba(255,255,255,0.25)', smartGuidesEnabled = true, footerMode = 'basic', sequenceSections = [], activeSection = null, showRulers = false, persistentGuides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onToggleSelectElement, onStartEdit, onStopEdit, onUpdateElement, onUpdateElements, onDeleteElement, onDeleteSelectedElements, onAddImage, onOpenHtmlEditor, onOpenCodeEditor, onOpenLatexEditor, onOpenManimEditor, onOpenP5Editor, slideW = 960, slideH = 540, drawTool = null, onAddDrawingStroke, globalFont = '', onUpdateAxisLines, citationFontSize = 10, citationFontFamily = '-apple-system,sans-serif' }) {
   const SLIDE_W = slideW
   const SLIDE_H = slideH
   const containerRef = useRef(null)
@@ -1041,6 +1041,8 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
             }}
             onCommitCrop={commitCrop}
             globalFont={globalFont}
+            citationFontSize={citationFontSize}
+            citationFontFamily={citationFontFamily}
           />
         ))}
 
@@ -1230,7 +1232,7 @@ export default function SlideCanvas({ editor, slide, selectedElementIds, editing
   )
 }
 
-function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, isDragging, editor, onPointerDown, onClick, onDoubleClick, onContextMenu, onStopEdit, onCropHandleDown, onCommitCrop, onAutoResize, onUpdateContent, globalFont }) {
+function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, isDragging, editor, onPointerDown, onClick, onDoubleClick, onContextMenu, onStopEdit, onCropHandleDown, onCommitCrop, onAutoResize, onUpdateContent, globalFont, citationFontSize = 10, citationFontFamily = '-apple-system,sans-serif' }) {
   const contentRef = useRef(null)
   const outerRef = useRef(null)
   const lastAutoHeightRef = useRef(null)
@@ -1370,7 +1372,7 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
             </div>
           )}
           {hasCiteText && (
-            <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', fontSize: 10, color: element.citationColor || 'rgba(255,255,255,0.5)', fontFamily: '-apple-system,sans-serif', lineHeight: 1.3, padding: '3px 2px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none', textAlign: element.citationAlign || 'left' }}>
+            <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', fontSize: citationFontSize, color: element.citationColor || 'rgba(255,255,255,0.5)', fontFamily: citationFontFamily, lineHeight: 1.3, padding: '3px 2px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none', textAlign: element.citationAlign || 'left' }}>
               {element.citationText || element.citationLink}
             </div>
           )}

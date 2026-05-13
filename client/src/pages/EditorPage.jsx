@@ -2221,6 +2221,43 @@ function draw() {
                     )}
                   </div>
                 )}
+              {/* Caption Style */}
+              <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 10, fontWeight: 600 }}>Citation / Caption Style</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px', gap: 8, alignItems: 'end' }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Font</div>
+                    <select className="prop-input" value={presentation.citationFontFamily || '-apple-system,sans-serif'}
+                      onChange={e => setPresentation(prev => ({ ...prev, citationFontFamily: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 8px' }}>
+                      <optgroup label="Sans-serif">
+                        <option value="-apple-system,sans-serif">System</option>
+                        <option value="Inter,sans-serif">Inter</option>
+                        <option value="Roboto,sans-serif">Roboto</option>
+                        <option value="'Open Sans',sans-serif">Open Sans</option>
+                        <option value="'Source Sans Pro',sans-serif">Source Sans Pro</option>
+                      </optgroup>
+                      <optgroup label="Serif">
+                        <option value="'Playfair Display',serif">Playfair Display</option>
+                        <option value="Merriweather,serif">Merriweather</option>
+                        <option value="'Latin Modern Roman',serif">Latin Modern Roman</option>
+                      </optgroup>
+                      <optgroup label="Monospace">
+                        <option value="'Fira Code',monospace">Fira Code</option>
+                        <option value="'JetBrains Mono',monospace">JetBrains Mono</option>
+                      </optgroup>
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Size</div>
+                    <input className="prop-input" type="number" min="6" max="24" step="1"
+                      value={presentation.citationFontSize || 10}
+                      onChange={e => setPresentation(prev => ({ ...prev, citationFontSize: Math.max(6, Math.min(24, Number(e.target.value) || 10)) }))}
+                      style={{ width: '100%', padding: '6px 8px' }} />
+                  </div>
+                </div>
+              </div>
+
               </div>
             </div>
           </div>
@@ -2758,6 +2795,8 @@ function draw() {
               footerFontFamily={presentation.footerFontFamily || '-apple-system,sans-serif'}
               footerColor={presentation.footerColor || 'rgba(255,255,255,0.65)'}
               footerInactiveColor={presentation.footerInactiveColor || 'rgba(255,255,255,0.25)'}
+              citationFontSize={presentation.citationFontSize || 10}
+              citationFontFamily={presentation.citationFontFamily || '-apple-system,sans-serif'}
               footerMode={presentation.footerMode || 'basic'}
               sequenceSections={presentation.sequenceSections || []}
               activeSection={currentSlide?.activeSection ?? null}
