@@ -983,6 +983,67 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
             </>
           )}
 
+          {/* Timeline options */}
+          {selectedElement.type === 'timeline' && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Start Date</div>
+                  <input className="prop-input" type="date" value={selectedElement.startDate || ''} onChange={e => onUpdateElement({ startDate: e.target.value })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>End Date</div>
+                  <input className="prop-input" type="date" value={selectedElement.endDate || ''} onChange={e => onUpdateElement({ endDate: e.target.value })} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Line</div>
+                  <input type="color" value={selectedElement.lineColor || '#6366f1'} onChange={e => onUpdateElement({ lineColor: e.target.value })} style={{ width: '100%', height: 24, border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Dots</div>
+                  <input type="color" value={selectedElement.dotColor || selectedElement.lineColor || '#6366f1'} onChange={e => onUpdateElement({ dotColor: e.target.value })} style={{ width: '100%', height: 24, border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Text</div>
+                  <input type="color" value={selectedElement.textColor || '#ffffff'} onChange={e => onUpdateElement({ textColor: e.target.value })} style={{ width: '100%', height: 24, border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }} />
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Font Size</div>
+              <input className="prop-input" type="number" min={8} max={24} value={selectedElement.fontSize || 11} onChange={e => onUpdateElement({ fontSize: Number(e.target.value) })} style={{ width: 60, marginBottom: 8 }} />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Events</div>
+              {(selectedElement.items || []).map((item, idx) => (
+                <div key={item.id} style={{ background: 'var(--bg-hover)', borderRadius: 6, padding: '6px 8px', marginBottom: 6, border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>#{idx + 1}</span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <select style={{ fontSize: 10, padding: '1px 4px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text-secondary)', cursor: 'pointer' }}
+                        value={item.side || 'top'} onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], side: e.target.value }; onUpdateElement({ items }) }}>
+                        <option value="top">Top</option><option value="bottom">Bottom</option>
+                      </select>
+                      <button onClick={() => { const items = selectedElement.items.filter((_, i) => i !== idx); onUpdateElement({ items }) }}
+                        style={{ background: 'none', border: 'none', color: 'var(--danger, #ef4444)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>×</button>
+                    </div>
+                  </div>
+                  <input className="prop-input" type="date" value={item.date || ''} onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], date: e.target.value }; onUpdateElement({ items }) }} style={{ marginBottom: 3, fontSize: 11 }} />
+                  <input className="prop-input" type="text" value={item.label || ''} placeholder="Label" onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], label: e.target.value }; onUpdateElement({ items }) }} style={{ marginBottom: 3, fontSize: 11 }} />
+                  <input className="prop-input" type="text" value={item.description || ''} placeholder="Description (optional)" onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], description: e.target.value }; onUpdateElement({ items }) }} style={{ marginBottom: 3, fontSize: 11 }} />
+                  <input className="prop-input" type="text" value={item.image || ''} placeholder="Image URL (optional)" onChange={e => { const items = [...selectedElement.items]; items[idx] = { ...items[idx], image: e.target.value }; onUpdateElement({ items }) }} style={{ fontSize: 11 }} />
+                </div>
+              ))}
+              <button className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', fontSize: 11, padding: '5px 8px' }}
+                onClick={() => {
+                  const items = [...(selectedElement.items || [])]
+                  const mid = new Date((new Date(selectedElement.startDate).getTime() + new Date(selectedElement.endDate).getTime()) / 2)
+                  items.push({ id: crypto.randomUUID(), date: mid.toISOString().split('T')[0], label: 'New Event', description: '', image: '', side: items.length % 2 === 0 ? 'top' : 'bottom' })
+                  onUpdateElement({ items })
+                }}>
+                + Add Event
+              </button>
+            </div>
+          )}
+
           {/* Video options */}
           {selectedElement.type === 'video' && (
             <div style={{ marginBottom: 10 }}>

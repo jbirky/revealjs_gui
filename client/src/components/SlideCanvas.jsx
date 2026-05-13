@@ -1466,6 +1466,53 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
       {element.type === 'markdown' && (
         <MarkdownRenderer element={element} />
       )}
+      {element.type === 'timeline' && (() => {
+        const w = element.width, h = element.height
+        const t0 = new Date(element.startDate).getTime(), t1 = new Date(element.endDate).getTime()
+        const range = t1 - t0 || 1
+        const lineY = h * 0.5
+        const pad = 30
+        const lineColor = element.lineColor || '#6366f1'
+        const dotColor = element.dotColor || lineColor
+        const textColor = element.textColor || '#fff'
+        const fs = element.fontSize || 11
+        const items = element.items || []
+        const datePos = (d) => pad + ((new Date(d).getTime() - t0) / range) * (w - pad * 2)
+        const yearSpan = (t1 - t0) / (365.25 * 24 * 3600000)
+        const tickInterval = yearSpan > 8 ? 2 : 1
+        const startYear = new Date(element.startDate).getFullYear()
+        const endYear = new Date(element.endDate).getFullYear()
+        const ticks = []
+        for (let y = startYear; y <= endYear; y += tickInterval) ticks.push(y)
+        return (
+          <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block', overflow: 'visible' }}>
+            <line x1={pad} y1={lineY} x2={w - pad} y2={lineY} stroke={lineColor} strokeWidth={2} />
+            {ticks.map(y => {
+              const x = datePos(`${y}-01-01`)
+              return <g key={y}><line x1={x} y1={lineY - 4} x2={x} y2={lineY + 4} stroke={lineColor} strokeWidth={1.5} /><text x={x} y={lineY + 18} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.5}>{y}</text></g>
+            })}
+            {items.map((item) => {
+              const x = datePos(item.date)
+              const isTop = item.side !== 'bottom'
+              const cardY = isTop ? 8 : lineY + 28
+              const cardH = isTop ? lineY - 36 : h - lineY - 36
+              const connY1 = isTop ? cardY + cardH : lineY
+              const connY2 = isTop ? lineY : cardY
+              const imgH = item.image ? Math.min(cardH * 0.55, 60) : 0
+              return (
+                <g key={item.id}>
+                  <line x1={x} y1={connY1} x2={x} y2={connY2} stroke={lineColor} strokeWidth={1} strokeDasharray="3,2" opacity={0.5} />
+                  <circle cx={x} cy={lineY} r={4} fill={dotColor} />
+                  {item.image && <image href={item.image} x={x - 40} y={cardY} width={80} height={imgH} preserveAspectRatio="xMidYMid meet" clipPath={`inset(0 round 4px)`} />}
+                  <text x={x} y={cardY + imgH + fs + 2} textAnchor="middle" fill={textColor} fontSize={fs} fontWeight={600}>{item.label}</text>
+                  {item.description && <text x={x} y={cardY + imgH + fs * 2 + 4} textAnchor="middle" fill={textColor} fontSize={fs - 1} opacity={0.6}>{item.description}</text>}
+                  <text x={x} y={cardY + imgH + fs * (item.description ? 3 : 2) + 6} textAnchor="middle" fill={textColor} fontSize={fs - 2} opacity={0.35}>{item.date}</text>
+                </g>
+              )
+            })}
+          </svg>
+        )
+      })()}
       {element.type === 'chart' && (
         <ChartRenderer element={element} isSelected={isSelected} />
       )}

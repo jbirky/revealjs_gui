@@ -910,6 +910,33 @@ function draw() {
     setSelectedElementIds([newEl.id])
   }, [])
 
+  const addTimelineElement = useCallback(() => {
+    const now = new Date()
+    const startYear = now.getFullYear() - 2
+    const endYear = now.getFullYear() + 1
+    const newEl = {
+      id: crypto.randomUUID(),
+      type: 'timeline',
+      x: 40, y: 140, width: slideW - 80, height: 260, zIndex: 2,
+      startDate: `${startYear}-01-01`,
+      endDate: `${endYear}-01-01`,
+      lineColor: '#6366f1',
+      dotColor: '#6366f1',
+      textColor: '#ffffff',
+      fontSize: 11,
+      items: [
+        { id: crypto.randomUUID(), date: `${startYear}-06-01`, label: 'Event 1', description: '', image: '', side: 'top' },
+        { id: crypto.randomUUID(), date: `${startYear + 1}-03-01`, label: 'Event 2', description: '', image: '', side: 'bottom' },
+        { id: crypto.randomUUID(), date: `${startYear + 2}-01-01`, label: 'Event 3', description: '', image: '', side: 'top' },
+      ],
+    }
+    setPresentation(prev => {
+      if (!prev) return prev
+      return { ...prev, slides: prev.slides.map((s, i) => i === currentSlideIndexRef.current ? { ...s, elements: [...(s.elements || []), newEl] } : s) }
+    })
+    setSelectedElementIds([newEl.id])
+  }, [slideW])
+
   const addCalloutElement = useCallback((number) => {
     const num = number || ((currentSlide?.elements || []).filter(el => el.type === 'callout').length + 1)
     const newEl = {
@@ -2638,6 +2665,7 @@ function draw() {
             onAddLatex={addLatexElement}
             onAddMarkdown={addMarkdownElement}
             onAddChart={addChartElement}
+            onAddTimeline={addTimelineElement}
             onAddCallout={addCalloutElement}
             onAddIcon={addIconElement}
             onAddVideo={addVideoElement}

@@ -161,6 +161,33 @@ export function generateRevealHTML(presentation) {
           const escaped = srcdoc.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
           return `<iframe${dataId}${fragClass}${fragIdx}${gsapAttrs} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
+        if (el.type === 'timeline') {
+          const w = el.width, h = el.height
+          const t0 = new Date(el.startDate).getTime(), t1 = new Date(el.endDate).getTime()
+          const range = t1 - t0 || 1, pad = 30, lineY = h * 0.5
+          const lc = el.lineColor || '#6366f1', dc = el.dotColor || lc, tc = el.textColor || '#fff', fs = el.fontSize || 11
+          const datePos = (d) => pad + ((new Date(d).getTime() - t0) / range) * (w - pad * 2)
+          const yearSpan = (t1 - t0) / (365.25 * 24 * 3600000)
+          const tickInt = yearSpan > 8 ? 2 : 1
+          const sY = new Date(el.startDate).getFullYear(), eY = new Date(el.endDate).getFullYear()
+          let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
+          svg += `<line x1="${pad}" y1="${lineY}" x2="${w-pad}" y2="${lineY}" stroke="${lc}" stroke-width="2"/>`
+          for (let y = sY; y <= eY; y += tickInt) { const x = datePos(`${y}-01-01`); svg += `<line x1="${x}" y1="${lineY-4}" x2="${x}" y2="${lineY+4}" stroke="${lc}" stroke-width="1.5"/><text x="${x}" y="${lineY+18}" text-anchor="middle" fill="${tc}" font-size="${fs-1}" opacity="0.5">${y}</text>` }
+          for (const item of el.items || []) {
+            const x = datePos(item.date), isTop = item.side !== 'bottom'
+            const cardY = isTop ? 8 : lineY + 28, cardH = isTop ? lineY - 36 : h - lineY - 36
+            const connY1 = isTop ? cardY + cardH : lineY, connY2 = isTop ? lineY : cardY
+            const imgH = item.image ? Math.min(cardH * 0.55, 60) : 0
+            svg += `<line x1="${x}" y1="${connY1}" x2="${x}" y2="${connY2}" stroke="${lc}" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>`
+            svg += `<circle cx="${x}" cy="${lineY}" r="4" fill="${dc}"/>`
+            if (item.image) svg += `<image href="${absoluteSrc(item.image)}" x="${x-40}" y="${cardY}" width="80" height="${imgH}" preserveAspectRatio="xMidYMid meet"/>`
+            svg += `<text x="${x}" y="${cardY+imgH+fs+2}" text-anchor="middle" fill="${tc}" font-size="${fs}" font-weight="600">${(item.label||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text>`
+            if (item.description) svg += `<text x="${x}" y="${cardY+imgH+fs*2+4}" text-anchor="middle" fill="${tc}" font-size="${fs-1}" opacity="0.6">${item.description.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text>`
+            svg += `<text x="${x}" y="${cardY+imgH+fs*(item.description?3:2)+6}" text-anchor="middle" fill="${tc}" font-size="${fs-2}" opacity="0.35">${item.date}</text>`
+          }
+          svg += '</svg>'
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}">${svg}</div>`
+        }
         if (el.type === 'chart') {
           const { chartType = 'bar', chartData = {} } = el
           const labels = JSON.stringify(chartData.labels || [])
@@ -834,6 +861,9 @@ function generatePrintHTML(presentation) {
         }
         if (el.type === 'chart') {
           return `<div style="${style}${vis}display:flex;align-items:center;justify-content:center;background:rgba(99,102,241,0.1);color:rgba(255,255,255,0.4);font-family:sans-serif;font-size:16px;">Chart</div>`
+        }
+        if (el.type === 'timeline') {
+          return `<div style="${style}${vis}display:flex;align-items:center;justify-content:center;background:rgba(99,102,241,0.1);color:rgba(255,255,255,0.4);font-family:sans-serif;font-size:16px;">Timeline</div>`
         }
         if (el.type === 'callout') {
           const bg = el.calloutColor || '#ef4444'; const tc = el.calloutTextColor || '#ffffff'; const fs = el.fontSize || 16
