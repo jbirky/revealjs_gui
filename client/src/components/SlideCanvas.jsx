@@ -1352,6 +1352,7 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
         const hasCiteText = element.citationText || element.citationLink
         return (
         <div style={{ position: 'relative', width: '100%', height: '100%', overflow: (isCropping || hasCiteText) ? 'visible' : 'hidden' }}>
+          <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
           <img
             src={element.src} alt={element.alt || ''}
             style={element.imageW != null ? {
@@ -1372,6 +1373,7 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
             }}
             draggable={false}
           />
+          </div>
           {(element.clickToExpand || element.popupText || element.citationText || element.citationLink) && (
             <div style={{ position: 'absolute', bottom: 3, right: 3, zIndex: 20, display: 'flex', gap: 3, pointerEvents: 'none' }}>
               {(element.citationText || element.citationLink) && (
