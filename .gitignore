@@ -11,4 +11,18 @@ plans/
 .env.*
 !.env.example
 docs/.vitepress/cache/
-client/dist/
+
+# Large media files (stored in R2, not GitHub)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.wmv
+*.flv
+*.m4v
+*.zip
+*.tar.gz
+*.tar
+*.rar
+*.7z
