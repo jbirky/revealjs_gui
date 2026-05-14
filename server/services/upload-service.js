@@ -3,35 +3,40 @@
 
 const path = require('path')
 const fs = require('fs-extra')
+const crypto = require('crypto')
 const { v4: uuidv4 } = require('uuid')
 const { uploadToR2, deleteFromR2 } = require('./r2')
 
 async function handleUpload(filePath, originalFilename, mimetype, { presentationId, userId, storage }) {
-  const ext = path.extname(originalFilename || filePath)
-  const fileId = uuidv4()
-  const fileName = `${fileId}${ext}`
-
-  // URL-path portion (what the client sees after /uploads/)
-  const urlFilename = presentationId ? `${presentationId}/${fileName}` : fileName
-  // R2 key (scoped by user)
-  const storageKey = userId
-    ? `${userId}/${urlFilename}`
-    : `anonymous/${urlFilename}`
-
   const contentType = mimetype || 'application/octet-stream'
+  const fileHash = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex')
+
+  if (storage && storage.query && presentationId) {
+    const { rows } = await storage.query(
+      'SELECT filename FROM uploads WHERE presentation_id = $1 AND file_hash = $2 LIMIT 1',
+      [presentationId, fileHash]
+    )
+    if (rows.length) {
+      fs.removeSync(filePath)
+      return { url: `/uploads/${rows[0].filename}` }
+    }
+  }
+
+  const ext = path.extname(originalFilename || filePath)
+  const fileName = `${uuidv4()}${ext}`
+  const urlFilename = presentationId ? `${presentationId}/${fileName}` : fileName
+  const storageKey = userId ? `${userId}/${urlFilename}` : `anonymous/${urlFilename}`
+
   const { size } = await uploadToR2(filePath, storageKey, contentType)
 
-  // Record in uploads table
   if (storage && storage.query) {
     await storage.query(
-      'INSERT INTO uploads (id, presentation_id, user_id, filename, storage_key, content_type, size_bytes) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [uuidv4(), presentationId || null, userId || null, urlFilename, storageKey, contentType, size]
+      'INSERT INTO uploads (id, presentation_id, user_id, filename, storage_key, content_type, size_bytes, file_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [uuidv4(), presentationId || null, userId || null, urlFilename, storageKey, contentType, size, fileHash]
     )
   }
 
-  // Clean up temp file
   fs.removeSync(filePath)
-
   return { url: `/uploads/${urlFilename}` }
 }
 
