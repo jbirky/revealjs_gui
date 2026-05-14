@@ -480,16 +480,20 @@ export function generateRevealHTML(presentation) {
     /* font-family only on section (inherited) so KaTeX's explicit rules take precedence */
     .reveal .slides section { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     .reveal .slides section { text-transform: none; letter-spacing: normal; }
-    /* Heading sizes matching browser defaults (TipTap editor uses these) */
-    .reveal .slides section h1 { font-size: 2em; font-weight: bold; line-height: 1.2; margin: 0; }
-    .reveal .slides section h2 { font-size: 1.5em; font-weight: bold; line-height: 1.2; margin: 0; }
-    .reveal .slides section h3 { font-size: 1.17em; font-weight: bold; line-height: 1.2; margin: 0; }
-    .reveal .slides section h4 { font-size: 1em;   font-weight: bold; line-height: 1.2; margin: 0; }
-    .reveal .slides section p  { margin: 0; }
+    /* Match TipTap / .slide-text-content editor CSS exactly */
+    .reveal .slides section h1 { font-size: 2.5em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
+    .reveal .slides section h2 { font-size: 1.6em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
+    .reveal .slides section h3 { font-size: 1.3em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
+    .reveal .slides section h4 { font-size: 1em;   font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
+    .reveal .slides section p  { margin: 0 0 0.4em; }
     .reveal .slides section ul,
-    .reveal .slides section ol { padding-left: 24px; margin: 0; }
-    .reveal .slides section li { margin-bottom: 0; }
+    .reveal .slides section ol { padding-left: 1.5em; margin: 0 0 0.4em; }
+    .reveal .slides section li { margin-bottom: 0.2em; }
     .reveal .slides section a  { text-decoration: underline; }
+    .reveal .slides section code { background: rgba(255,255,255,0.1); padding: 2px 5px; border-radius: 3px; font-family: monospace; }
+    .reveal .slides section pre { background: rgba(0,0,0,0.4); padding: 12px 16px; border-radius: 6px; margin-bottom: 0.4em; overflow: auto; }
+    .reveal .slides section pre code { background: none; padding: 0; }
+    .reveal .slides section blockquote { border-left: 3px solid rgba(255,255,255,0.3); padding-left: 16px; opacity: 0.8; margin-bottom: 0.4em; }
     /* reveal.js constrains/decorates section imgs — reset everything */
     .reveal .slides section img { margin: 0 !important; border: none !important; background: none !important; box-shadow: none !important; max-width: none !important; max-height: none !important; }
     /* Footer — explicit CSS rule with high specificity so reveal.js theme cannot override */
