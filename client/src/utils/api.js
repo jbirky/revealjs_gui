@@ -36,6 +36,7 @@ export const api = {
     fd.append('file', file)
     return authFetch(`/api/presentations/${presentationId}/upload`, { method: 'POST', body: fd }).then(r => r.json())
   },
+  getUploads: (presentationId) => authFetch(`${BASE}/presentations/${presentationId}/uploads`).then(r => r.json()),
   getGithubConfig: () => authFetch(`${BASE}/github/config`).then(r => r.json()),
   saveGithubConfig: (data) => authFetch(`${BASE}/github/config`, {
     method: 'POST',

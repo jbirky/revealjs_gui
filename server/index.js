@@ -1241,6 +1241,26 @@ app.put('/api/presentations/:id', async (req, res) => {
   }
 })
 
+// GET /api/presentations/:id/uploads - list uploaded files
+app.get('/api/presentations/:id/uploads', async (req, res) => {
+  try {
+    const { rows } = await storage.query(
+      'SELECT id, filename, content_type, size_bytes, created_at FROM uploads WHERE presentation_id = $1 ORDER BY created_at DESC',
+      [req.params.id]
+    )
+    res.json(rows.map(r => ({
+      id: r.id,
+      url: `/uploads/${r.filename}`,
+      contentType: r.content_type,
+      size: r.size_bytes,
+      createdAt: r.created_at,
+      name: r.filename.split('/').pop(),
+    })))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // DELETE /api/presentations/:id
 app.delete('/api/presentations/:id', async (req, res) => {
   try {
