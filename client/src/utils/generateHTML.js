@@ -241,7 +241,7 @@ export function generateRevealHTML(presentation) {
           const bg = el.calloutColor || '#ef4444'
           const tc = el.calloutTextColor || '#ffffff'
           const fs = el.fontSize || 16
-          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;color:${tc};font-size:${fs}px;font-weight:700;font-family:-apple-system,sans-serif;">${el.calloutNumber || 1}</div>`
+          return `<div${dataId}${fragClass}${fragIdx}${gsapAttrs} style="${style}border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;color:${tc};font-size:${fs}px;font-weight:700;font-family:-apple-system,sans-serif;line-height:1;">${el.calloutNumber || 1}</div>`
         }
         if (el.type === 'icon') {
           const color = el.iconColor || '#ffffff'
@@ -479,7 +479,8 @@ export function generateRevealHTML(presentation) {
     /* Neutralise theme typography overrides so presentation matches editor exactly */
     /* font-family only on section (inherited) so KaTeX's explicit rules take precedence */
     .reveal .slides section { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-    .reveal .slides section { text-transform: none; letter-spacing: normal; }
+    .reveal .slides section { text-transform: none; letter-spacing: normal; line-height: normal; }
+    .reveal .slides section p, .reveal .slides section li, .reveal .slides section span { line-height: inherit; }
     /* Match TipTap / .slide-text-content editor CSS exactly */
     .reveal .slides section h1 { font-size: 2.5em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
     .reveal .slides section h2 { font-size: 1.6em; font-weight: bold; line-height: 1.2; margin: 0 0 0.4em; }
