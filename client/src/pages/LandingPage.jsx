@@ -111,6 +111,7 @@ export default function LandingPage({ onSignIn }) {
               style={{ width: '100%', aspectRatio: '16/9', border: 'none', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
 
             />
+            <p style={{ color: 'var(--text-muted, #888)', fontSize: 13, textAlign: 'center', marginTop: 8, fontStyle: 'italic' }}>(click on it, it's interactive!)</p>
           </div>
         </section>
 
