@@ -479,7 +479,7 @@ export function generateRevealHTML(presentation) {
     .reveal .slides section { padding: 0 !important; text-align: left !important; overflow: hidden !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: normal; text-transform: none; letter-spacing: normal; }
     .reveal .slides section > * { overflow: hidden; }
     /* Override ALL theme element styles to match TipTap editor exactly */
-    .reveal p { line-height: inherit !important; margin: 0 0 0.4em !important; }
+    .reveal p { line-height: inherit; margin: 0 0 0.4em !important; }
     .reveal h1, .reveal h2, .reveal h3, .reveal h4, .reveal h5, .reveal h6 { margin: 0 0 0.4em !important; text-transform: none !important; letter-spacing: normal !important; text-shadow: none !important; }
     .reveal h1 { font-size: 2.5em; font-weight: bold; line-height: 1.2; }
     .reveal h2 { font-size: 1.6em; font-weight: bold; line-height: 1.2; }
