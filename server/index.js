@@ -789,10 +789,10 @@ function generateRevealHTML(presentation) {
     /* Override reveal.js theme CSS variables to match editor */
     :root { --r-main-font-size: 16px; --r-block-margin: 0px; --r-heading-margin: 0 0 0.4em 0; --r-heading-text-transform: none; --r-heading-letter-spacing: normal; }
     /* Reset reveal.js section padding/alignment so absolute positions match the editor canvas exactly */
-    .reveal .slides section { padding: 0 !important; text-align: left !important; overflow: hidden !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: normal; text-transform: none; letter-spacing: normal; }
+    .reveal .slides section { padding: 0 !important; text-align: left !important; overflow: hidden !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: normal !important; text-transform: none; letter-spacing: normal; }
     .reveal .slides section > * { overflow: hidden; }
     /* Override ALL theme element styles to match TipTap editor exactly */
-    .reveal p { line-height: inherit; margin: 0 0 0.4em !important; }
+    .reveal p { margin: 0 0 0.4em !important; }
     .reveal h1, .reveal h2, .reveal h3, .reveal h4, .reveal h5, .reveal h6 { margin: 0 0 0.4em !important; text-transform: none !important; letter-spacing: normal !important; text-shadow: none !important; }
     .reveal h1 { font-size: 2.5em; font-weight: bold; line-height: 1.2; }
     .reveal h2 { font-size: 1.6em; font-weight: bold; line-height: 1.2; }
