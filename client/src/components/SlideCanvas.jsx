@@ -1352,16 +1352,17 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
         const hasCiteText = element.citationText || element.citationLink
         return (
         <div style={{ position: 'relative', width: '100%', height: '100%', overflow: (isCropping || hasCiteText) ? 'visible' : 'hidden' }}>
-          <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+          <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
           <img
             src={element.src} alt={element.alt || ''}
             style={element.imageW != null ? {
-              // Pixel-exact positioning so scale never changes after crop
               position: 'absolute',
               left: element.imageOffsetX ?? 0,
               top: element.imageOffsetY ?? 0,
               width: element.imageW,
               height: element.imageH,
+              maxWidth: 'none',
+              maxHeight: 'none',
               objectFit: element.objectFit || 'contain',
               pointerEvents: 'none',
               filter: imgFilter,
