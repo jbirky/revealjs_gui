@@ -977,7 +977,7 @@ function draw() {
   }, [])
 
   const addShapeElement = useCallback((shape) => {
-    const defaults = { line: { width: 300, height: 40 }, circle: { width: 200, height: 200 } }
+    const defaults = { line: { width: 300, height: 40 }, 'line-arrow': { width: 300, height: 40 }, circle: { width: 200, height: 200 } }
     const dim = defaults[shape] || { width: 200, height: 150 }
     const newEl = {
       id: crypto.randomUUID(),

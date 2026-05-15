@@ -7,6 +7,7 @@ export const SHAPES = [
   { id: 'arrow-right',  name: 'Arrow Right',       icon: '→' },
   { id: 'star',         name: 'Star',              icon: '★' },
   { id: 'line',         name: 'Line',              icon: '—' },
+  { id: 'line-arrow',   name: 'Line Arrow',        icon: '⟶' },
 ]
 
 // Returns an SVG content string (for HTML export)
@@ -27,6 +28,14 @@ export function shapeSvgString(el) {
     const lsda = el.strokeDasharray === 'dashed' ? `${lw*3} ${lw*2}` : el.strokeDasharray === 'dotted' ? `${lw} ${lw*1.5}` : ''
     const lsdaAttr = lsda ? ` stroke-dasharray="${lsda}"` : ''
     inner = `<line x1="${lw}" y1="${h/2}" x2="${w-lw}" y2="${h/2}" stroke="${lineColor}" stroke-width="${lw}"${lsdaAttr} fill="none" />`
+  } else if (shape === 'line-arrow') {
+    const lw = el.strokeWidth || 3
+    const lineColor = el.stroke && el.stroke !== 'none' ? el.stroke : (el.fill || '#ffffff')
+    const lsda = el.strokeDasharray === 'dashed' ? `${lw*3} ${lw*2}` : el.strokeDasharray === 'dotted' ? `${lw} ${lw*1.5}` : ''
+    const lsdaAttr = lsda ? ` stroke-dasharray="${lsda}"` : ''
+    const hs = Math.max(lw * 3, h * 0.3)
+    inner = `<line x1="${lw}" y1="${h/2}" x2="${w-lw}" y2="${h/2}" stroke="${lineColor}" stroke-width="${lw}"${lsdaAttr} fill="none" />`
+      + `<polyline points="${w-lw-hs},${h/2-hs} ${w-lw},${h/2} ${w-lw-hs},${h/2+hs}" stroke="${lineColor}" stroke-width="${lw}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`
   } else {
     let shapeEl = ''
     switch(shape) {

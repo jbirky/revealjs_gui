@@ -2120,6 +2120,16 @@ function ShapeRenderer({ element }) {
       const lsda = element.strokeDasharray === 'dashed' ? `${lw*3} ${lw*2}` : element.strokeDasharray === 'dotted' ? `${lw} ${lw*1.5}` : undefined
       return <line x1={lw} y1={h/2} x2={w-lw} y2={h/2} stroke={lineColor} strokeWidth={lw} strokeDasharray={lsda} fill="none" />
     }
+    if (shape === 'line-arrow') {
+      const lw = element.strokeWidth || 3
+      const lineColor = element.stroke && element.stroke !== 'none' ? element.stroke : (element.fill || '#ffffff')
+      const lsda = element.strokeDasharray === 'dashed' ? `${lw*3} ${lw*2}` : element.strokeDasharray === 'dotted' ? `${lw} ${lw*1.5}` : undefined
+      const hs = Math.max(lw * 3, h * 0.3)
+      return <>
+        <line x1={lw} y1={h/2} x2={w-lw} y2={h/2} stroke={lineColor} strokeWidth={lw} strokeDasharray={lsda} fill="none" />
+        <polyline points={`${w-lw-hs},${h/2-hs} ${w-lw},${h/2} ${w-lw-hs},${h/2+hs}`} stroke={lineColor} strokeWidth={lw} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </>
+    }
     const gProps = { fill, stroke, strokeWidth: sw, strokeDasharray: sda }
     switch(shape) {
       case 'rect':
