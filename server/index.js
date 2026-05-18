@@ -760,6 +760,22 @@ function generateRevealHTML(presentation) {
     .fragment.flip-up { transform:perspective(600px) rotateX(90deg); opacity:0; transition:transform 0.6s ease, opacity 0.3s ease; }
     .fragment.flip-down { transform:perspective(600px) rotateX(-90deg); opacity:0; transition:transform 0.6s ease, opacity 0.3s ease; }
     .fragment.flip-up.visible,.fragment.flip-down.visible { transform:none; opacity:1; }
+    /* Slide overview panel */
+    #overview-toggle { position:fixed;top:16px;left:16px;z-index:9999;background:rgba(0,0,0,0.5);color:white;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px;backdrop-filter:blur(4px);transition:background 0.15s; }
+    #overview-toggle:hover { background:rgba(0,0,0,0.75); }
+    :fullscreen #overview-toggle, :-webkit-full-screen #overview-toggle { display:none; }
+    #overview-panel { position:fixed;top:0;left:0;bottom:0;z-index:9998;background:rgba(15,15,25,0.95);backdrop-filter:blur(8px);border-right:1px solid rgba(255,255,255,0.1);transform:translateX(-100%);transition:transform 0.25s ease;overflow:hidden;display:flex;flex-direction:column; }
+    #overview-panel.open { transform:translateX(0); }
+    #overview-panel .ov-header { padding:12px 16px;font-size:12px;color:rgba(255,255,255,0.5);font-family:-apple-system,sans-serif;border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0;display:flex;align-items:center;justify-content:space-between; }
+    #overview-panel .ov-body { flex:1;overflow:auto;padding:10px; }
+    #overview-panel .ov-body.linear { display:flex;flex-direction:column;gap:8px;width:180px; }
+    #overview-panel .ov-body.sections { display:flex;flex-direction:row;gap:16px;min-width:min-content;padding:10px 14px; }
+    #overview-panel .ov-section-col { display:flex;flex-direction:column;gap:8px;min-width:140px; }
+    #overview-panel .ov-section-label { font-size:10px;color:rgba(255,255,255,0.45);font-family:-apple-system,sans-serif;text-transform:uppercase;letter-spacing:0.04em;padding:0 4px 4px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:4px;white-space:nowrap; }
+    #overview-panel .ov-thumb { position:relative;border-radius:4px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color 0.15s,box-shadow 0.15s;flex-shrink:0; }
+    #overview-panel .ov-thumb:hover { border-color:rgba(99,102,241,0.5);box-shadow:0 0 8px rgba(99,102,241,0.2); }
+    #overview-panel .ov-thumb.active { border-color:rgba(99,102,241,0.9);box-shadow:0 0 12px rgba(99,102,241,0.35); }
+    #overview-panel .ov-thumb-num { position:absolute;top:3px;left:3px;font-size:9px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.6);padding:1px 4px;border-radius:3px;font-family:-apple-system,sans-serif;z-index:2; }
   </style>${presentation.customCSS ? `\n  <style>\n${presentation.customCSS}\n  </style>` : ''}
 </head>
 <body>
@@ -769,6 +785,8 @@ ${slidesHtml}
     </div>
   </div>
   <button id="fs-btn" title="Enter fullscreen (F)" onclick="document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()">&#x26F6; Fullscreen</button>
+  <button id="overview-toggle" title="Slide overview (G)">&#x25A6; Overview</button>
+  <div id="overview-panel"><div class="ov-header"><span>Slides</span><span id="ov-count"></span></div><div class="ov-body ${presentation.overviewLayout || 'linear'}" id="ov-body"></div></div>
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
@@ -919,6 +937,116 @@ ${slidesHtml}
       });
       document.addEventListener('keydown', function(e) { if (e.key === 'Escape') dismissAll(); });
     })();
+${(() => {
+  const overviewLayout = presentation.overviewLayout || 'linear'
+  const flatSlides = (presentation.slides || []).map((s, i) => ({ h: i, v: 0, flatIdx: i, section: s.section || '' }))
+  return `
+    // ── Slide overview panel ──────────────────────────────────────────
+    (function() {
+      var LAYOUT = '${overviewLayout}';
+      var SLIDES = ${JSON.stringify(flatSlides)};
+      var panel = document.getElementById('overview-panel');
+      var body = document.getElementById('ov-body');
+      var toggle = document.getElementById('overview-toggle');
+      var countEl = document.getElementById('ov-count');
+      var thumbs = [];
+      var THUMB_W = LAYOUT === 'sections' ? 130 : 150;
+      var slideW = ${slideW}, slideH = ${slideH};
+      var thumbH = Math.round(THUMB_W * slideH / slideW);
+      var isOpen = false;
+
+      countEl.textContent = SLIDES.length;
+
+      function buildThumbnails() {
+        var allSections = document.querySelectorAll('.reveal .slides > section');
+        var slideEls = [];
+        allSections.forEach(function(sec) {
+          var nested = sec.querySelectorAll(':scope > section');
+          if (nested.length > 0) {
+            nested.forEach(function(s) { slideEls.push(s); });
+          } else {
+            slideEls.push(sec);
+          }
+        });
+
+        if (LAYOUT === 'sections') {
+          var groups = {};
+          var order = [];
+          SLIDES.forEach(function(s, i) {
+            var key = s.section || '(No Section)';
+            if (!groups[key]) { groups[key] = []; order.push(key); }
+            groups[key].push({ meta: s, idx: i, el: slideEls[i] });
+          });
+          order.forEach(function(key) {
+            var col = document.createElement('div');
+            col.className = 'ov-section-col';
+            var label = document.createElement('div');
+            label.className = 'ov-section-label';
+            label.textContent = key;
+            col.appendChild(label);
+            groups[key].forEach(function(item) {
+              col.appendChild(makeThumb(item.meta, item.idx, item.el));
+            });
+            body.appendChild(col);
+          });
+        } else {
+          SLIDES.forEach(function(s, i) {
+            body.appendChild(makeThumb(s, i, slideEls[i]));
+          });
+        }
+      }
+
+      function makeThumb(meta, idx, srcEl) {
+        var wrap = document.createElement('div');
+        wrap.className = 'ov-thumb';
+        wrap.style.width = THUMB_W + 'px';
+        wrap.style.height = thumbH + 'px';
+        var num = document.createElement('div');
+        num.className = 'ov-thumb-num';
+        num.textContent = idx + 1;
+        wrap.appendChild(num);
+        if (srcEl) {
+          var clone = srcEl.cloneNode(true);
+          clone.style.cssText = 'position:absolute;top:0;left:0;width:' + slideW + 'px;height:' + slideH + 'px;transform:scale(' + (THUMB_W/slideW) + ');transform-origin:top left;pointer-events:none;overflow:hidden;';
+          clone.querySelectorAll('.reveal-footer').forEach(function(f) { f.remove(); });
+          clone.querySelectorAll('iframe').forEach(function(f) { f.remove(); });
+          clone.querySelectorAll('video').forEach(function(v) { v.pause(); v.removeAttribute('autoplay'); });
+          wrap.appendChild(clone);
+        } else {
+          wrap.style.background = 'rgba(30,30,46,0.8)';
+        }
+        wrap.onclick = function() { Reveal.slide(meta.h, meta.v); updateActive(); };
+        thumbs.push({ el: wrap, h: meta.h, v: meta.v });
+        return wrap;
+      }
+
+      function updateActive() {
+        var state = Reveal.getIndices();
+        thumbs.forEach(function(t) {
+          if (t.h === state.h && t.v === state.v) t.el.classList.add('active');
+          else t.el.classList.remove('active');
+        });
+        var active = body.querySelector('.ov-thumb.active');
+        if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      }
+
+      function togglePanel() {
+        isOpen = !isOpen;
+        if (isOpen) panel.classList.add('open');
+        else panel.classList.remove('open');
+      }
+
+      toggle.onclick = togglePanel;
+      document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.key === 'g' || e.key === 'G') { e.preventDefault(); togglePanel(); }
+      });
+
+      Reveal.on('ready', function() { buildThumbnails(); updateActive(); });
+      Reveal.on('slidechanged', function() { updateActive(); });
+    })();
+`
+})()}
 ${showTimeWidget ? `
     (function() {
       var mode = '${footerTimeMode}';
@@ -1141,6 +1269,28 @@ app.put('/api/presentations/:id', async (req, res) => {
   }
 })
 
+// GET /api/presentations/:id/uploads - list uploaded files
+app.get('/api/presentations/:id/uploads', async (req, res) => {
+  try {
+    const pres = await storage.getPresentation(req.params.id, req.userId)
+    if (!pres) return res.status(404).json({ error: 'Not found' })
+    const { rows } = await storage.query(
+      'SELECT id, filename, content_type, size_bytes, created_at FROM uploads WHERE presentation_id = $1 ORDER BY created_at DESC',
+      [req.params.id]
+    )
+    res.json(rows.map(r => ({
+      id: r.id,
+      url: `/uploads/${r.filename}`,
+      contentType: r.content_type,
+      size: r.size_bytes,
+      createdAt: r.created_at,
+      name: r.filename.split('/').pop(),
+    })))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // DELETE /api/presentations/:id
 app.delete('/api/presentations/:id', async (req, res) => {
   try {
@@ -1191,6 +1341,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 app.post('/api/presentations/:id/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
   try {
+    const pres = await storage.getPresentation(req.params.id, req.userId)
+    if (!pres) { fs.removeSync(req.file.path); return res.status(404).json({ error: 'Not found' }) }
     let filePath = req.file.path
     if (req.file.mimetype.startsWith('video/')) {
       filePath = transcodeVideoIfNeeded(filePath)
@@ -1210,6 +1362,8 @@ app.post('/api/presentations/:id/upload', upload.single('file'), async (req, res
 // POST /api/presentations/:id/import-pptx — convert PPTX to per-slide PNG images
 app.post('/api/presentations/:id/import-pptx', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+  const pres = await storage.getPresentation(req.params.id, req.userId)
+  if (!pres) { fs.removeSync(req.file.path); return res.status(404).json({ error: 'Not found' }) }
   const tmpDir = path.join(os.tmpdir(), uuidv4())
   try {
     fs.ensureDirSync(tmpDir)
@@ -1853,6 +2007,8 @@ if (IS_CLOUD) {
 
 app.get('/api/presentations/:id/plugins', async (req, res) => {
   try {
+    const pres = await storage.getPresentation(req.params.id, req.userId)
+    if (!pres) return res.status(404).json({ error: 'Not found' })
     const plugins = await storage.getPresentationPlugins(req.params.id)
     res.json(plugins)
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -1860,6 +2016,8 @@ app.get('/api/presentations/:id/plugins', async (req, res) => {
 
 app.post('/api/presentations/:id/plugins', async (req, res) => {
   try {
+    const pres = await storage.getPresentation(req.params.id, req.userId)
+    if (!pres) return res.status(404).json({ error: 'Not found' })
     const { pluginId, config } = req.body
     await storage.enablePluginForPresentation(req.params.id, pluginId, config)
     res.json({ ok: true })
@@ -1868,6 +2026,8 @@ app.post('/api/presentations/:id/plugins', async (req, res) => {
 
 app.delete('/api/presentations/:id/plugins/:pluginId', async (req, res) => {
   try {
+    const pres = await storage.getPresentation(req.params.id, req.userId)
+    if (!pres) return res.status(404).json({ error: 'Not found' })
     await storage.disablePluginForPresentation(req.params.id, req.params.pluginId)
     res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }

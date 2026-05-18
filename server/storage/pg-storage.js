@@ -40,10 +40,11 @@ class PgStorage extends StorageInterface {
   }
 
   async getPresentation(id, userId) {
-    const { rows } = await this.query(
-      'SELECT id, data, created_at as "createdAt", updated_at as "updatedAt", expires_at as "expiresAt" FROM presentations WHERE id = $1 AND is_template = false',
-      [id]
-    )
+    const sql = userId
+      ? 'SELECT id, data, created_at as "createdAt", updated_at as "updatedAt", expires_at as "expiresAt" FROM presentations WHERE id = $1 AND user_id = $2 AND is_template = false'
+      : 'SELECT id, data, created_at as "createdAt", updated_at as "updatedAt", expires_at as "expiresAt" FROM presentations WHERE id = $1 AND is_template = false'
+    const params = userId ? [id, userId] : [id]
+    const { rows } = await this.query(sql, params)
     if (!rows.length) return null
     const r = rows[0]
     return { ...r.data, id: r.id, createdAt: r.createdAt, updatedAt: r.updatedAt, expiresAt: r.expiresAt || null }
@@ -67,15 +68,22 @@ class PgStorage extends StorageInterface {
     if (!existing) return null
     const now = new Date().toISOString()
     const merged = { ...existing, ...data, id, updatedAt: now }
-    await this.query(
-      'UPDATE presentations SET title = $1, data = $2, updated_at = $3 WHERE id = $4',
-      [merged.title || 'Untitled', JSON.stringify(merged), now, id]
-    )
+    const sql = userId
+      ? 'UPDATE presentations SET title = $1, data = $2, updated_at = $3 WHERE id = $4 AND user_id = $5'
+      : 'UPDATE presentations SET title = $1, data = $2, updated_at = $3 WHERE id = $4'
+    const params = userId
+      ? [merged.title || 'Untitled', JSON.stringify(merged), now, id, userId]
+      : [merged.title || 'Untitled', JSON.stringify(merged), now, id]
+    await this.query(sql, params)
     return merged
   }
 
   async deletePresentation(id, userId) {
-    const { rowCount } = await this.query('DELETE FROM presentations WHERE id = $1', [id])
+    const sql = userId
+      ? 'DELETE FROM presentations WHERE id = $1 AND user_id = $2'
+      : 'DELETE FROM presentations WHERE id = $1'
+    const params = userId ? [id, userId] : [id]
+    const { rowCount } = await this.query(sql, params)
     return rowCount > 0
   }
 
@@ -92,6 +100,9 @@ class PgStorage extends StorageInterface {
   // --- Templates ---
 
   async listTemplates(userId) {
+    const conditions = ['is_template = true']
+    const params = []
+    if (userId) { params.push(userId); conditions.push(`user_id = $${params.length}`) }
     const { rows } = await this.query(`
       SELECT id, title,
         data->>'theme' as theme,
@@ -101,17 +112,18 @@ class PgStorage extends StorageInterface {
         created_at as "createdAt",
         data->'slides'->0->'background' as thumbnail
       FROM presentations
-      WHERE is_template = true
+      WHERE ${conditions.join(' AND ')}
       ORDER BY updated_at DESC
-    `)
+    `, params)
     return rows.map(r => ({ ...r, slideCount: parseInt(r.slideCount) || 0, thumbnail: r.thumbnail || null }))
   }
 
   async getTemplate(id, userId) {
-    const { rows } = await this.query(
-      'SELECT id, data, created_at as "createdAt", updated_at as "updatedAt" FROM presentations WHERE id = $1 AND is_template = true',
-      [id]
-    )
+    const sql = userId
+      ? 'SELECT id, data, created_at as "createdAt", updated_at as "updatedAt" FROM presentations WHERE id = $1 AND user_id = $2 AND is_template = true'
+      : 'SELECT id, data, created_at as "createdAt", updated_at as "updatedAt" FROM presentations WHERE id = $1 AND is_template = true'
+    const params = userId ? [id, userId] : [id]
+    const { rows } = await this.query(sql, params)
     if (!rows.length) return null
     const r = rows[0]
     return { ...r.data, id: r.id, createdAt: r.createdAt, updatedAt: r.updatedAt }
@@ -134,15 +146,22 @@ class PgStorage extends StorageInterface {
     if (!existing) return null
     const now = new Date().toISOString()
     const merged = { ...existing, ...data, id, updatedAt: now }
-    await this.query(
-      'UPDATE presentations SET title = $1, data = $2, updated_at = $3 WHERE id = $4 AND is_template = true',
-      [merged.title || 'Untitled', JSON.stringify(merged), now, id]
-    )
+    const sql = userId
+      ? 'UPDATE presentations SET title = $1, data = $2, updated_at = $3 WHERE id = $4 AND user_id = $5 AND is_template = true'
+      : 'UPDATE presentations SET title = $1, data = $2, updated_at = $3 WHERE id = $4 AND is_template = true'
+    const params = userId
+      ? [merged.title || 'Untitled', JSON.stringify(merged), now, id, userId]
+      : [merged.title || 'Untitled', JSON.stringify(merged), now, id]
+    await this.query(sql, params)
     return merged
   }
 
   async deleteTemplate(id, userId) {
-    const { rowCount } = await this.query('DELETE FROM presentations WHERE id = $1 AND is_template = true', [id])
+    const sql = userId
+      ? 'DELETE FROM presentations WHERE id = $1 AND user_id = $2 AND is_template = true'
+      : 'DELETE FROM presentations WHERE id = $1 AND is_template = true'
+    const params = userId ? [id, userId] : [id]
+    const { rowCount } = await this.query(sql, params)
     return rowCount > 0
   }
 
@@ -159,22 +178,38 @@ class PgStorage extends StorageInterface {
   // --- Sharing ---
 
   async createShareToken(presentationId, userId) {
-    const { rows } = await this.query('SELECT id, share_token, share_enabled FROM presentations WHERE id = $1', [presentationId])
+    const sql = userId
+      ? 'SELECT id, share_token, share_enabled FROM presentations WHERE id = $1 AND user_id = $2'
+      : 'SELECT id, share_token, share_enabled FROM presentations WHERE id = $1'
+    const params = userId ? [presentationId, userId] : [presentationId]
+    const { rows } = await this.query(sql, params)
     if (!rows.length) return null
     const row = rows[0]
     if (row.share_enabled && row.share_token) return { token: row.share_token, shared: true }
     const token = row.share_token || uuidv4()
-    await this.query('UPDATE presentations SET share_token = $1, share_enabled = true WHERE id = $2', [token, presentationId])
+    const updateSql = userId
+      ? 'UPDATE presentations SET share_token = $1, share_enabled = true WHERE id = $2 AND user_id = $3'
+      : 'UPDATE presentations SET share_token = $1, share_enabled = true WHERE id = $2'
+    const updateParams = userId ? [token, presentationId, userId] : [token, presentationId]
+    await this.query(updateSql, updateParams)
     return { token, shared: true }
   }
 
   async deleteShareToken(presentationId, userId) {
-    await this.query('UPDATE presentations SET share_enabled = false WHERE id = $1', [presentationId])
+    const sql = userId
+      ? 'UPDATE presentations SET share_enabled = false WHERE id = $1 AND user_id = $2'
+      : 'UPDATE presentations SET share_enabled = false WHERE id = $1'
+    const params = userId ? [presentationId, userId] : [presentationId]
+    await this.query(sql, params)
     return { shared: false }
   }
 
   async getShareStatus(presentationId, userId) {
-    const { rows } = await this.query('SELECT share_token, share_enabled FROM presentations WHERE id = $1', [presentationId])
+    const sql = userId
+      ? 'SELECT share_token, share_enabled FROM presentations WHERE id = $1 AND user_id = $2'
+      : 'SELECT share_token, share_enabled FROM presentations WHERE id = $1'
+    const params = userId ? [presentationId, userId] : [presentationId]
+    const { rows } = await this.query(sql, params)
     if (!rows.length) return { shared: false, token: null }
     return { shared: rows[0].share_enabled, token: rows[0].share_enabled ? rows[0].share_token : null }
   }
@@ -205,6 +240,10 @@ class PgStorage extends StorageInterface {
   }
 
   async listSnapshots(presentationId, userId) {
+    const ownerCheck = userId
+      ? await this.query('SELECT 1 FROM presentations WHERE id = $1 AND user_id = $2', [presentationId, userId])
+      : { rows: [1] }
+    if (!ownerCheck.rows.length) return []
     const { rows } = await this.query(
       `SELECT id, label as name, created_at as "createdAt",
         jsonb_array_length(COALESCE(data->'slides', '[]'::jsonb)) as "slideCount"
@@ -222,6 +261,10 @@ class PgStorage extends StorageInterface {
   }
 
   async deleteSnapshot(presentationId, snapshotId, userId) {
+    if (userId) {
+      const { rows } = await this.query('SELECT 1 FROM presentations WHERE id = $1 AND user_id = $2', [presentationId, userId])
+      if (!rows.length) return false
+    }
     await this.query('DELETE FROM snapshots WHERE id = $1 AND presentation_id = $2', [snapshotId, presentationId])
     return true
   }

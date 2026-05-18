@@ -16,10 +16,10 @@ import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
-import { ChevronLeft, ChevronDown, Play, Download, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Play, Download, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup, Monitor } from 'lucide-react'
 import { api } from '../utils/api'
 import { generateLatexIframeHtml } from '../utils/latexRenderer'
-import { downloadHTML, downloadSlideHTML, presentInWindow, previewSlideInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
+import { downloadHTML, downloadSlideHTML, presentInWindow, presenterInWindow, previewSlideInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
 import { exportToPptx } from '../utils/exportPptx'
 import { simplifyPoints } from '../utils/drawingUtils'
 import { generateOfflineHTML } from '../utils/offlineExport'
@@ -246,6 +246,7 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [showSyncModal, setShowSyncModal] = useState(false)
   const [showSyncDropdown, setShowSyncDropdown] = useState(false)
   const [showDefaultSettings, setShowDefaultSettings] = useState(false)
+  const [showPresentDropdown, setShowPresentDropdown] = useState(false)
   const [showKineticModal, setShowKineticModal] = useState(false)
   const [showMathGridModal, setShowMathGridModal] = useState(false)
   const [showAnimeModal, setShowAnimeModal] = useState(false)
@@ -1888,14 +1889,52 @@ function draw() {
             )}
           </div>
 
-          <button
-            className="btn btn-primary"
-            onClick={() => presentInWindow(presentation)}
-            title="Present"
-          >
-            <Play size={14} />
-            Present
-          </button>
+          <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex' }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => presentInWindow(presentation)}
+                title="Present"
+                style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+              >
+                <Play size={14} />
+                Present
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowPresentDropdown(v => !v)}
+                title="Present options"
+                style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: '1px solid rgba(255,255,255,0.2)', padding: '6px 5px' }}
+              >
+                <ChevronDown size={12} />
+              </button>
+            </div>
+            {showPresentDropdown && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowPresentDropdown(false)} />
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, minWidth: 170, overflow: 'hidden' }}>
+                  <button
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    onClick={() => { setShowPresentDropdown(false); presentInWindow(presentation) }}
+                  >
+                    <Play size={14} />
+                    Present
+                  </button>
+                  <button
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    onClick={() => { setShowPresentDropdown(false); presenterInWindow(presentation) }}
+                  >
+                    <Monitor size={14} />
+                    Presenter Mode
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2048,6 +2087,17 @@ function draw() {
                     style={{ accentColor: 'var(--accent)' }} />
                   Show grid in present mode
                 </label>
+              </div>
+
+              {/* Overview Panel */}
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500 }}>Slide Overview (present mode)</div>
+                <select className="prop-input" value={presentation.overviewLayout || 'linear'}
+                  onChange={e => setPresentation(prev => ({ ...prev, overviewLayout: e.target.value }))}
+                  style={{ width: '100%', padding: '6px 8px' }}>
+                  <option value="linear">Linear</option>
+                  <option value="sections">Group by Section</option>
+                </select>
               </div>
 
               {/* Footer */}

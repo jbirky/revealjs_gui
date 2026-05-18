@@ -445,6 +445,22 @@ export function generateRevealHTML(presentation) {
     .fragment.flip-up { transform:perspective(600px) rotateX(90deg); opacity:0; transition:transform 0.6s ease, opacity 0.3s ease; }
     .fragment.flip-down { transform:perspective(600px) rotateX(-90deg); opacity:0; transition:transform 0.6s ease, opacity 0.3s ease; }
     .fragment.flip-up.visible,.fragment.flip-down.visible { transform:none; opacity:1; }
+    /* Slide overview panel */
+    #overview-toggle { position:fixed;top:16px;left:16px;z-index:9999;background:rgba(0,0,0,0.5);color:white;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px;backdrop-filter:blur(4px);transition:background 0.15s; }
+    #overview-toggle:hover { background:rgba(0,0,0,0.75); }
+    :fullscreen #overview-toggle, :-webkit-full-screen #overview-toggle { display:none; }
+    #overview-panel { position:fixed;top:0;left:0;bottom:0;z-index:9998;background:rgba(15,15,25,0.95);backdrop-filter:blur(8px);border-right:1px solid rgba(255,255,255,0.1);transform:translateX(-100%);transition:transform 0.25s ease;overflow:hidden;display:flex;flex-direction:column; }
+    #overview-panel.open { transform:translateX(0); }
+    #overview-panel .ov-header { padding:12px 16px;font-size:12px;color:rgba(255,255,255,0.5);font-family:-apple-system,sans-serif;border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0;display:flex;align-items:center;justify-content:space-between; }
+    #overview-panel .ov-body { flex:1;overflow:auto;padding:10px; }
+    #overview-panel .ov-body.linear { display:flex;flex-direction:column;gap:8px;width:180px; }
+    #overview-panel .ov-body.sections { display:flex;flex-direction:row;gap:16px;min-width:min-content;padding:10px 14px; }
+    #overview-panel .ov-section-col { display:flex;flex-direction:column;gap:8px;min-width:140px; }
+    #overview-panel .ov-section-label { font-size:10px;color:rgba(255,255,255,0.45);font-family:-apple-system,sans-serif;text-transform:uppercase;letter-spacing:0.04em;padding:0 4px 4px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:4px;white-space:nowrap; }
+    #overview-panel .ov-thumb { position:relative;border-radius:4px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color 0.15s,box-shadow 0.15s;flex-shrink:0; }
+    #overview-panel .ov-thumb:hover { border-color:rgba(99,102,241,0.5);box-shadow:0 0 8px rgba(99,102,241,0.2); }
+    #overview-panel .ov-thumb.active { border-color:rgba(99,102,241,0.9);box-shadow:0 0 12px rgba(99,102,241,0.35); }
+    #overview-panel .ov-thumb-num { position:absolute;top:3px;left:3px;font-size:9px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.6);padding:1px 4px;border-radius:3px;font-family:-apple-system,sans-serif;z-index:2; }
   </style>${presentation.customCSS ? `\n  <style>\n${presentation.customCSS}\n  </style>` : ''}
 </head>
 <body>
@@ -454,6 +470,8 @@ ${slidesHtml}
     </div>
   </div>
   <button id="fs-btn" title="Enter fullscreen (F)" onclick="document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()">&#x26F6; Fullscreen</button>
+  <button id="overview-toggle" title="Slide overview (G)">&#x25A6; Overview</button>
+  <div id="overview-panel"><div class="ov-header"><span>Slides</span><span id="ov-count"></span></div><div class="ov-body ${presentation.overviewLayout || 'linear'}" id="ov-body"></div></div>
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
@@ -646,6 +664,120 @@ ${slidesHtml}
       document.addEventListener('keydown', function(e) { if (e.key === 'Escape') dismissAll(); });
     })();
 
+${(() => {
+  const overviewLayout = presentation.overviewLayout || 'linear'
+  const colsData = columns.map((colSlides, h) => colSlides.map((slide, v) => {
+    const flatIdx = presentation.slides.indexOf(slide)
+    return { h, v, flatIdx, section: slide.section || '' }
+  }))
+  const flatSlides = colsData.flat()
+  return `
+    // ── Slide overview panel ──────────────────────────────────────────
+    (function() {
+      var LAYOUT = '${overviewLayout}';
+      var SLIDES = ${JSON.stringify(flatSlides)};
+      var panel = document.getElementById('overview-panel');
+      var body = document.getElementById('ov-body');
+      var toggle = document.getElementById('overview-toggle');
+      var countEl = document.getElementById('ov-count');
+      var thumbs = [];
+      var THUMB_W = LAYOUT === 'sections' ? 130 : 150;
+      var slideW = ${slideW}, slideH = ${slideH};
+      var thumbH = Math.round(THUMB_W * slideH / slideW);
+      var isOpen = false;
+
+      countEl.textContent = SLIDES.length;
+
+      function buildThumbnails() {
+        var allSections = document.querySelectorAll('.reveal .slides > section');
+        var slideEls = [];
+        allSections.forEach(function(sec) {
+          var nested = sec.querySelectorAll(':scope > section');
+          if (nested.length > 0) {
+            nested.forEach(function(s) { slideEls.push(s); });
+          } else {
+            slideEls.push(sec);
+          }
+        });
+
+        if (LAYOUT === 'sections') {
+          var groups = {};
+          var order = [];
+          SLIDES.forEach(function(s, i) {
+            var key = s.section || '(No Section)';
+            if (!groups[key]) { groups[key] = []; order.push(key); }
+            groups[key].push({ meta: s, idx: i, el: slideEls[i] });
+          });
+          order.forEach(function(key) {
+            var col = document.createElement('div');
+            col.className = 'ov-section-col';
+            var label = document.createElement('div');
+            label.className = 'ov-section-label';
+            label.textContent = key;
+            col.appendChild(label);
+            groups[key].forEach(function(item) {
+              col.appendChild(makeThumb(item.meta, item.idx, item.el));
+            });
+            body.appendChild(col);
+          });
+        } else {
+          SLIDES.forEach(function(s, i) {
+            body.appendChild(makeThumb(s, i, slideEls[i]));
+          });
+        }
+      }
+
+      function makeThumb(meta, idx, srcEl) {
+        var wrap = document.createElement('div');
+        wrap.className = 'ov-thumb';
+        wrap.style.width = THUMB_W + 'px';
+        wrap.style.height = thumbH + 'px';
+        var num = document.createElement('div');
+        num.className = 'ov-thumb-num';
+        num.textContent = idx + 1;
+        wrap.appendChild(num);
+        if (srcEl) {
+          var clone = srcEl.cloneNode(true);
+          clone.style.cssText = 'position:absolute;top:0;left:0;width:' + slideW + 'px;height:' + slideH + 'px;transform:scale(' + (THUMB_W/slideW) + ');transform-origin:top left;pointer-events:none;overflow:hidden;';
+          clone.querySelectorAll('.reveal-footer').forEach(function(f) { f.remove(); });
+          clone.querySelectorAll('iframe').forEach(function(f) { f.remove(); });
+          clone.querySelectorAll('video').forEach(function(v) { v.pause(); v.removeAttribute('autoplay'); });
+          wrap.appendChild(clone);
+        } else {
+          wrap.style.background = 'rgba(30,30,46,0.8)';
+        }
+        wrap.onclick = function() { Reveal.slide(meta.h, meta.v); updateActive(); };
+        thumbs.push({ el: wrap, h: meta.h, v: meta.v });
+        return wrap;
+      }
+
+      function updateActive() {
+        var state = Reveal.getIndices();
+        thumbs.forEach(function(t) {
+          if (t.h === state.h && t.v === state.v) t.el.classList.add('active');
+          else t.el.classList.remove('active');
+        });
+        var active = body.querySelector('.ov-thumb.active');
+        if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      }
+
+      function togglePanel() {
+        isOpen = !isOpen;
+        if (isOpen) panel.classList.add('open');
+        else panel.classList.remove('open');
+      }
+
+      toggle.onclick = togglePanel;
+      document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.key === 'g' || e.key === 'G') { e.preventDefault(); togglePanel(); }
+      });
+
+      Reveal.on('ready', function() { buildThumbnails(); updateActive(); });
+      Reveal.on('slidechanged', function() { updateActive(); });
+    })();
+`
+})()}
 ${showTimeWidget ? `
     // Time widget (clock or timer)
     (function() {
@@ -1033,4 +1165,223 @@ export function presentInWindow(presentation) {
   const url = URL.createObjectURL(blob)
   window.open(url, '_blank')
   setTimeout(() => URL.revokeObjectURL(url), 60000)
+}
+
+export function presenterInWindow(presentation) {
+  const html = generatePresenterHTML(presentation)
+  const blob = new Blob([html], { type: 'text/html' })
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 120000)
+}
+
+export function generatePresenterHTML(presentation) {
+  const slideW = presentation.slideWidth || 960
+  const slideH = presentation.slideHeight || 540
+  const slides = presentation.slides || []
+
+  const slideMeta = JSON.stringify(slides.map(s => ({
+    notes: s.notes || '',
+    section: s.section || '',
+  })))
+
+  const revealHTML = generateRevealHTML({
+    ...presentation,
+    _presenterEmbed: true,
+  })
+  const revealDataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(revealHTML)}`
+
+  const thumbScale = 140 / slideW
+  const thumbH = Math.round(140 * slideH / slideW)
+  const thumbEntries = slides.map((slide, i) => {
+    const bgStyle = (() => {
+      const bg = slide.background
+      if (!bg) return 'background:#1e1e2e;'
+      if (bg.type === 'color') return `background:${bg.color || '#1e1e2e'};`
+      if (bg.type === 'gradient') return `background:${bg.gradient || '#1e1e2e'};`
+      if (bg.type === 'image' && bg.image) return `background-image:url(${absoluteSrc(bg.image)});background-size:${bg.size||'cover'};background-position:${bg.position||'center'};`
+      return 'background:#1e1e2e;'
+    })()
+    const textEls = (slide.elements || [])
+      .filter(el => el.type === 'text')
+      .sort((a, b) => a.y - b.y)
+      .slice(0, 3)
+      .map(el => {
+        const plain = (el.content || '').replace(/<[^>]*>/g, '').trim()
+        return plain ? `<div style="font-size:7px;color:rgba(255,255,255,0.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px;">${escapeHtml(plain.substring(0, 60))}</div>` : ''
+      }).join('')
+    return `<div class="pv-thumb" data-idx="${i}" style="width:140px;height:${thumbH}px;${bgStyle}">${textEls}<span class="pv-thumb-num">${i + 1}</span></div>`
+  }).join('\n          ')
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Presenter — ${escapeHtml(presentation.title || 'Presentation')}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0d0d14; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .pv-layout { display: flex; width: 100%; height: 100%; }
+    .pv-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .pv-header { height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: #13131d; border-bottom: 1px solid rgba(255,255,255,0.06); flex-shrink: 0; }
+    .pv-header-title { font-size: 12px; color: rgba(255,255,255,0.5); }
+    .pv-header-slide { font-size: 12px; color: rgba(255,255,255,0.7); font-weight: 600; }
+    .pv-header-time { font-size: 12px; color: rgba(255,255,255,0.45); font-variant-numeric: tabular-nums; }
+    .pv-iframe-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 12px; overflow: hidden; }
+    .pv-iframe-wrap iframe { border: none; border-radius: 6px; box-shadow: 0 4px 24px rgba(0,0,0,0.5); }
+    .pv-sidebar { width: 320px; min-width: 260px; max-width: 400px; display: flex; flex-direction: column; border-left: 1px solid rgba(255,255,255,0.06); background: #111119; overflow: hidden; resize: horizontal; }
+    .pv-notes { flex: 1; overflow-y: auto; padding: 16px; min-height: 0; }
+    .pv-notes-label { font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    .pv-notes-text { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.85); white-space: pre-wrap; }
+    .pv-notes-empty { font-size: 13px; color: rgba(255,255,255,0.25); font-style: italic; }
+    .pv-upcoming { flex-shrink: 0; border-top: 1px solid rgba(255,255,255,0.06); padding: 12px; overflow-x: auto; overflow-y: hidden; }
+    .pv-upcoming-label { font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    .pv-upcoming-row { display: flex; gap: 8px; }
+    .pv-thumb { position: relative; border-radius: 4px; overflow: hidden; flex-shrink: 0; border: 2px solid transparent; cursor: pointer; transition: border-color 0.15s; display: flex; flex-direction: column; justify-content: center; }
+    .pv-thumb:hover { border-color: rgba(99,102,241,0.4); }
+    .pv-thumb.active { border-color: rgba(99,102,241,0.9); }
+    .pv-thumb.current { border-color: rgba(34,197,94,0.8); }
+    .pv-thumb-num { position: absolute; top: 2px; left: 2px; font-size: 8px; color: rgba(255,255,255,0.7); background: rgba(0,0,0,0.6); padding: 1px 4px; border-radius: 2px; z-index: 2; }
+    .pv-nav { display: flex; gap: 6px; }
+    .pv-nav button { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); color: #e0e0e0; border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
+    .pv-nav button:hover { background: rgba(255,255,255,0.14); }
+  </style>
+</head>
+<body>
+  <div class="pv-layout">
+    <div class="pv-main">
+      <div class="pv-header">
+        <span class="pv-header-title">${escapeHtml(presentation.title || 'Presentation')}</span>
+        <span class="pv-header-slide" id="pv-slide-indicator">Slide 1 / ${slides.length}</span>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span class="pv-header-time" id="pv-elapsed">00:00</span>
+          <div class="pv-nav">
+            <button id="pv-prev" title="Previous (←)">← Prev</button>
+            <button id="pv-next" title="Next (→)">Next →</button>
+          </div>
+        </div>
+      </div>
+      <div class="pv-iframe-wrap" id="pv-iframe-wrap">
+        <iframe id="pv-iframe" src="${revealDataUrl}"></iframe>
+      </div>
+    </div>
+    <div class="pv-sidebar">
+      <div class="pv-notes" id="pv-notes">
+        <div class="pv-notes-label">Speaker Notes</div>
+        <div class="pv-notes-text" id="pv-notes-text"></div>
+      </div>
+      <div class="pv-upcoming" id="pv-upcoming">
+        <div class="pv-upcoming-label">Upcoming Slides</div>
+        <div class="pv-upcoming-row" id="pv-upcoming-row">
+          ${thumbEntries}
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    var SLIDES = ${slideMeta};
+    var TOTAL = SLIDES.length;
+    var currentFlat = 0;
+    var iframe = document.getElementById('pv-iframe');
+    var notesText = document.getElementById('pv-notes-text');
+    var indicator = document.getElementById('pv-slide-indicator');
+    var elapsedEl = document.getElementById('pv-elapsed');
+    var thumbs = document.querySelectorAll('.pv-thumb');
+    var Reveal = null;
+    var startTime = Date.now();
+
+    // Elapsed timer
+    setInterval(function() {
+      var s = Math.floor((Date.now() - startTime) / 1000);
+      var m = Math.floor(s / 60); s = s % 60;
+      var h = Math.floor(m / 60); m = m % 60;
+      elapsedEl.textContent = h > 0
+        ? h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s
+        : (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    }, 1000);
+
+    // Size the iframe to fit the available space while maintaining aspect ratio
+    function sizeIframe() {
+      var wrap = document.getElementById('pv-iframe-wrap');
+      var maxW = wrap.clientWidth - 24;
+      var maxH = wrap.clientHeight - 24;
+      var aspect = ${slideW} / ${slideH};
+      var w, h;
+      if (maxW / maxH > aspect) { h = maxH; w = Math.round(h * aspect); }
+      else { w = maxW; h = Math.round(w / aspect); }
+      iframe.style.width = w + 'px';
+      iframe.style.height = h + 'px';
+    }
+    window.addEventListener('resize', sizeIframe);
+
+    function updateState(flatIdx) {
+      currentFlat = flatIdx;
+      var meta = SLIDES[flatIdx] || {};
+      notesText.innerHTML = meta.notes
+        ? '<span>' + meta.notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\n/g,'<br>') + '</span>'
+        : '<span class="pv-notes-empty">No notes for this slide</span>';
+      var section = meta.section ? '  —  ' + meta.section : '';
+      indicator.textContent = 'Slide ' + (flatIdx + 1) + ' / ' + TOTAL + section;
+      thumbs.forEach(function(t, i) {
+        t.classList.toggle('current', i === flatIdx);
+        t.classList.toggle('active', i > flatIdx && i <= flatIdx + 3);
+      });
+      // Scroll upcoming to show current context
+      var activeThumb = thumbs[Math.min(flatIdx + 1, TOTAL - 1)];
+      if (activeThumb) activeThumb.scrollIntoView({ inline: 'nearest', behavior: 'smooth' });
+    }
+
+    // Build flat index map from Reveal's h,v coordinates
+    var flatMap = {}; // "h,v" -> flatIdx
+    iframe.addEventListener('load', function() {
+      sizeIframe();
+      try {
+        var iWin = iframe.contentWindow;
+        Reveal = iWin.Reveal;
+        // Wait for Reveal to be ready
+        function tryInit() {
+          if (!Reveal || !Reveal.isReady || !Reveal.isReady()) {
+            setTimeout(tryInit, 100);
+            return;
+          }
+          // Build flat map
+          var slides = Reveal.getSlides();
+          slides.forEach(function(s, i) {
+            var idx = Reveal.getIndices(s);
+            flatMap[idx.h + ',' + idx.v] = i;
+          });
+          Reveal.on('slidechanged', function(e) {
+            var key = (e.indexh || 0) + ',' + (e.indexv || 0);
+            var fi = flatMap[key];
+            if (fi != null) updateState(fi);
+          });
+          updateState(0);
+        }
+        tryInit();
+      } catch(e) { console.warn('Presenter: could not access iframe Reveal', e); }
+    });
+
+    // Navigation
+    function goFlat(fi) {
+      fi = Math.max(0, Math.min(TOTAL - 1, fi));
+      if (Reveal) {
+        var slides = Reveal.getSlides();
+        if (slides[fi]) {
+          var idx = Reveal.getIndices(slides[fi]);
+          Reveal.slide(idx.h, idx.v);
+        }
+      }
+    }
+    document.getElementById('pv-prev').onclick = function() { goFlat(currentFlat - 1); };
+    document.getElementById('pv-next').onclick = function() { goFlat(currentFlat + 1); };
+    thumbs.forEach(function(t) {
+      t.onclick = function() { goFlat(parseInt(t.getAttribute('data-idx'))); };
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); goFlat(currentFlat + 1); }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); goFlat(currentFlat - 1); }
+    });
+  </script>
+</body>
+</html>`
 }
