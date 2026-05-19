@@ -24,18 +24,43 @@ function absoluteSrc(src) {
 }
 
 // Group slides by column for 2D navigation.
-// If no slide has a `column` property, returns each slide as its own single-item column (1D mode).
-function getSlideColumns(slides) {
+// Priority: explicit `column` property > section-based grouping > flat 1D.
+function getSlideColumns(slides, presentation = {}) {
   const is2D = slides.some(s => s.column !== undefined)
-  if (!is2D) return slides.map(s => [s])
-  const colMap = {}
-  slides.forEach(s => {
-    const c = s.column ?? 0
-    if (!colMap[c]) colMap[c] = []
-    colMap[c].push(s)
-  })
-  const sortedKeys = Object.keys(colMap).map(Number).sort((a, b) => a - b)
-  return sortedKeys.map(k => colMap[k])
+  if (is2D) {
+    const colMap = {}
+    slides.forEach(s => {
+      const c = s.column ?? 0
+      if (!colMap[c]) colMap[c] = []
+      colMap[c].push(s)
+    })
+    const sortedKeys = Object.keys(colMap).map(Number).sort((a, b) => a - b)
+    return sortedKeys.map(k => colMap[k])
+  }
+
+  if (presentation.sectionNav) {
+    const groups = []
+    const keyOrder = []
+    const keyToGroup = {}
+    slides.forEach(s => {
+      const key = s.activeSection !== undefined ? String(s.activeSection)
+        : (s.section || '')
+      if (!key) {
+        groups.push([s])
+        keyOrder.push(null)
+      } else if (keyToGroup[key]) {
+        keyToGroup[key].push(s)
+      } else {
+        const group = [s]
+        keyToGroup[key] = group
+        groups.push(group)
+        keyOrder.push(key)
+      }
+    })
+    return groups
+  }
+
+  return slides.map(s => [s])
 }
 
 const CUSTOM_TRANSITIONS = ['differential-rotation']
@@ -354,7 +379,7 @@ export function generateRevealHTML(presentation) {
   })
 
   // Group into columns for 2D output
-  const columns = getSlideColumns(presentation.slides)
+  const columns = getSlideColumns(presentation.slides, presentation)
   const slidesHtml = columns.map(colSlides => {
     const sections = colSlides.map(slide => {
       const idx = presentation.slides.indexOf(slide)

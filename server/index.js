@@ -20,6 +20,12 @@ const storage = createStorage()
 const { authStack, requireUser, IS_CLOUD, PLAN_LIMITS } = require('./middleware/auth')
 const { isR2Enabled, streamFromR2 } = require('./services/r2')
 const { handleUpload: r2Upload, deleteUploadsForPresentation } = require('./services/upload-service')
+const {
+  corsConfig, helmetConfig, apiLimiter, uploadLimiter, authLimiter,
+  requireValidId, requireValidSlug, requireValidSHA, validateUpload,
+  sanitizeUrl, sanitizeAttr, sanitizeCSSValue, sanitizeCustomCSS,
+  safeErrorMessage,
+} = require('./middleware/security')
 
 const DATA_DIR = process.env.SLIDES_DATA_DIR || path.join(__dirname, 'data')
 const UPLOADS_BASE = process.env.SLIDES_UPLOADS_DIR || path.join(__dirname, 'uploads')
@@ -50,7 +56,8 @@ const multerStorage = multer.diskStorage({
 })
 const upload = multer({ storage: multerStorage, limits: { fileSize: 500 * 1024 * 1024 } }) // 500MB limit for video
 
-app.use(cors())
+app.use(helmetConfig())
+app.use(cors(corsConfig()))
 
 // Stripe webhook — must be before express.json() to get raw body
 const stripeService = require('./services/stripe')
@@ -66,10 +73,11 @@ if (stripeService.isEnabled()) {
   })
 }
 
-app.use(express.json({ limit: '50mb' }))
+app.use(express.json({ limit: '10mb' }))
 if (isR2Enabled()) {
   app.get('/uploads/*', async (req, res) => {
     const urlPath = req.path.replace(/^\/uploads\//, '')
+    if (urlPath.includes('..') || urlPath.startsWith('/')) return res.status(400).send('Invalid path')
     try {
       const { rows } = await storage.query(
         'SELECT storage_key, content_type FROM uploads WHERE filename = $1',
@@ -87,7 +95,16 @@ if (isR2Enabled()) {
     }
   })
 } else {
-  app.use('/uploads', express.static(UPLOADS_DIR))
+  app.use('/uploads', express.static(UPLOADS_DIR, {
+    setHeaders(res, filePath) {
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      const ext = path.extname(filePath).toLowerCase()
+      if (ext === '.html' || ext === '.htm' || ext === '.svg') {
+        res.setHeader('Content-Type', 'application/octet-stream')
+        res.setHeader('Content-Disposition', 'attachment')
+      }
+    }
+  }))
 }
 
 // ---- Docs API (public, before auth) ----
@@ -147,10 +164,10 @@ if (fs.existsSync(docsPublic)) {
 const userPluginsDir = path.join(DATA_DIR, 'plugins')
 const bundledPluginsDir = path.join(__dirname, '..', 'plugins')
 fs.ensureDirSync(userPluginsDir)
-app.use('/api/plugins/:slug/assets', (req, res, next) => {
-  const safePath = path.normalize(req.params.slug).replace(/\.\./g, '')
-  const userDir = path.join(userPluginsDir, safePath, 'dist')
-  const bundledDir = path.join(bundledPluginsDir, safePath, 'dist')
+app.use('/api/plugins/:slug/assets', requireValidSlug(), (req, res, next) => {
+  const slug = req.params.slug
+  const userDir = path.join(userPluginsDir, slug, 'dist')
+  const bundledDir = path.join(bundledPluginsDir, slug, 'dist')
   if (fs.existsSync(userDir)) {
     express.static(userDir)(req, res, next)
   } else if (fs.existsSync(bundledDir)) {
@@ -246,6 +263,7 @@ if (IS_CLOUD) {
 
 // Protect all /api routes in cloud mode
 app.use('/api', requireUser)
+app.use('/api', apiLimiter)
 
 // Plan quota check helper
 async function checkPresentationQuota(req, res) {
@@ -297,7 +315,7 @@ app.get('/api/me', async (req, res) => {
 
 // ---- Billing API ----
 if (IS_CLOUD && stripeService.isEnabled()) {
-  app.post('/api/billing/checkout', requireUser, async (req, res) => {
+  app.post('/api/billing/checkout', authLimiter, requireUser, async (req, res) => {
     try {
       const { rows } = await storage.query('SELECT email, name FROM users WHERE id = $1', [req.userId])
       if (!rows[0]) return res.status(404).json({ error: 'User not found' })
@@ -377,8 +395,8 @@ function transcodeVideoIfNeeded(filePath) {
 // Shape SVG rendering helper (mirrors client/src/utils/shapeUtils.js)
 function shapeSvgString(el) {
   const w = el.width, h = el.height
-  const fill = el.fill || '#6366f1'
-  const stroke = el.stroke || 'none'
+  const fill = sanitizeCSSValue(el.fill) || '#6366f1'
+  const stroke = sanitizeCSSValue(el.stroke) || 'none'
   const sw = el.strokeWidth || 0
   const shape = el.shape || 'rect'
   let inner = ''
@@ -406,8 +424,8 @@ function shapeSvgString(el) {
   let textEl = ''
   if (el.text) {
     const fs = el.fontSize || 16
-    const tc = el.textColor || '#ffffff'
-    textEl = `<text x="${w/2}" y="${h/2}" dominant-baseline="middle" text-anchor="middle" font-size="${fs}" fill="${tc}">${el.text}</text>`
+    const tc = sanitizeCSSValue(el.textColor) || '#ffffff'
+    textEl = `<text x="${w/2}" y="${h/2}" dominant-baseline="middle" text-anchor="middle" font-size="${fs}" fill="${tc}">${escapeHtml(el.text)}</text>`
   }
   return `<svg width="100%" height="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="position:absolute;inset:0;overflow:visible;">${inner}${textEl}</svg>`
 }
@@ -435,10 +453,10 @@ function generateRevealHTML(presentation) {
   const showPageNumbers = presentation.showPageNumbers || false
   const pageNumberFormat = presentation.pageNumberFormat || 'c/t'
   const footerFontSize = presentation.footerFontSize || 14
-  const footerFontFamily = presentation.footerFontFamily || '-apple-system,sans-serif'
+  const footerFontFamily = sanitizeCSSValue(presentation.footerFontFamily) || '-apple-system,sans-serif'
   const footerMode = presentation.footerMode || 'basic'
   const sequenceSections = presentation.sequenceSections || []
-  const footerInactiveColor = presentation.footerInactiveColor || 'rgba(255,255,255,0.25)'
+  const footerInactiveColor = sanitizeCSSValue(presentation.footerInactiveColor) || 'rgba(255,255,255,0.25)'
   const _seenGroups = new Set()
   const totalNumberedSlides = (presentation.slides || []).filter(s => {
     if (s.showPageNumber === false) return false
@@ -450,7 +468,7 @@ function generateRevealHTML(presentation) {
   }).length
   let pageCounter = 0
   const pageGroupSeen = new Set()
-  const footerColor = presentation.footerColor || 'rgba(255,255,255,0.65)'
+  const footerColor = sanitizeCSSValue(presentation.footerColor) || 'rgba(255,255,255,0.65)'
   const showPresentGrid = presentation.showPresentGrid || false
   const presentGridSize = presentation.gridSize || 40
   const codeTheme = presentation.codeTheme || 'monokai'
@@ -458,7 +476,7 @@ function generateRevealHTML(presentation) {
   const timerDuration = presentation.timerDuration ?? 20
   const showTimeWidget = footerTimeMode !== 'none'
 
-  const slidesHtml = (presentation.slides || []).map((slide, slideIndex) => {
+  const slideEntries = (presentation.slides || []).map((slide, slideIndex) => {
     const bgAttrs = getBackgroundAttrs(slide.background)
     const notes = slide.notes ? `<aside class="notes">${slide.notes}</aside>` : ''
 
@@ -471,12 +489,12 @@ function generateRevealHTML(presentation) {
       .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
       .map(el => {
         const shadowStyle = (el.shadowBlur || el.shadowX || el.shadowY)
-          ? `box-shadow:${el.shadowX||0}px ${el.shadowY||0}px ${el.shadowBlur||0}px ${el.shadowColor||'rgba(0,0,0,0.5)'};` : ''
+          ? `box-shadow:${el.shadowX||0}px ${el.shadowY||0}px ${el.shadowBlur||0}px ${sanitizeCSSValue(el.shadowColor)||'rgba(0,0,0,0.5)'};` : ''
         const borderRadiusStyle = (el.type === 'image' || el.type === 'code') && el.borderRadius ? `border-radius:${el.borderRadius}px;` : ''
         const rotationStyle = el.rotation ? `transform:rotate(${el.rotation}deg);` : ''
         const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;z-index:${el.zIndex || 1};overflow:hidden;box-sizing:border-box;${shadowStyle}${borderRadiusStyle}${rotationStyle}`
-        const fragClass = el.fragment ? ` class="fragment ${el.fragmentAnimation || 'fade-in'}"` : ''
-        const fragIdx = el.fragment && el.fragmentIndex != null ? ` data-fragment-index="${el.fragmentIndex}"` : ''
+        const fragClass = el.fragment ? ` class="fragment ${sanitizeAttr(el.fragmentAnimation || 'fade-in')}"` : ''
+        const fragIdx = el.fragment && el.fragmentIndex != null ? ` data-fragment-index="${sanitizeAttr(el.fragmentIndex)}"` : ''
         if (el.type === 'text') {
           const textStyle = el.sizeMode === 'auto'
             ? `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:auto;z-index:${el.zIndex||1};overflow:visible;box-sizing:border-box;${shadowStyle}${rotationStyle}`
@@ -509,13 +527,15 @@ function generateRevealHTML(presentation) {
           const sup = sIdx >= 0 ? `<span class="cite-sup">${sIdx + 1}</span>` : ''
           const clipOpen = citeCaption ? `<div style="width:100%;height:100%;overflow:hidden;position:relative;${borderRadiusStyle}">` : ''
           const clipClose = citeCaption ? '</div>' : ''
+          const safeSrc = sanitizeUrl(el.src)
+          const safeAlt = sanitizeAttr(el.alt || '')
           if (el.imageW != null) {
             const offX = el.imageOffsetX ?? 0
             const offY = el.imageOffsetY ?? 0
             const imgStyle = `position:absolute;left:${offX}px;top:${offY}px;width:${el.imageW}px;height:${el.imageH}px;object-fit:${el.objectFit||'contain'};${filterStyle}`
-            return `<div${fragClass}${fragIdx}${expandAttr}${popupAttr} style="${cStyle}${interactiveCursor}">${clipOpen}<img src="${el.src}" alt="${el.alt||''}" style="${imgStyle}" />${clipClose}${capHtml}${sup}</div>`
+            return `<div${fragClass}${fragIdx}${expandAttr}${popupAttr} style="${cStyle}${interactiveCursor}">${clipOpen}<img src="${safeSrc}" alt="${safeAlt}" style="${imgStyle}" />${clipClose}${capHtml}${sup}</div>`
           }
-          return `<div${fragClass}${fragIdx}${expandAttr}${popupAttr} style="${cStyle}${interactiveCursor}">${clipOpen}<img src="${el.src}" alt="${el.alt||''}" style="display:block;width:100%;height:100%;object-fit:${el.objectFit||'contain'};${filterStyle}" />${clipClose}${capHtml}${sup}</div>`
+          return `<div${fragClass}${fragIdx}${expandAttr}${popupAttr} style="${cStyle}${interactiveCursor}">${clipOpen}<img src="${safeSrc}" alt="${safeAlt}" style="display:block;width:100%;height:100%;object-fit:${el.objectFit||'contain'};${filterStyle}" />${clipClose}${capHtml}${sup}</div>`
         }
         if (el.type === 'shape') {
           const opacityStyle = el.opacity !== undefined && el.opacity !== 1 ? `opacity:${el.opacity};` : ''
@@ -549,13 +569,13 @@ function generateRevealHTML(presentation) {
           return `<iframe${fragClass}${fragIdx} srcdoc="${escaped}" style="${style}border:none;background:transparent;" scrolling="no"></iframe>`
         }
         if (el.type === 'callout') {
-          const bg = el.calloutColor || '#ef4444'
-          const tc = el.calloutTextColor || '#ffffff'
+          const bg = sanitizeCSSValue(el.calloutColor) || '#ef4444'
+          const tc = sanitizeCSSValue(el.calloutTextColor) || '#ffffff'
           const fs = el.fontSize || 16
           return `<div${fragClass}${fragIdx} style="${style}border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;color:${tc};font-size:${fs}px;font-weight:700;font-family:-apple-system,sans-serif;">${el.calloutNumber || 1}</div>`
         }
         if (el.type === 'icon') {
-          const color = el.iconColor || '#ffffff'
+          const color = sanitizeCSSValue(el.iconColor) || '#ffffff'
           const sw = el.iconStrokeWidth || 2
           const iconPaths = { Star:'<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>', Heart:'<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>', Check:'<polyline points="20,6 9,17 4,12"/>', X:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>', Zap:'<polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/>', Target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>' }
           const path = iconPaths[el.iconName] || iconPaths['Star']
@@ -584,24 +604,25 @@ function generateRevealHTML(presentation) {
           if (el.autoplay) attrs.push('autoplay')
           if (el.loop) attrs.push('loop')
           if (el.muted) attrs.push('muted')
-          const posterAttr = el.poster ? ` poster="${el.poster}"` : ''
+          const safeVideoSrc = sanitizeUrl(el.src)
+          const posterAttr = el.poster ? ` poster="${sanitizeUrl(el.poster)}"` : ''
           const videoMime = /\.webm$/i.test(el.src) ? 'video/webm' : /\.ogg$/i.test(el.src) ? 'video/ogg' : 'video/mp4'
-          return `<div${fragClass}${fragIdx} style="${style}"><video ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:${el.objectFit||'contain'};display:block;"><source src="${el.src}" type="${videoMime}"></video></div>`
+          return `<div${fragClass}${fragIdx} style="${style}"><video ${attrs.join(' ')}${posterAttr} style="width:100%;height:100%;object-fit:${el.objectFit||'contain'};display:block;"><source src="${safeVideoSrc}" type="${videoMime}"></video></div>`
         }
         if (el.type === 'audio') {
           const attrs = ['controls']
           if (el.autoplay) attrs.push('autoplay')
           if (el.loop) attrs.push('loop')
           if (el.muted) attrs.push('muted')
-          return `<div${fragClass}${fragIdx} style="${style}display:flex;align-items:center;justify-content:center;"><audio src="${el.src}" ${attrs.join(' ')} style="width:90%;"></audio></div>`
+          return `<div${fragClass}${fragIdx} style="${style}display:flex;align-items:center;justify-content:center;"><audio src="${sanitizeUrl(el.src)}" ${attrs.join(' ')} style="width:90%;"></audio></div>`
         }
         if (el.type === 'table') {
           const data = el.data || [['']]
-          const headerBg = el.headerBgColor || 'rgba(99,102,241,0.3)'
-          const cellBg = el.cellBgColor || 'transparent'
-          const borderColor = el.borderColor || 'rgba(255,255,255,0.2)'
+          const headerBg = sanitizeCSSValue(el.headerBgColor) || 'rgba(99,102,241,0.3)'
+          const cellBg = sanitizeCSSValue(el.cellBgColor) || 'transparent'
+          const borderColor = sanitizeCSSValue(el.borderColor) || 'rgba(255,255,255,0.2)'
           const borderWidth = el.borderWidth ?? 1
-          const textColor = el.textColor || '#ffffff'
+          const textColor = sanitizeCSSValue(el.textColor) || '#ffffff'
           const fontSize = el.fontSize || 14
           const cellPadding = el.cellPadding || 8
           const rows = data.map((row, ri) => {
@@ -654,7 +675,7 @@ function generateRevealHTML(presentation) {
         const seqSpans = sequenceSections.map((sec, i) => {
           const isActive = activeIdx === i
           const secLabel = typeof sec === 'string' ? sec : (sec?.label || '')
-          const secActiveColor = typeof sec === 'object' && sec?.color ? sec.color : (footerColor || 'rgba(255,255,255,0.9)')
+          const secActiveColor = typeof sec === 'object' && sec?.color ? sanitizeCSSValue(sec.color) : (footerColor || 'rgba(255,255,255,0.9)')
           const color = isActive ? secActiveColor : footerInactiveColor
           const weight = isActive ? 'font-weight:700;' : 'font-weight:400;'
           return `<span style="color:${color};${weight}">${escapeHtml(secLabel || `Section ${i+1}`)}</span>`
@@ -678,7 +699,34 @@ function generateRevealHTML(presentation) {
     const perSlideTransition = slide.transition ? ` data-transition="${_isCustom ? 'none' : slide.transition}"` : ''
     const customTransAttr = _isCustom ? ` data-custom-transition="${slide.transition}"` : ''
     const perSlideSpeed = slide.transitionSpeed ? ` data-transition-speed="${slide.transitionSpeed}"` : ''
-    return `    <section${bgAttrs}${autoAnimateAttr}${autoAnimateDurAttr}${autoAnimateEasingAttr}${perSlideTransition}${customTransAttr}${perSlideSpeed} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n${sideCitationsHtml}\n      ${notes}\n    </section>`
+    return { slideIndex, html: `    <section${bgAttrs}${autoAnimateAttr}${autoAnimateDurAttr}${autoAnimateEasingAttr}${perSlideTransition}${customTransAttr}${perSlideSpeed} style="padding:0;width:${slideW}px;height:${slideH}px;overflow:hidden;font-size:42px;">\n${elementsHtml}\n${footerHtml}\n${gridHtml}\n${sideCitationsHtml}\n      ${notes}\n    </section>`, slide }
+  })
+
+  // Group slides into 2D columns (section-based or column-based)
+  const allSlides = presentation.slides || []
+  let columns
+  const hasColumns = allSlides.some(s => s.column !== undefined)
+  if (hasColumns) {
+    const colMap = {}
+    allSlides.forEach((s, i) => { const c = s.column ?? 0; if (!colMap[c]) colMap[c] = []; colMap[c].push(i) })
+    columns = Object.keys(colMap).map(Number).sort((a, b) => a - b).map(k => colMap[k])
+  } else if (presentation.sectionNav) {
+    const groups = []; const keyToGroup = {}
+    allSlides.forEach((s, i) => {
+      const key = s.activeSection !== undefined ? String(s.activeSection) : (s.section || '')
+      if (!key) { groups.push([i]) }
+      else if (keyToGroup[key]) { keyToGroup[key].push(i) }
+      else { const g = [i]; keyToGroup[key] = g; groups.push(g) }
+    })
+    columns = groups
+  } else {
+    columns = allSlides.map((_, i) => [i])
+  }
+
+  const slidesHtml = columns.map(idxs => {
+    const sections = idxs.map(i => slideEntries[i]?.html || '').join('\n')
+    if (idxs.length === 1) return sections
+    return `    <section>\n${sections}\n    </section>`
   }).join('\n')
 
   return `<!doctype html>
@@ -776,7 +824,7 @@ function generateRevealHTML(presentation) {
     #overview-panel .ov-thumb:hover { border-color:rgba(99,102,241,0.5);box-shadow:0 0 8px rgba(99,102,241,0.2); }
     #overview-panel .ov-thumb.active { border-color:rgba(99,102,241,0.9);box-shadow:0 0 12px rgba(99,102,241,0.35); }
     #overview-panel .ov-thumb-num { position:absolute;top:3px;left:3px;font-size:9px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.6);padding:1px 4px;border-radius:3px;font-family:-apple-system,sans-serif;z-index:2; }
-  </style>${presentation.customCSS ? `\n  <style>\n${presentation.customCSS}\n  </style>` : ''}
+  </style>${presentation.customCSS ? `\n  <style>\n${sanitizeCustomCSS(presentation.customCSS)}\n  </style>` : ''}
 </head>
 <body>
   <div class="reveal">
@@ -939,7 +987,9 @@ ${slidesHtml}
     })();
 ${(() => {
   const overviewLayout = presentation.overviewLayout || 'linear'
-  const flatSlides = (presentation.slides || []).map((s, i) => ({ h: i, v: 0, flatIdx: i, section: s.section || '' }))
+  const slideCoords = {}
+  columns.forEach((idxs, h) => { idxs.forEach((i, v) => { slideCoords[i] = { h, v } }) })
+  const flatSlides = (presentation.slides || []).map((s, i) => ({ h: slideCoords[i]?.h ?? i, v: slideCoords[i]?.v ?? 0, flatIdx: i, section: s.section || '' }))
   return `
     // ── Slide overview panel ──────────────────────────────────────────
     (function() {
@@ -1073,9 +1123,9 @@ ${showTimeWidget ? `
 
 function getBackgroundAttrs(bg) {
   if (!bg) return ''
-  if (bg.type === 'color' && bg.color) return ` data-background-color="${bg.color}"`
-  if (bg.type === 'image' && bg.image) return ` data-background-image="${bg.image}" data-background-size="${bg.size || 'cover'}" data-background-position="${bg.position || 'center'}"`
-  if (bg.type === 'gradient' && bg.gradient) return ` data-background-gradient="${bg.gradient}"`
+  if (bg.type === 'color' && bg.color) return ` data-background-color="${sanitizeAttr(bg.color)}"`
+  if (bg.type === 'image' && bg.image) return ` data-background-image="${sanitizeUrl(bg.image)}" data-background-size="${sanitizeAttr(bg.size || 'cover')}" data-background-position="${sanitizeAttr(bg.position || 'center')}"`
+  if (bg.type === 'gradient' && bg.gradient) return ` data-background-gradient="${sanitizeAttr(bg.gradient)}"`
   return ''
 }
 
@@ -1204,7 +1254,7 @@ app.post('/api/templates', async (req, res) => {
 })
 
 // GET /api/templates/:id
-app.get('/api/templates/:id', async (req, res) => {
+app.get('/api/templates/:id', requireValidId(), async (req, res) => {
   try {
     const template = await storage.getTemplate(req.params.id, req.userId)
     if (!template) return res.status(404).json({ error: 'Not found' })
@@ -1215,7 +1265,7 @@ app.get('/api/templates/:id', async (req, res) => {
 })
 
 // PUT /api/templates/:id
-app.put('/api/templates/:id', async (req, res) => {
+app.put('/api/templates/:id', requireValidId(), async (req, res) => {
   try {
     const updated = await storage.updateTemplate(req.params.id, req.body, req.userId)
     if (!updated) return res.status(404).json({ error: 'Not found' })
@@ -1226,7 +1276,7 @@ app.put('/api/templates/:id', async (req, res) => {
 })
 
 // DELETE /api/templates/:id
-app.delete('/api/templates/:id', async (req, res) => {
+app.delete('/api/templates/:id', requireValidId(), async (req, res) => {
   try {
     const deleted = await storage.deleteTemplate(req.params.id, req.userId)
     if (!deleted) return res.status(404).json({ error: 'Not found' })
@@ -1237,7 +1287,7 @@ app.delete('/api/templates/:id', async (req, res) => {
 })
 
 // POST /api/presentations/:id/save-as-template
-app.post('/api/presentations/:id/save-as-template', async (req, res) => {
+app.post('/api/presentations/:id/save-as-template', requireValidId(), async (req, res) => {
   try {
     const template = await storage.saveAsTemplate(req.params.id, req.body.title, req.userId)
     if (!template) return res.status(404).json({ error: 'Not found' })
@@ -1248,7 +1298,7 @@ app.post('/api/presentations/:id/save-as-template', async (req, res) => {
 })
 
 // GET /api/presentations/:id - get full presentation
-app.get('/api/presentations/:id', async (req, res) => {
+app.get('/api/presentations/:id', requireValidId(), async (req, res) => {
   try {
     const presentation = await storage.getPresentation(req.params.id, req.userId)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
@@ -1259,7 +1309,7 @@ app.get('/api/presentations/:id', async (req, res) => {
 })
 
 // PUT /api/presentations/:id - update
-app.put('/api/presentations/:id', async (req, res) => {
+app.put('/api/presentations/:id', requireValidId(), async (req, res) => {
   try {
     const updated = await storage.updatePresentation(req.params.id, req.body, req.userId)
     if (!updated) return res.status(404).json({ error: 'Not found' })
@@ -1292,7 +1342,7 @@ app.get('/api/presentations/:id/uploads', async (req, res) => {
 })
 
 // DELETE /api/presentations/:id
-app.delete('/api/presentations/:id', async (req, res) => {
+app.delete('/api/presentations/:id', requireValidId(), async (req, res) => {
   try {
     if (isR2Enabled()) {
       await deleteUploadsForPresentation(req.params.id, storage)
@@ -1306,7 +1356,7 @@ app.delete('/api/presentations/:id', async (req, res) => {
 })
 
 // POST /api/presentations/:id/duplicate
-app.post('/api/presentations/:id/duplicate', async (req, res) => {
+app.post('/api/presentations/:id/duplicate', requireValidId(), async (req, res) => {
   try {
     if (!(await checkPresentationQuota(req, res))) return
     const copy = await storage.duplicatePresentation(req.params.id, req.userId)
@@ -1318,7 +1368,7 @@ app.post('/api/presentations/:id/duplicate', async (req, res) => {
 })
 
 // POST /api/upload (legacy global upload)
-app.post('/api/upload', upload.single('file'), async (req, res) => {
+app.post('/api/upload', uploadLimiter, upload.single('file'), validateUpload, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
   try {
     let filePath = req.file.path
@@ -1338,7 +1388,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 })
 
 // POST /api/presentations/:id/upload (per-presentation upload)
-app.post('/api/presentations/:id/upload', upload.single('file'), async (req, res) => {
+app.post('/api/presentations/:id/upload', requireValidId(), uploadLimiter, upload.single('file'), validateUpload, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
   try {
     const pres = await storage.getPresentation(req.params.id, req.userId)
@@ -1360,7 +1410,7 @@ app.post('/api/presentations/:id/upload', upload.single('file'), async (req, res
 })
 
 // POST /api/presentations/:id/import-pptx — convert PPTX to per-slide PNG images
-app.post('/api/presentations/:id/import-pptx', upload.single('file'), async (req, res) => {
+app.post('/api/presentations/:id/import-pptx', requireValidId(), uploadLimiter, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
   const pres = await storage.getPresentation(req.params.id, req.userId)
   if (!pres) { fs.removeSync(req.file.path); return res.status(404).json({ error: 'Not found' }) }
@@ -1443,7 +1493,7 @@ app.post('/api/render-manim', express.json(), async (req, res) => {
 })
 
 // GET /api/presentations/:id/export - download HTML
-app.get('/api/presentations/:id/export', async (req, res) => {
+app.get('/api/presentations/:id/export', requireValidId(), async (req, res) => {
   try {
     const presentation = await storage.getPresentation(req.params.id, req.userId)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
@@ -1458,7 +1508,7 @@ app.get('/api/presentations/:id/export', async (req, res) => {
 })
 
 // GET /api/presentations/:id/present - serve in browser
-app.get('/api/presentations/:id/present', async (req, res) => {
+app.get('/api/presentations/:id/present', requireValidId(), async (req, res) => {
   try {
     const presentation = await storage.getPresentation(req.params.id, req.userId)
     if (!presentation) return res.status(404).json({ error: 'Not found' })
@@ -1476,7 +1526,7 @@ app.get('/api/presentations/:id/present', async (req, res) => {
 
 
 // POST /api/presentations/:id/share - enable sharing, return token
-app.post('/api/presentations/:id/share', async (req, res) => {
+app.post('/api/presentations/:id/share', requireValidId(), async (req, res) => {
   try {
     const result = await storage.createShareToken(req.params.id, req.userId)
     if (!result) return res.status(404).json({ error: 'Not found' })
@@ -1487,7 +1537,7 @@ app.post('/api/presentations/:id/share', async (req, res) => {
 })
 
 // DELETE /api/presentations/:id/share - disable sharing
-app.delete('/api/presentations/:id/share', async (req, res) => {
+app.delete('/api/presentations/:id/share', requireValidId(), async (req, res) => {
   try {
     res.json(await storage.deleteShareToken(req.params.id, req.userId))
   } catch (err) {
@@ -1496,7 +1546,7 @@ app.delete('/api/presentations/:id/share', async (req, res) => {
 })
 
 // GET /api/presentations/:id/share - get share status
-app.get('/api/presentations/:id/share', async (req, res) => {
+app.get('/api/presentations/:id/share', requireValidId(), async (req, res) => {
   try {
     res.json(await storage.getShareStatus(req.params.id, req.userId))
   } catch (err) {
@@ -1505,7 +1555,7 @@ app.get('/api/presentations/:id/share', async (req, res) => {
 })
 
 // GET /share/:token - public view of shared presentation
-app.get('/share/:token', async (req, res) => {
+app.get('/share/:token', requireValidId('token'), async (req, res) => {
   try {
     const presentation = await storage.getSharedPresentation(req.params.token)
     if (!presentation) return res.status(404).send('Presentation not found or sharing disabled')
@@ -1521,7 +1571,7 @@ app.get('/share/:token', async (req, res) => {
 // --- Version History ---
 
 // POST /api/presentations/:id/snapshot
-app.post('/api/presentations/:id/snapshot', async (req, res) => {
+app.post('/api/presentations/:id/snapshot', requireValidId(), async (req, res) => {
   try {
     const result = await storage.createSnapshot(req.params.id, req.body.name, req.userId)
     if (!result) return res.status(404).json({ error: 'Not found' })
@@ -1530,14 +1580,14 @@ app.post('/api/presentations/:id/snapshot', async (req, res) => {
 })
 
 // GET /api/presentations/:id/snapshots - list snapshots
-app.get('/api/presentations/:id/snapshots', async (req, res) => {
+app.get('/api/presentations/:id/snapshots', requireValidId(), async (req, res) => {
   try {
     res.json(await storage.listSnapshots(req.params.id, req.userId))
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // POST /api/presentations/:id/restore/:snapshotId - restore a snapshot
-app.post('/api/presentations/:id/restore/:snapshotId', async (req, res) => {
+app.post('/api/presentations/:id/restore/:snapshotId', requireValidId(), requireValidId('snapshotId'), async (req, res) => {
   try {
     const restored = await storage.restoreSnapshot(req.params.id, req.params.snapshotId, req.userId)
     if (!restored) return res.status(404).json({ error: 'Snapshot or presentation not found' })
@@ -1546,7 +1596,7 @@ app.post('/api/presentations/:id/restore/:snapshotId', async (req, res) => {
 })
 
 // DELETE /api/presentations/:id/snapshots/:snapshotId
-app.delete('/api/presentations/:id/snapshots/:snapshotId', async (req, res) => {
+app.delete('/api/presentations/:id/snapshots/:snapshotId', requireValidId(), requireValidId('snapshotId'), async (req, res) => {
   try {
     await storage.deleteSnapshot(req.params.id, req.params.snapshotId, req.userId)
     res.json({ success: true })
@@ -1595,12 +1645,10 @@ app.post('/api/rclone/config', async (req, res) => {
   try {
     const { username, password, remoteName } = req.body
     if (!username || !password) return res.status(400).json({ error: 'Username and password required' })
-    const name = remoteName || 'protondrive'
-    const configContent = `[${name}]
-type = protondrive
-username = ${username}
-password = ${password}
-`
+    const stripNewlines = (s) => String(s).replace(/[\r\n]/g, '')
+    const name = stripNewlines(remoteName || 'protondrive').replace(/[[\]]/g, '')
+    if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) return res.status(400).json({ error: 'Invalid remote name' })
+    const configContent = `[${name}]\ntype = protondrive\nusername = ${stripNewlines(username)}\npassword = ${stripNewlines(password)}\n`
     await fs.writeFile(RCLONE_CONFIG_FILE, configContent)
     // Verify connection
     try {
@@ -1618,8 +1666,8 @@ password = ${password}
 app.post('/api/rclone/sync', async (req, res) => {
   try {
     const { remote, remotePath } = req.body
-    if (!remote) return res.status(400).json({ error: 'Remote name required' })
-    const dest = remotePath || '/slides-backup'
+    if (!remote || !/^[a-zA-Z0-9_-]+$/.test(remote)) return res.status(400).json({ error: 'Invalid remote name' })
+    const dest = String(remotePath || '/slides-backup').replace(/[\r\n]/g, '')
 
     // Export all presentations as HTML + JSON into sync dir
     fs.ensureDirSync(SYNC_DIR)
@@ -1667,8 +1715,9 @@ app.post('/api/rclone/sync', async (req, res) => {
 app.post('/api/rclone/sync-single', async (req, res) => {
   try {
     const { remote, remotePath, presentationId } = req.body
-    if (!remote || !presentationId) return res.status(400).json({ error: 'Remote and presentationId required' })
-    const dest = remotePath || '/slides-backup'
+    if (!remote || !/^[a-zA-Z0-9_-]+$/.test(remote)) return res.status(400).json({ error: 'Invalid remote name' })
+    if (!presentationId) return res.status(400).json({ error: 'presentationId required' })
+    const dest = String(remotePath || '/slides-backup').replace(/[\r\n]/g, '')
 
     const pres = await storage.getPresentation(presentationId, req.userId)
     if (!pres) return res.status(404).json({ error: 'Presentation not found' })
@@ -1947,7 +1996,7 @@ app.get('/api/presentations/:id/github/history', async (req, res) => {
 })
 
 // GET /api/presentations/:id/github/version/:sha - fetch presentation.json at a specific commit
-app.get('/api/presentations/:id/github/version/:sha', async (req, res) => {
+app.get('/api/presentations/:id/github/version/:sha', requireValidId(), requireValidSHA(), async (req, res) => {
   try {
     const config = await storage.getGithubConfig(req.userId)
     if (!config.token || !config.owner || !config.repo) {
@@ -1979,7 +2028,7 @@ app.get('/api/presentations/:id/github/version/:sha', async (req, res) => {
 // ---- Plugin API (authenticated routes) ----
 
 if (IS_CLOUD) {
-  app.post('/api/plugins/:slug/install', requireUser, async (req, res) => {
+  app.post('/api/plugins/:slug/install', requireValidSlug(), requireUser, async (req, res) => {
     try {
       const plugin = await storage.getPlugin(req.params.slug)
       if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
@@ -1988,7 +2037,7 @@ if (IS_CLOUD) {
     } catch (err) { res.status(500).json({ error: err.message }) }
   })
 
-  app.delete('/api/plugins/:slug/install', requireUser, async (req, res) => {
+  app.delete('/api/plugins/:slug/install', requireValidSlug(), requireUser, async (req, res) => {
     try {
       const plugin = await storage.getPlugin(req.params.slug)
       if (!plugin) return res.status(404).json({ error: 'Plugin not found' })
@@ -2047,6 +2096,12 @@ if (process.env.NODE_ENV === 'production') {
     })
   }
 }
+
+// Global error handler — prevents stack traces and internal paths from leaking
+app.use((err, req, res, _next) => {
+  console.error('Unhandled error:', err.message)
+  res.status(err.status || 500).json({ error: safeErrorMessage(err) })
+})
 
 // When required as a module (Electron), export startServer. Otherwise start directly.
 function startServer(port) {
