@@ -2099,6 +2099,15 @@ function draw() {
                   <option value="sections">Group by Section</option>
                 </select>
               </div>
+              <div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={presentation.sectionNav || false}
+                    onChange={e => setPresentation(prev => ({ ...prev, sectionNav: e.target.checked }))}
+                    style={{ accentColor: 'var(--accent)' }} />
+                  2D section navigation
+                </label>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Arrow left/right between sections, up/down within</div>
+              </div>
 
               {/* Footer */}
               <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
