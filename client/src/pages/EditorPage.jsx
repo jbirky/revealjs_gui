@@ -37,7 +37,7 @@ import ThreeModal from '../components/ThreeModal'
 import BibliographyModal from '../components/BibliographyModal'
 import DiagramModal from '../components/DiagramModal'
 import EquationPalette from '../components/EquationPalette'
-import { formatCitation } from '../utils/bibtexParser'
+import { formatCitation, getReferencedEntries, parseAuthors, formatAuthorsFull } from '../utils/bibtexParser'
 import { MathNode } from '../extensions/MathExtension'
 import { FontSize } from '../extensions/FontSize'
 import { FontFamily } from '../extensions/FontFamily'
@@ -397,6 +397,10 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
 
   const slideW = presentation?.slideWidth || 960
   const slideH = presentation?.slideHeight || 540
+  const referencedEntries = presentation ? getReferencedEntries(presentation.bibliography || [], presentation.slides || []) : []
+  const hasReferencesSlide = referencedEntries.length > 0
+  const referencesSlideIndex = hasReferencesSlide ? presentation.slides.length : -1
+  const isViewingReferences = currentSlideIndex === referencesSlideIndex && hasReferencesSlide
 
   // TipTap editor
   const editor = useEditor({
@@ -2761,6 +2765,8 @@ function draw() {
           onMoveToColumn={moveSlideToColumn}
           slideW={slideW}
           slideH={slideH}
+          referencesSlideIndex={hasReferencesSlide ? referencesSlideIndex : -1}
+          referencesCount={referencedEntries.length}
         />
 
         <div className="editor-main">
@@ -2850,7 +2856,29 @@ function draw() {
             canRedo={redoStackRef.current.length > 0}
           />
           <div className="canvas-area" style={{ display: 'flex', flexDirection: 'column' }}>
-            <SlideCanvas
+            {isViewingReferences ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+                <div style={{ width: slideW * 0.75, height: slideH * 0.75, background: '#111122', borderRadius: 8, border: '1px solid var(--border)', overflow: 'auto', padding: '24px 32px', position: 'relative', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+                  <div style={{ position: 'absolute', top: 8, right: 10, fontSize: 10, color: 'var(--text-muted)', background: 'rgba(99,102,241,0.15)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>Auto-generated</div>
+                  <h2 style={{ fontSize: 22, margin: '0 0 16px', color: 'rgba(255,255,255,0.95)', fontWeight: 700 }}>References</h2>
+                  <div style={{ columns: referencedEntries.length > 8 ? 2 : 1, columnGap: 24 }}>
+                    {referencedEntries.map((entry, i) => {
+                      const authors = parseAuthors(entry.author)
+                      const authorStr = formatAuthorsFull(authors)
+                      return (
+                        <div key={entry.key} style={{ marginBottom: 8, lineHeight: 1.5, fontSize: 12, color: 'rgba(255,255,255,0.85)', breakInside: 'avoid' }}>
+                          <span style={{ color: 'var(--accent)', fontWeight: 700, marginRight: 6 }}>[{i + 1}]</span>
+                          {authorStr}{entry.year ? ` (${entry.year})` : ''}. {entry.title}.
+                          {entry.journal || entry.booktitle ? <em> {entry.journal || entry.booktitle}</em> : null}
+                          {entry.volume ? `, ${entry.volume}` : ''}{entry.pages ? `, ${entry.pages}` : ''}.
+                          {entry.doi && <a href={`https://doi.org/${entry.doi}`} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(99,102,241,0.8)', fontSize: '0.85em', marginLeft: 4 }}>DOI</a>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : <SlideCanvas
               editor={editor}
               slide={currentSlide}
               selectedElementIds={selectedElementIds}
@@ -2927,9 +2955,9 @@ function draw() {
               onAddDrawingStroke={addDrawingStroke}
               globalFont={presentation.globalFont || ''}
               onUpdateAxisLines={(axisLines) => updateCurrentSlide({ axisLines })}
-            />
+            />}
           </div>
-        </div>
+        </div>}
 
         <PropertiesPanel
           slide={currentSlide}

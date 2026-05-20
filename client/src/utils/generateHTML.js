@@ -3,7 +3,7 @@
 
 import { shapeSvgString } from './shapeUtils'
 import { pointsToPath } from './drawingUtils'
-import { parseAuthors, formatAuthorsShort } from './bibtexParser'
+import { getReferencedEntries } from './bibtexParser'
 
 function buildHtmlEmbed(userHtml, embedW, embedH) {
   const initScript = `<script>const EMBED_WIDTH=${embedW},EMBED_HEIGHT=${embedH};(function(){function fit(){document.querySelectorAll('svg').forEach(function(s){if(s._vb)return;var w=s.getAttribute('width'),h=s.getAttribute('height');if(w&&h&&!s.getAttribute('viewBox'))s.setAttribute('viewBox','0 0 '+parseFloat(w)+' '+parseFloat(h));if(s.getAttribute('viewBox')){s.setAttribute('width','100%');s.setAttribute('height','100%');s._vb=1;}});}window.addEventListener('load',fit);setTimeout(fit,100);setTimeout(fit,400);new MutationObserver(fit).observe(document.documentElement,{childList:true,subtree:true});})();<\/script>`
@@ -394,21 +394,7 @@ export function generateRevealHTML(presentation) {
   }).join('\n')
 
   if (bibliography.length > 0) {
-    const allText = (presentation.slides || []).flatMap(s => (s.elements || []).flatMap(el => {
-      const parts = []
-      if (el.content) parts.push(el.content)
-      if (el.citationText) parts.push(el.citationText)
-      return parts
-    })).join(' ')
-
-    const referencedEntries = bibliography.filter((entry, i) => {
-      if (allText.includes(`[${i + 1}]`)) return true
-      const authors = parseAuthors(entry.author)
-      const short = formatAuthorsShort(authors)
-      if (short && allText.includes(short)) return true
-      if (entry.key && allText.includes(entry.key)) return true
-      return false
-    })
+    const referencedEntries = getReferencedEntries(bibliography, presentation.slides)
 
     if (referencedEntries.length > 0) {
       const refItems = referencedEntries.map((entry, i) => {

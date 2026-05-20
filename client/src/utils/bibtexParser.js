@@ -119,6 +119,25 @@ export function formatCitation(entry, style, index) {
   return `[${index + 1}]`
 }
 
+export function getReferencedEntries(bibliography, slides) {
+  if (!bibliography || !bibliography.length) return []
+  const allText = (slides || []).flatMap(s => (s.elements || []).flatMap(el => {
+    const parts = []
+    if (el.content) parts.push(el.content)
+    if (el.citationText) parts.push(el.citationText)
+    return parts
+  })).join(' ')
+
+  return bibliography.filter((entry, i) => {
+    if (allText.includes(`[${i + 1}]`)) return true
+    const authors = parseAuthors(entry.author)
+    const short = formatAuthorsShort(authors)
+    if (short && allText.includes(short)) return true
+    if (entry.key && allText.includes(entry.key)) return true
+    return false
+  })
+}
+
 export function formatReference(entry, index) {
   const authors = parseAuthors(entry.author)
   const authorStr = formatAuthorsFull(authors)
