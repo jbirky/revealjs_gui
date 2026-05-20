@@ -58,6 +58,8 @@ export default defineConfig({
             { text: 'Kinetic Text', link: '/tutorials/kinetic-text' },
             { text: 'Video & Audio', link: '/tutorials/media' },
             { text: 'Citations & Bibliography', link: '/tutorials/citations' },
+            { text: 'Diagram Editor', link: '/tutorials/diagrams' },
+            { text: 'Equation Palette', link: '/tutorials/equation-palette' },
           ]
         },
         {

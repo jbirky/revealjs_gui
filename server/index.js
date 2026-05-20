@@ -139,6 +139,8 @@ app.get('/api/docs/sidebar', (req, res) => {
       { text: 'Kinetic Text', link: 'tutorials/kinetic-text' },
       { text: 'Video & Audio', link: 'tutorials/media' },
       { text: 'Citations & Bibliography', link: 'tutorials/citations' },
+      { text: 'Diagram Editor', link: 'tutorials/diagrams' },
+      { text: 'Equation Palette', link: 'tutorials/equation-palette' },
       { text: 'Animations & Fragments', link: 'tutorials/animations' },
       { text: 'Transitions', link: 'tutorials/transitions' },
       { text: 'Presenting & Export', link: 'tutorials/presenting' },

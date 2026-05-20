@@ -35,6 +35,8 @@ import MathGridModal from '../components/MathGridModal'
 import AnimeModal from '../components/AnimeModal'
 import ThreeModal from '../components/ThreeModal'
 import BibliographyModal from '../components/BibliographyModal'
+import DiagramModal from '../components/DiagramModal'
+import EquationPalette from '../components/EquationPalette'
 import { formatCitation } from '../utils/bibtexParser'
 import { MathNode } from '../extensions/MathExtension'
 import { FontSize } from '../extensions/FontSize'
@@ -254,6 +256,7 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [showAnimeModal, setShowAnimeModal] = useState(false)
   const [showThreeModal, setShowThreeModal] = useState(false)
   const [showBibliographyModal, setShowBibliographyModal] = useState(false)
+  const [showDiagramModal, setShowDiagramModal] = useState(false)
   const [syncStatus, setSyncStatus] = useState(null) // { installed, remotes, hasConfig }
   const [syncConfig, setSyncConfig] = useState({ username: '', password: '', remoteName: 'protondrive' })
   const [syncResult, setSyncResult] = useState(null) // { type, message }
@@ -2743,6 +2746,7 @@ function draw() {
             onAddMathGrid={() => setShowMathGridModal(true)}
             onAddAnime={() => setShowAnimeModal(true)}
             onAddThree={() => setShowThreeModal(true)}
+            onAddDiagram={() => setShowDiagramModal(true)}
             onAddP5={addP5Element}
             onAddCode={addCodeElement}
             onAddLatex={addLatexElement}
@@ -3077,23 +3081,34 @@ function draw() {
               </div>
             </div>
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-              <textarea
-                value={latexEditorState.content}
-                onChange={e => setLatexEditorState(s => ({ ...s, content: e.target.value }))}
-                style={{ flex: 1, background: '#0d0d1a', color: '#e2e8f0', fontFamily: "'Fira Code','JetBrains Mono',monospace", fontSize: 13, padding: '16px 20px', border: 'none', outline: 'none', resize: 'none', lineHeight: 1.6, tabSize: 2, borderRight: '1px solid var(--border)' }}
-                spellCheck={false}
-                autoFocus
-                onKeyDown={e => {
-                  if (e.key === 'Tab') {
-                    e.preventDefault()
-                    const { selectionStart: s, selectionEnd: end, value } = e.target
-                    const next = value.substring(0, s) + '  ' + value.substring(end)
-                    e.target.value = next
-                    setLatexEditorState(st => ({ ...st, content: next }))
-                    requestAnimationFrame(() => { e.target.selectionStart = e.target.selectionEnd = s + 2 })
-                  }
-                }}
-              />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)' }}>
+                <textarea
+                  id="latex-editor-textarea"
+                  value={latexEditorState.content}
+                  onChange={e => setLatexEditorState(s => ({ ...s, content: e.target.value }))}
+                  style={{ flex: 1, background: '#0d0d1a', color: '#e2e8f0', fontFamily: "'Fira Code','JetBrains Mono',monospace", fontSize: 13, padding: '16px 20px', border: 'none', outline: 'none', resize: 'none', lineHeight: 1.6, tabSize: 2 }}
+                  spellCheck={false}
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Tab') {
+                      e.preventDefault()
+                      const { selectionStart: s, selectionEnd: end, value } = e.target
+                      const next = value.substring(0, s) + '  ' + value.substring(end)
+                      e.target.value = next
+                      setLatexEditorState(st => ({ ...st, content: next }))
+                      requestAnimationFrame(() => { e.target.selectionStart = e.target.selectionEnd = s + 2 })
+                    }
+                  }}
+                />
+                <EquationPalette onInsert={(latex) => {
+                  const ta = document.getElementById('latex-editor-textarea')
+                  if (!ta) return
+                  const { selectionStart: s, selectionEnd: end, value } = ta
+                  const next = value.substring(0, s) + latex + value.substring(end)
+                  setLatexEditorState(st => ({ ...st, content: next }))
+                  requestAnimationFrame(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + latex.length })
+                }} />
+              </div>
               <div style={{ flex: 1, background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 16 }}>
                 <iframe
                   key={latexEditorState.content}
@@ -3320,6 +3335,24 @@ function draw() {
             }
           }}
           onClose={() => setShowBibliographyModal(false)}
+        />
+      )}
+
+      {/* Diagram Modal */}
+      {showDiagramModal && (
+        <DiagramModal
+          slideW={slideW}
+          slideH={slideH}
+          onInsert={(svg) => {
+            const newEl = { id: crypto.randomUUID(), type: 'html', x: 80, y: 80, width: 600, height: 380, zIndex: 2, content: svg }
+            setPresentation(prev => {
+              if (!prev) return prev
+              return { ...prev, slides: prev.slides.map((s, i) => i === currentSlideIndex ? { ...s, elements: [...(s.elements || []), newEl] } : s) }
+            })
+            setSelectedElementIds([newEl.id])
+            setShowDiagramModal(false)
+          }}
+          onClose={() => setShowDiagramModal(false)}
         />
       )}
 
