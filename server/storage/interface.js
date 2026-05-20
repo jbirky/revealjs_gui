@@ -31,6 +31,9 @@ class StorageInterface {
   async getZoteroConfig(userId) { throw new Error('Not implemented') }
   async setZoteroConfig(config, userId) { throw new Error('Not implemented') }
 
+  async getZenodoConfig(userId) { throw new Error('Not implemented') }
+  async setZenodoConfig(config, userId) { throw new Error('Not implemented') }
+
   async listPlugins() { throw new Error('Not implemented') }
   async getPlugin(slug) { throw new Error('Not implemented') }
   async installPlugin(pluginId, userId) { throw new Error('Not implemented') }

@@ -150,6 +150,21 @@ export const api = {
     body: JSON.stringify({ owner, repo, folder, branch }),
   }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.message || b.error || 'Fork failed'); return b }),
 
+  // Zenodo
+  getZenodoConfig: () => authFetch(`${BASE}/zenodo/config`).then(safeJson),
+  saveZenodoConfig: (data) => authFetch(`${BASE}/zenodo/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then(safeJson),
+  deleteZenodoConfig: () => authFetch(`${BASE}/zenodo/config`, { method: 'DELETE' }).then(safeJson),
+  getZenodoStatus: (id) => authFetch(`${BASE}/presentations/${id}/zenodo/status`).then(safeJson),
+  publishToZenodo: (id, metadata) => authFetch(`${BASE}/presentations/${id}/zenodo/publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(metadata),
+  }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Publish failed'); return b }),
+
   // File management
   getUploads: () => authFetch(`${BASE}/uploads`).then(safeJson),
   deleteUpload: (id) => authFetch(`${BASE}/uploads/${id}`, { method: 'DELETE' }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Delete failed'); return b }),

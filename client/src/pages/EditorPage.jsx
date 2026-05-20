@@ -238,6 +238,19 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [githubStatus, setGithubStatus] = useState(null) // { type: 'success'|'error', message }
   const [githubCommitMsg, setGithubCommitMsg] = useState('')
 
+  const [showZenodoModal, setShowZenodoModal] = useState(false)
+  const [zenodoConfig, setZenodoConfig] = useState({ hasToken: false, sandbox: false })
+  const [zenodoToken, setZenodoToken] = useState('')
+  const [zenodoPublishing, setZenodoPublishing] = useState(false)
+  const [zenodoStatus, setZenodoStatus] = useState(null)
+  const [zenodoMeta, setZenodoMeta] = useState({
+    creators: [{ name: '', affiliation: '', orcid: '' }],
+    description: '',
+    keywords: '',
+    license: 'cc-by-4.0',
+  })
+  const [zenodoPubStatus, setZenodoPubStatus] = useState(null)
+
   // New feature state
   const [showFindReplace, setShowFindReplace] = useState(false)
   const [showTransitionPreview, setShowTransitionPreview] = useState(false)
@@ -359,9 +372,10 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
     }).then(() => setPluginsLoaded(true)).catch(() => setPluginsLoaded(true))
   }, [])
 
-  // Load GitHub config on mount
+  // Load GitHub + Zenodo config on mount
   useEffect(() => {
     api.getGithubConfig().then(setGithubConfig).catch(() => {})
+    api.getZenodoConfig().then(setZenodoConfig).catch(() => {})
   }, [])
 
   // Load share status
@@ -390,6 +404,35 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
       setGithubStatus({ type: 'error', message: err.message })
     } finally {
       setGithubPushing(false)
+    }
+  }
+
+  const handleZenodoSaveConfig = async () => {
+    const data = { sandbox: zenodoConfig.sandbox }
+    if (zenodoToken) data.token = zenodoToken
+    const result = await api.saveZenodoConfig(data)
+    setZenodoConfig(result)
+    setZenodoToken('')
+  }
+
+  const handleZenodoPublish = async () => {
+    setZenodoPublishing(true)
+    setZenodoStatus(null)
+    try {
+      const meta = {
+        creators: zenodoMeta.creators.filter(c => c.name.trim()),
+        description: zenodoMeta.description.trim() || undefined,
+        keywords: zenodoMeta.keywords.trim() ? zenodoMeta.keywords.split(',').map(k => k.trim()).filter(Boolean) : undefined,
+        license: zenodoMeta.license || undefined,
+      }
+      if (!meta.creators.length) throw new Error('At least one creator name is required')
+      const result = await api.publishToZenodo(presentationId, meta)
+      setZenodoStatus({ type: 'success', message: `Published! DOI: ${result.doi}`, url: result.url, doi: result.doi })
+      setZenodoPubStatus({ published: true, doi: result.doi, url: result.url })
+    } catch (err) {
+      setZenodoStatus({ type: 'error', message: err.message })
+    } finally {
+      setZenodoPublishing(false)
     }
   }
 
@@ -1886,6 +1929,22 @@ function draw() {
                     onMouseLeave={e => e.currentTarget.style.background = 'none'}
                     onClick={async () => {
                       setShowSyncDropdown(false)
+                      setZenodoStatus(null)
+                      if (presentationId) {
+                        api.getZenodoStatus(presentationId).then(setZenodoPubStatus).catch(() => setZenodoPubStatus(null))
+                      }
+                      setShowZenodoModal(true)
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19h16"/><path d="M4 5l16 14"/><path d="M4 5h16"/></svg>
+                    Zenodo
+                  </button>
+                  <button
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    onClick={async () => {
+                      setShowSyncDropdown(false)
                       try { const s = await api.getRcloneStatus(); setSyncStatus(s) } catch { setSyncStatus({ installed: false }) }
                       setSyncResult(null)
                       setShowSyncModal(true)
@@ -2457,6 +2516,187 @@ function draw() {
                   {githubStatus.url && (
                     <a href={githubStatus.url} target="_blank" rel="noopener noreferrer"
                       style={{ marginLeft: 'auto', color: 'inherit', textDecoration: 'underline' }}>View</a>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Zenodo Modal */}
+      {showZenodoModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowZenodoModal(false) }}>
+          <div style={{ background: '#1e1e2e', borderRadius: 12, padding: 24, width: 500, maxWidth: '90vw', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16, color: '#e0e0e0' }}>Publish to Zenodo</h3>
+              <button className="btn btn-ghost" onClick={() => setShowZenodoModal(false)} style={{ padding: 4 }}>
+                <X size={16} />
+              </button>
+            </div>
+
+            {zenodoPubStatus?.published && (
+              <div style={{ padding: '10px 14px', borderRadius: 6, fontSize: 13, background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', color: '#86efac', marginBottom: 16, lineHeight: 1.6 }}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>Previously published</div>
+                <div>DOI: <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 6px', borderRadius: 3, fontSize: 12 }}>{zenodoPubStatus.doi}</code></div>
+                <a href={zenodoPubStatus.url} target="_blank" rel="noopener noreferrer" style={{ color: '#86efac', fontSize: 12 }}>View on Zenodo</a>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, color: '#a0a0b0', display: 'block', marginBottom: 4 }}>
+                  API Token {zenodoConfig.hasToken && <span style={{ color: '#22c55e' }}>(saved)</span>}
+                </label>
+                <input
+                  type="password"
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 14, boxSizing: 'border-box' }}
+                  value={zenodoToken}
+                  onChange={e => setZenodoToken(e.target.value)}
+                  placeholder={zenodoConfig.hasToken ? '••••••••  (leave blank to keep)' : 'Paste your Zenodo token'}
+                />
+                <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+                  Generate at zenodo.org &rarr; Settings &rarr; Applications &rarr; Personal access tokens (scope: <code style={{ fontSize: 10 }}>deposit:write</code>)
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#a0a0b0', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={zenodoConfig.sandbox}
+                    onChange={e => setZenodoConfig(prev => ({ ...prev, sandbox: e.target.checked }))}
+                    style={{ accentColor: '#6366f1' }}
+                  />
+                  Use Sandbox (sandbox.zenodo.org)
+                </label>
+              </div>
+
+              <button className="btn btn-secondary" onClick={handleZenodoSaveConfig} style={{ alignSelf: 'flex-start' }}>
+                <Settings size={14} />
+                Save Settings
+              </button>
+
+              <hr style={{ border: 'none', borderTop: '1px solid #3a3a4e', margin: '4px 0' }} />
+
+              <div style={{ fontSize: 12, color: '#a0a0b0', fontWeight: 600, marginBottom: -4 }}>Metadata</div>
+
+              {zenodoMeta.creators.map((c, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    {i === 0 && <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Name *</label>}
+                    <input
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: 5, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 13, boxSizing: 'border-box' }}
+                      value={c.name}
+                      onChange={e => { const arr = [...zenodoMeta.creators]; arr[i] = { ...arr[i], name: e.target.value }; setZenodoMeta(m => ({ ...m, creators: arr })) }}
+                      placeholder="Last, First"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    {i === 0 && <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Affiliation</label>}
+                    <input
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: 5, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 13, boxSizing: 'border-box' }}
+                      value={c.affiliation}
+                      onChange={e => { const arr = [...zenodoMeta.creators]; arr[i] = { ...arr[i], affiliation: e.target.value }; setZenodoMeta(m => ({ ...m, creators: arr })) }}
+                      placeholder="University"
+                    />
+                  </div>
+                  <div style={{ width: 120 }}>
+                    {i === 0 && <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>ORCID</label>}
+                    <input
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: 5, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 13, boxSizing: 'border-box' }}
+                      value={c.orcid}
+                      onChange={e => { const arr = [...zenodoMeta.creators]; arr[i] = { ...arr[i], orcid: e.target.value }; setZenodoMeta(m => ({ ...m, creators: arr })) }}
+                      placeholder="0000-0000-..."
+                    />
+                  </div>
+                  {zenodoMeta.creators.length > 1 && (
+                    <button onClick={() => setZenodoMeta(m => ({ ...m, creators: m.creators.filter((_, j) => j !== i) }))}
+                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '7px 4px', marginTop: i === 0 ? 18 : 0 }}>
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={() => setZenodoMeta(m => ({ ...m, creators: [...m.creators, { name: '', affiliation: '', orcid: '' }] }))}
+                style={{ alignSelf: 'flex-start', background: 'none', border: '1px dashed #3a3a4e', color: '#a0a0b0', borderRadius: 5, padding: '4px 12px', fontSize: 12, cursor: 'pointer' }}
+              >
+                + Add creator
+              </button>
+
+              <div>
+                <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Description</label>
+                <textarea
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 5, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 13, boxSizing: 'border-box', minHeight: 60, resize: 'vertical', fontFamily: 'inherit' }}
+                  value={zenodoMeta.description}
+                  onChange={e => setZenodoMeta(m => ({ ...m, description: e.target.value }))}
+                  placeholder="Brief description of the presentation..."
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Keywords (comma separated)</label>
+                  <input
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: 5, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 13, boxSizing: 'border-box' }}
+                    value={zenodoMeta.keywords}
+                    onChange={e => setZenodoMeta(m => ({ ...m, keywords: e.target.value }))}
+                    placeholder="astronomy, stellar evolution, ..."
+                  />
+                </div>
+                <div style={{ width: 160 }}>
+                  <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>License</label>
+                  <select
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: 5, border: '1px solid #3a3a4e', background: '#2a2a3e', color: '#e0e0e0', fontSize: 13, boxSizing: 'border-box' }}
+                    value={zenodoMeta.license}
+                    onChange={e => setZenodoMeta(m => ({ ...m, license: e.target.value }))}
+                  >
+                    <option value="cc-by-4.0">CC BY 4.0</option>
+                    <option value="cc-by-sa-4.0">CC BY-SA 4.0</option>
+                    <option value="cc-by-nc-4.0">CC BY-NC 4.0</option>
+                    <option value="cc0-1.0">CC0 (Public Domain)</option>
+                    <option value="MIT">MIT</option>
+                    <option value="Apache-2.0">Apache 2.0</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                className="btn btn-primary"
+                onClick={handleZenodoPublish}
+                disabled={zenodoPublishing || !zenodoConfig.hasToken || !zenodoMeta.creators.some(c => c.name.trim())}
+                style={{ width: '100%', justifyContent: 'center', opacity: (zenodoPublishing || !zenodoConfig.hasToken) ? 0.5 : 1 }}
+              >
+                {zenodoPublishing ? 'Publishing...' : 'Publish to Zenodo'}
+              </button>
+
+              {zenodoPublishing && (
+                <div style={{ fontSize: 12, color: '#a0a0b0', textAlign: 'center' }}>
+                  Uploading files and minting DOI... this may take a moment.
+                </div>
+              )}
+
+              {zenodoStatus && (
+                <div style={{
+                  padding: '10px 14px', borderRadius: 6, fontSize: 13,
+                  background: zenodoStatus.type === 'success' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                  color: zenodoStatus.type === 'success' ? '#22c55e' : '#ef4444',
+                  lineHeight: 1.6,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {zenodoStatus.type === 'success' ? <Check size={14} /> : <X size={14} />}
+                    <span>{zenodoStatus.message}</span>
+                  </div>
+                  {zenodoStatus.doi && (
+                    <div style={{ marginTop: 6, fontSize: 12 }}>
+                      Copy this DOI for citations: <code style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 3 }}>{zenodoStatus.doi}</code>
+                    </div>
+                  )}
+                  {zenodoStatus.url && (
+                    <a href={zenodoStatus.url} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'inline-block', marginTop: 4, color: 'inherit', textDecoration: 'underline', fontSize: 12 }}>View on Zenodo</a>
                   )}
                 </div>
               )}

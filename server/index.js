@@ -2190,6 +2190,187 @@ app.get('/api/zotero/proxy/*', async (req, res) => {
   }
 })
 
+// --- Zenodo Integration ---
+
+// GET /api/zenodo/config
+app.get('/api/zenodo/config', async (req, res) => {
+  try {
+    const config = await storage.getZenodoConfig(req.userId)
+    res.json({ hasToken: !!config.token, sandbox: config.sandbox })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/zenodo/config
+app.post('/api/zenodo/config', async (req, res) => {
+  try {
+    const updated = await storage.setZenodoConfig(req.body, req.userId)
+    res.json({ hasToken: !!updated.token, sandbox: updated.sandbox })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /api/zenodo/config
+app.delete('/api/zenodo/config', async (req, res) => {
+  try {
+    await storage.setZenodoConfig({ token: '', sandbox: false }, req.userId)
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/presentations/:id/zenodo/status - check if this presentation has been published
+app.get('/api/presentations/:id/zenodo/status', requireValidId(), async (req, res) => {
+  try {
+    const { rows } = await storage.query(
+      'SELECT doi, zenodo_url, sandbox, published_at FROM zenodo_publications WHERE presentation_id = $1 AND user_id = $2 ORDER BY published_at DESC LIMIT 1',
+      [req.params.id, req.userId]
+    )
+    if (!rows.length) return res.json({ published: false })
+    res.json({ published: true, doi: rows[0].doi, url: rows[0].zenodo_url, sandbox: rows[0].sandbox, publishedAt: rows[0].published_at })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/presentations/:id/zenodo/publish - publish presentation to Zenodo
+app.post('/api/presentations/:id/zenodo/publish', requireValidId(), async (req, res) => {
+  try {
+    const config = await storage.getZenodoConfig(req.userId)
+    if (!config.token) return res.status(400).json({ error: 'Zenodo not configured. Save your API token first.' })
+
+    const presentation = await storage.getPresentation(req.params.id, req.userId)
+    if (!presentation) return res.status(404).json({ error: 'Presentation not found' })
+
+    const { creators, description, keywords, license } = req.body
+    if (!creators || !creators.length) return res.status(400).json({ error: 'At least one creator is required' })
+
+    const baseUrl = config.sandbox ? 'https://sandbox.zenodo.org' : 'https://zenodo.org'
+    const token = config.token
+    const zen = async (endpoint, opts = {}) => {
+      const r = await fetch(`${baseUrl}/api${endpoint}`, {
+        ...opts,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...opts.headers,
+        },
+      })
+      const body = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(body.message || JSON.stringify(body.errors || body) || `Zenodo API ${r.status}`)
+      return body
+    }
+
+    // 1. Create a new deposition
+    const deposition = await zen('/deposit/depositions', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    const depositionId = deposition.id
+    const bucketUrl = deposition.links.bucket
+
+    // 2. Prepare export: rewrite asset paths for self-contained HTML
+    const exportPres = JSON.parse(JSON.stringify(presentation))
+    const uploadPaths = new Set()
+    const collectUploads = (str) => { for (const m of str.matchAll(/\/uploads\/[^\s"'<>)]+/g)) uploadPaths.add(m[0]) }
+    for (const slide of presentation.slides || []) {
+      for (const el of slide.elements || []) {
+        if (el.src && el.src.startsWith('/uploads/')) uploadPaths.add(el.src)
+        if (el.poster && el.poster.startsWith('/uploads/')) uploadPaths.add(el.poster)
+        if (el.content) collectUploads(el.content)
+      }
+      if (slide.background?.image?.startsWith('/uploads/')) uploadPaths.add(slide.background.image)
+    }
+
+    const assetName = (p) => path.basename(p)
+    const rewriteUploads = (str) => str.replace(/\/uploads\/[^\s"'<>)]+/g, m => `./assets/${assetName(m)}`)
+    for (const slide of exportPres.slides || []) {
+      for (const el of slide.elements || []) {
+        if (el.src && el.src.startsWith('/uploads/')) el.src = `./assets/${assetName(el.src)}`
+        if (el.poster && el.poster.startsWith('/uploads/')) el.poster = `./assets/${assetName(el.poster)}`
+        if (el.content && el.content.includes('/uploads/')) el.content = rewriteUploads(el.content)
+      }
+      if (slide.background?.image?.startsWith('/uploads/')) slide.background.image = `./assets/${assetName(slide.background.image)}`
+    }
+
+    const htmlContent = generateRevealHTML(exportPres)
+    const jsonContent = JSON.stringify(presentation, null, 2)
+
+    // 3. Upload presentation.html
+    await fetch(`${bucketUrl}/presentation.html`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/html' },
+      body: htmlContent,
+    })
+
+    // 4. Upload presentation.json
+    await fetch(`${bucketUrl}/presentation.json`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: jsonContent,
+    })
+
+    // 5. Upload asset files
+    for (const uploadPath of uploadPaths) {
+      const relativePath = uploadPath.replace(/^\/uploads\//, '')
+      try {
+        let fileBuffer, contentType = 'application/octet-stream'
+        if (isR2Enabled()) {
+          const { rows } = await storage.query('SELECT storage_key, content_type FROM uploads WHERE filename = $1', [relativePath])
+          if (!rows.length) continue
+          contentType = rows[0].content_type || contentType
+          const { body } = await streamFromR2(rows[0].storage_key)
+          const chunks = []
+          for await (const chunk of body) chunks.push(chunk)
+          fileBuffer = Buffer.concat(chunks)
+        } else {
+          const filePath = path.join(UPLOADS_DIR, relativePath)
+          if (!fs.existsSync(filePath)) continue
+          fileBuffer = fs.readFileSync(filePath)
+        }
+        await fetch(`${bucketUrl}/assets/${assetName(uploadPath)}`, {
+          method: 'PUT',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': contentType },
+          body: fileBuffer,
+        })
+      } catch (e) { console.error(`Zenodo asset upload failed for ${uploadPath}:`, e.message) }
+    }
+
+    // 6. Set metadata
+    const metadata = {
+      title: presentation.title || 'Untitled Presentation',
+      upload_type: 'presentation',
+      description: description || `Presentation created with Parallax.`,
+      creators: creators.map(c => {
+        const entry = { name: c.name }
+        if (c.affiliation) entry.affiliation = c.affiliation
+        if (c.orcid) entry.orcid = c.orcid
+        return entry
+      }),
+    }
+    if (keywords && keywords.length) metadata.keywords = keywords
+    if (license) metadata.license = { id: license }
+
+    await zen(`/deposit/depositions/${depositionId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ metadata }),
+    })
+
+    // 7. Publish
+    const published = await zen(`/deposit/depositions/${depositionId}/actions/publish`, {
+      method: 'POST',
+    })
+
+    const doi = published.doi || published.metadata?.doi || ''
+    const zenodoUrl = published.links?.html || published.links?.record_html || `${baseUrl}/records/${depositionId}`
+
+    // 8. Record in database
+    await storage.query(
+      'INSERT INTO zenodo_publications (presentation_id, user_id, deposition_id, doi, zenodo_url, sandbox) VALUES ($1, $2, $3, $4, $5, $6)',
+      [req.params.id, req.userId, depositionId, doi, zenodoUrl, config.sandbox]
+    )
+
+    res.json({ doi, url: zenodoUrl, depositionId })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/presentations/:id/github/push - push presentation to GitHub
 app.post('/api/presentations/:id/github/push', async (req, res) => {
   try {

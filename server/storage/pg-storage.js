@@ -317,6 +317,27 @@ class PgStorage extends StorageInterface {
     return { zoteroUserId: config.zoteroUserId || '', apiKey: config.apiKey || '' }
   }
 
+  // --- Zenodo ---
+
+  async getZenodoConfig(userId) {
+    if (!userId) return { token: '', sandbox: false }
+    const { rows } = await this.query('SELECT token, sandbox FROM zenodo_configs WHERE user_id = $1', [userId])
+    if (!rows.length) return { token: '', sandbox: false }
+    return { token: decrypt(rows[0].token || ''), sandbox: rows[0].sandbox || false }
+  }
+
+  async setZenodoConfig(config, userId) {
+    if (!userId) return config
+    const encryptedToken = encrypt(config.token || '')
+    const sandbox = config.sandbox || false
+    await this.query(
+      `INSERT INTO zenodo_configs (user_id, token, sandbox) VALUES ($1, $2, $3)
+       ON CONFLICT (user_id) DO UPDATE SET token = $2, sandbox = $3`,
+      [userId, encryptedToken, sandbox]
+    )
+    return { token: config.token || '', sandbox }
+  }
+
   // --- Plugins ---
 
   _scanBundledPlugins() {
