@@ -69,7 +69,9 @@ export default function BibliographyModal({ bibliography = [], citationStyle = '
   // ── Zotero ──────────────────────────────────────────────
 
   async function zoteroFetch(endpoint, params = {}) {
-    const qs = new URLSearchParams(params).toString()
+    const { itemType, ...rest } = params
+    let qs = new URLSearchParams(rest).toString()
+    if (itemType) qs += (qs ? '&' : '') + 'itemType=' + encodeURIComponent(itemType).replace(/%7C%7C/gi, '||')
     const url = `https://api.zotero.org/users/${zoteroUserId}${endpoint}${qs ? '?' + qs : ''}`
     const res = await fetch(url, {
       headers: {
@@ -77,7 +79,12 @@ export default function BibliographyModal({ bibliography = [], citationStyle = '
         'Zotero-API-Key': zoteroApiKey,
       }
     })
-    if (!res.ok) throw new Error(`Zotero API error: ${res.status}`)
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      if (res.status === 403) throw new Error('Invalid API key or insufficient permissions')
+      if (res.status === 404) throw new Error('User ID not found')
+      throw new Error(`Zotero API error ${res.status}: ${body || res.statusText}`)
+    }
     const total = parseInt(res.headers.get('Total-Results') || '0', 10)
     const data = await res.json()
     return { data, total }
