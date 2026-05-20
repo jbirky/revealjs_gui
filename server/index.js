@@ -2253,7 +2253,11 @@ app.post('/api/presentations/:id/zenodo/publish', requireValidId(), async (req, 
         },
       })
       const body = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(body.message || JSON.stringify(body.errors || body) || `Zenodo API ${r.status}`)
+      if (!r.ok) {
+        let msg = body.message || ''
+        if (body.errors) msg += (msg ? ': ' : '') + body.errors.map(e => `${e.field}: ${e.message || e.messages?.join(', ')}`).join('; ')
+        throw new Error(msg || JSON.stringify(body) || `Zenodo API ${r.status}`)
+      }
       return body
     }
 
@@ -2337,6 +2341,8 @@ app.post('/api/presentations/:id/zenodo/publish', requireValidId(), async (req, 
       title: presentation.title || 'Untitled Presentation',
       upload_type: 'presentation',
       description: description || `Presentation created with Parallax.`,
+      publication_date: new Date().toISOString().split('T')[0],
+      access_right: 'open',
       creators: creators.map(c => {
         const entry = { name: c.name }
         if (c.affiliation) entry.affiliation = c.affiliation
@@ -2345,7 +2351,7 @@ app.post('/api/presentations/:id/zenodo/publish', requireValidId(), async (req, 
       }),
     }
     if (keywords && keywords.length) metadata.keywords = keywords
-    if (license) metadata.license = { id: license }
+    if (license) metadata.license = license
 
     await zen(`/deposit/depositions/${depositionId}`, {
       method: 'PUT',
