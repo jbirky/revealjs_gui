@@ -2586,45 +2586,52 @@ app.post('/api/presentations/:id/github/push', async (req, res) => {
     }
     const readmeContent = readmeLines.join('\n') + '\n'
 
-    // Upload asset files to GitHub as blobs
+    // Upload asset files to GitHub as blobs (parallel, batches of 5)
     const assetBlobs = []
-    for (const uploadPath of uploadPaths) {
+    const assetUploads = [...uploadPaths].map(uploadPath => async () => {
       const relativePath = uploadPath.replace(/^\/uploads\//, '')
       try {
         let fileBuffer
         if (isR2Enabled()) {
           const { rows } = await storage.query('SELECT storage_key FROM uploads WHERE filename = $1', [relativePath])
-          if (!rows.length) continue
+          if (!rows.length) return null
           const { body } = await streamFromR2(rows[0].storage_key)
           const chunks = []
           for await (const chunk of body) chunks.push(chunk)
           fileBuffer = Buffer.concat(chunks)
         } else {
           const filePath = path.join(UPLOADS_DIR, relativePath)
-          if (!fs.existsSync(filePath)) continue
+          if (!fs.existsSync(filePath)) return null
           fileBuffer = fs.readFileSync(filePath)
         }
         const blob = await gh(`/repos/${owner}/${repo}/git/blobs`, {
           method: 'POST',
           body: JSON.stringify({ content: fileBuffer.toString('base64'), encoding: 'base64' }),
         })
-        assetBlobs.push({ path: `${folderName}/assets/${assetName(uploadPath)}`, mode: '100644', type: 'blob', sha: blob.sha })
-      } catch (e) { console.error(`Asset upload failed for ${uploadPath}:`, e.message) }
+        return { path: `${folderName}/assets/${assetName(uploadPath)}`, mode: '100644', type: 'blob', sha: blob.sha }
+      } catch (e) { console.error(`Asset upload failed for ${uploadPath}:`, e.message); return null }
+    })
+    for (let i = 0; i < assetUploads.length; i += 5) {
+      const batch = assetUploads.slice(i, i + 5).map(fn => fn())
+      const results = await Promise.all(batch)
+      assetBlobs.push(...results.filter(Boolean))
     }
 
-    // Create blobs for our files
-    const htmlBlob = await gh(`/repos/${owner}/${repo}/git/blobs`, {
-      method: 'POST',
-      body: JSON.stringify({ content: Buffer.from(htmlContent).toString('base64'), encoding: 'base64' }),
-    })
-    const jsonBlob = await gh(`/repos/${owner}/${repo}/git/blobs`, {
-      method: 'POST',
-      body: JSON.stringify({ content: Buffer.from(jsonContent).toString('base64'), encoding: 'base64' }),
-    })
-    const readmeBlob = await gh(`/repos/${owner}/${repo}/git/blobs`, {
-      method: 'POST',
-      body: JSON.stringify({ content: Buffer.from(readmeContent).toString('base64'), encoding: 'base64' }),
-    })
+    // Create blobs for HTML, JSON, README (parallel)
+    const [htmlBlob, jsonBlob, readmeBlob] = await Promise.all([
+      gh(`/repos/${owner}/${repo}/git/blobs`, {
+        method: 'POST',
+        body: JSON.stringify({ content: Buffer.from(htmlContent).toString('base64'), encoding: 'base64' }),
+      }),
+      gh(`/repos/${owner}/${repo}/git/blobs`, {
+        method: 'POST',
+        body: JSON.stringify({ content: Buffer.from(jsonContent).toString('base64'), encoding: 'base64' }),
+      }),
+      gh(`/repos/${owner}/${repo}/git/blobs`, {
+        method: 'POST',
+        body: JSON.stringify({ content: Buffer.from(readmeContent).toString('base64'), encoding: 'base64' }),
+      }),
+    ])
 
     // Create a new tree with our files, assets, + README
     const treePayload = {
