@@ -532,36 +532,6 @@ export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) 
       </div>
 
       <div className="home-content">
-        {isCloud && planInfo && planInfo.limits?.storageBytes && (
-          <div style={{
-            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: '12px 16px', marginBottom: 16,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
-                <HardDrive size={15} style={{ color: 'var(--text-muted)' }} />
-                Storage
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                {formatBytes(planInfo.storageUsed)} / {formatBytes(planInfo.limits.storageBytes)}
-              </div>
-            </div>
-            <div style={{
-              height: 6, borderRadius: 3, background: 'var(--bg-primary)',
-              overflow: 'hidden',
-            }}>
-              <div style={{
-                height: '100%', borderRadius: 3, transition: 'width 0.3s ease',
-                width: `${Math.min(100, (planInfo.storageUsed / planInfo.limits.storageBytes) * 100)}%`,
-                background: (planInfo.storageUsed / planInfo.limits.storageBytes) > 0.9
-                  ? '#ef4444'
-                  : (planInfo.storageUsed / planInfo.limits.storageBytes) > 0.7
-                    ? '#f59e0b'
-                    : 'var(--accent)',
-              }} />
-            </div>
-          </div>
-        )}
         {atLimit && (
           <div style={{
             background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
@@ -737,13 +707,43 @@ export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) 
           })}
         </div>
 
-        {/* File Browser Section (cloud mode) */}
+        {/* Storage & File Browser Section (cloud mode) */}
+        {isCloud && planInfo && planInfo.limits?.storageBytes && (
+          <div style={{
+            marginTop: 40, background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+            borderRadius: 10, padding: '12px 16px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+                <HardDrive size={15} style={{ color: 'var(--text-muted)' }} />
+                Storage
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {formatBytes(planInfo.storageUsed)} / {formatBytes(planInfo.limits.storageBytes)}
+              </div>
+            </div>
+            <div style={{
+              height: 6, borderRadius: 3, background: 'var(--bg-primary)',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                height: '100%', borderRadius: 3, transition: 'width 0.3s ease',
+                width: `${Math.min(100, (planInfo.storageUsed / planInfo.limits.storageBytes) * 100)}%`,
+                background: (planInfo.storageUsed / planInfo.limits.storageBytes) > 0.9
+                  ? '#ef4444'
+                  : (planInfo.storageUsed / planInfo.limits.storageBytes) > 0.7
+                    ? '#f59e0b'
+                    : 'var(--accent)',
+              }} />
+            </div>
+          </div>
+        )}
         {isCloud && (
           <>
             <div
               onClick={() => { if (!uploadsOpen) loadUploads(); setUploadsOpen(v => !v) }}
               style={{
-                marginTop: 40, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 cursor: 'pointer', userSelect: 'none',
               }}
             >
