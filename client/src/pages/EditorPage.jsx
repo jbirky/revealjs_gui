@@ -1758,6 +1758,7 @@ function draw() {
             title="Bibliography & Citations"
           >
             <FileText size={14} />
+            Citations
             {(presentation.bibliography || []).length > 0 && (
               <span style={{ fontSize: 9, background: 'var(--accent)', color: 'white', borderRadius: 8, padding: '0 4px', lineHeight: '14px', fontWeight: 700 }}>
                 {presentation.bibliography.length}
@@ -1771,6 +1772,7 @@ function draw() {
             title="Find & Replace (Ctrl+F)"
           >
             <Search size={14} />
+            Find
           </button>
 
           <button
@@ -1779,6 +1781,7 @@ function draw() {
             title="Animation Timeline"
           >
             <Clock size={14} />
+            Timeline
           </button>
 
           <div style={{ position: 'relative' }}>
@@ -1842,6 +1845,7 @@ function draw() {
             title="Version History"
           >
             <History size={14} />
+            History
           </button>
 
           <div style={{ position: 'relative' }}>
