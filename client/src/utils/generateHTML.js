@@ -1301,11 +1301,13 @@ export function presentInWindow(presentation) {
 }
 
 export function livePresentInWindow(presentation, sessionId, onViewerCount) {
+  const origin = window.location.origin
   const baseHtml = generateRevealHTML(presentation)
   const liveScript = `
   <script>
   (function() {
     var sessionId = '${sessionId}';
+    var origin = '${origin}';
     var badge = document.createElement('div');
     badge.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;background:rgba(239,68,68,0.9);color:white;padding:6px 12px;border-radius:20px;font-family:-apple-system,sans-serif;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;backdrop-filter:blur(4px);pointer-events:none;';
     badge.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:white;animation:pulse 1.5s infinite;display:inline-block"></span> LIVE <span id="live-count" style="opacity:0.8">0 viewers</span>';
@@ -1329,7 +1331,7 @@ export function livePresentInWindow(presentation, sessionId, onViewerCount) {
     }
 
     function sendSlide() {
-      fetch('/api/live/' + sessionId + '/slide', {
+      fetch(origin + '/api/live/' + sessionId + '/slide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ flatIndex: currentFlat() })
