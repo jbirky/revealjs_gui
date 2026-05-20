@@ -113,7 +113,7 @@ export default function BibliographyModal({ bibliography = [], citationStyle = '
     setZoteroLoading(true)
     setZoteroError(null)
     try {
-      const params = { limit: 25, start: offset, sort: 'dateAdded', direction: 'desc', itemType: '-attachment || -note' }
+      const params = { limit: 25, start: offset, sort: 'dateAdded', direction: 'desc' }
       if (query) { params.q = query; params.qmode = 'titleCreatorYear' }
       const endpoint = collectionKey
         ? `/collections/${collectionKey}/items/top`
@@ -333,14 +333,14 @@ export default function BibliographyModal({ bibliography = [], citationStyle = '
               {!zoteroConnected ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                    Connect to your Zotero library. You can find your User ID and create an API key at{' '}
-                    <span style={{ color: 'var(--accent)', fontWeight: 500 }}>zotero.org/settings/keys</span>.
+                    Connect to your Zotero library. Find your numeric User ID and create an API key at{' '}
+                    <a href="https://www.zotero.org/settings/keys" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', fontWeight: 500 }}>zotero.org/settings/keys</a>.
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>User ID</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>User ID <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>(numeric, not username)</span></div>
                     <input className="prop-input" type="text" value={zoteroUserId}
-                      onChange={e => setZoteroUserId(e.target.value)}
-                      placeholder="e.g. 12345678"
+                      onChange={e => setZoteroUserId(e.target.value.replace(/\D/g, ''))}
+                      placeholder="e.g. 12345678 (from zotero.org/settings/keys)"
                       style={{ width: '100%', padding: '8px 12px', fontSize: 13, boxSizing: 'border-box' }} />
                   </div>
                   <div>
