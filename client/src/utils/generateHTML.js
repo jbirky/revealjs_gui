@@ -1274,7 +1274,6 @@ export function exportPDF(presentation) {
 }
 
 export function presentInWindow(presentation) {
-  console.log('[present] bibliography entries:', (presentation.bibliography || []).length)
   const html = generateRevealHTML(presentation)
   const blob = new Blob([html], { type: 'text/html' })
   const url = URL.createObjectURL(blob)

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Jessica Birky
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import katex from 'katex'
 import { api } from '../utils/api'
+import { parseAuthors, formatAuthorsShort } from '../utils/bibtexParser'
 
 const CODE_LANGUAGES = [
   { id: 'plaintext', label: 'Plain Text' },
@@ -31,6 +32,98 @@ const CODE_LANGUAGES = [
   { id: 'markdown', label: 'Markdown' },
   { id: 'latex', label: 'LaTeX' },
 ]
+
+function CitationAutocomplete({ bibliography, citationText, citationLink, onUpdate }) {
+  const [query, setQuery] = useState(citationText)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [selectedKey, setSelectedKey] = useState(null)
+  const inputRef = useRef(null)
+
+  const prevTextRef = useRef(citationText)
+  if (citationText !== prevTextRef.current) {
+    prevTextRef.current = citationText
+    if (citationText !== query) setQuery(citationText)
+  }
+
+  const suggestions = useMemo(() => {
+    if (!query || !bibliography.length) return []
+    const q = query.toLowerCase()
+    return bibliography.filter(entry => {
+      const authors = parseAuthors(entry.author)
+      const authorStr = formatAuthorsShort(authors).toLowerCase()
+      const fullAuthors = (entry.author || '').toLowerCase()
+      const title = (entry.title || '').toLowerCase()
+      const year = entry.year || ''
+      const key = entry.key.toLowerCase()
+      return authorStr.includes(q) || fullAuthors.includes(q) || title.includes(q) || year.includes(q) || key.includes(q)
+    }).slice(0, 6)
+  }, [query, bibliography])
+
+  function selectEntry(entry) {
+    const authors = parseAuthors(entry.author)
+    const text = `${formatAuthorsShort(authors)}${entry.year ? ` (${entry.year})` : ''}`
+    setQuery(text)
+    setSelectedKey(entry.key)
+    setShowSuggestions(false)
+    const updates = { citationText: text }
+    if (entry.doi) updates.citationLink = `https://doi.org/${entry.doi}`
+    else if (entry.url) updates.citationLink = entry.url
+    onUpdate(updates)
+  }
+
+  function handleInputChange(val) {
+    setQuery(val)
+    setSelectedKey(null)
+    setShowSuggestions(val.length > 0)
+    onUpdate({ citationText: val || null })
+  }
+
+  function handleBlur() {
+    setTimeout(() => setShowSuggestions(false), 150)
+  }
+
+  return (
+    <>
+      <div style={{ marginBottom: 4, position: 'relative' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Text</div>
+        <input ref={inputRef} className="prop-input" placeholder="e.g. Smith et al. (2023)"
+          value={query}
+          onChange={e => handleInputChange(e.target.value)}
+          onFocus={() => { if (query && suggestions.length) setShowSuggestions(true) }}
+          onBlur={handleBlur}
+          style={{ width: '100%', fontSize: 11, padding: '4px 6px', boxSizing: 'border-box' }} />
+        {showSuggestions && suggestions.length > 0 && (
+          <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 100, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.3)', maxHeight: 200, overflowY: 'auto', marginTop: 2 }}>
+            {suggestions.map(entry => {
+              const authors = parseAuthors(entry.author)
+              return (
+                <div key={entry.key}
+                  onMouseDown={e => { e.preventDefault(); selectEntry(entry) }}
+                  style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <div style={{ fontSize: 11, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {formatAuthorsShort(authors)}{entry.year ? ` (${entry.year})` : ''}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {entry.title}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Link (optional)</div>
+        <input className="prop-input" placeholder="https://..."
+          value={citationLink}
+          onChange={e => onUpdate({ citationLink: e.target.value || null })}
+          style={{ width: '100%', fontSize: 11, padding: '4px 6px', boxSizing: 'border-box' }} />
+      </div>
+    </>
+  )
+}
 
 export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide, onUpdateElement, onDeleteElement, onBringForward, onSendBackward, onEditHtml, onEditCode, onEditLatex, onEditP5, presentation, onUpdatePresentation, selectedElementIds, onDeleteSelectedElements, isTemplate = false, activeMathNode, onUpdateMathNode, onCloseMathNode, onPreviewSlide, currentSlideIndex }) {
   const [videoUploading, setVideoUploading] = useState(false)
@@ -764,20 +857,12 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
               )}
               <div style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>Citation</div>
-                <div style={{ marginBottom: 4 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Text</div>
-                  <input className="prop-input" placeholder="e.g. Smith et al. (2023)"
-                    value={selectedElement.citationText || ''}
-                    onChange={e => onUpdateElement({ citationText: e.target.value || null })}
-                    style={{ width: '100%', fontSize: 11, padding: '4px 6px' }} />
-                </div>
-                <div style={{ marginBottom: 4 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Link (optional)</div>
-                  <input className="prop-input" placeholder="https://..."
-                    value={selectedElement.citationLink || ''}
-                    onChange={e => onUpdateElement({ citationLink: e.target.value || null })}
-                    style={{ width: '100%', fontSize: 11, padding: '4px 6px' }} />
-                </div>
+                <CitationAutocomplete
+                  bibliography={presentation?.bibliography || []}
+                  citationText={selectedElement.citationText || ''}
+                  citationLink={selectedElement.citationLink || ''}
+                  onUpdate={onUpdateElement}
+                />
                 {(selectedElement.citationText || selectedElement.citationLink) && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     <div>
