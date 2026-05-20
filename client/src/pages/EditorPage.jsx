@@ -3237,7 +3237,7 @@ function draw() {
               onUpdateAxisLines={(axisLines) => updateCurrentSlide({ axisLines })}
             />}
           </div>
-        </div>}
+        </div>
 
         <PropertiesPanel
           slide={currentSlide}
