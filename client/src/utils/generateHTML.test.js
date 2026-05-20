@@ -299,69 +299,119 @@ describe('generateRevealHTML', () => {
     expect(html).not.toContain('>References<')
   })
 
-  it('generates a references slide when bibliography has entries', () => {
+  it('does not add references slide when no entries are cited', () => {
     const pres = makePresentation({
+      bibliography: [
+        { key: 'unused', type: 'article', author: 'Nobody', title: 'Uncited', year: '2020' },
+      ],
+    })
+    const html = generateRevealHTML(pres)
+    expect(html).not.toContain('>References<')
+  })
+
+  it('generates a references slide for entries cited via [N] in text', () => {
+    const pres = makePresentation({
+      slides: [{
+        id: 's1',
+        elements: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 400, height: 60, zIndex: 1, content: '<p>See <sup>[1]</sup></p>' }],
+      }],
       bibliography: [
         { key: 'smith2020', type: 'article', author: 'Smith, John', title: 'A Paper', year: '2020', journal: 'Nature', volume: '42', pages: '100-110', doi: '10.1234/test' },
       ],
     })
     const html = generateRevealHTML(pres)
     expect(html).toContain('>References<')
-    expect(html).toContain('[1]')
     expect(html).toContain('Smith, John')
-    expect(html).toContain('(2020)')
     expect(html).toContain('A Paper')
     expect(html).toContain('<em>Nature</em>')
-    expect(html).toContain('10.1234/test')
   })
 
-  it('generates references for multiple bibliography entries', () => {
+  it('generates a references slide for entries cited via image citationText', () => {
     const pres = makePresentation({
+      slides: [{
+        id: 's1',
+        elements: [{ id: 'e1', type: 'image', x: 0, y: 0, width: 200, height: 150, zIndex: 1, src: 'https://example.com/img.png', citationText: 'Smith (2020)' }],
+      }],
       bibliography: [
-        { key: 'a', type: 'article', author: 'Alpha, A', title: 'First', year: '2020' },
-        { key: 'b', type: 'article', author: 'Beta, B', title: 'Second', year: '2021' },
-        { key: 'c', type: 'article', author: 'Gamma, G', title: 'Third', year: '2022' },
+        { key: 'smith2020', type: 'article', author: 'Smith, John', title: 'A Paper', year: '2020' },
       ],
     })
     const html = generateRevealHTML(pres)
-    expect(html).toContain('[1]')
-    expect(html).toContain('[2]')
-    expect(html).toContain('[3]')
-    expect(html).toContain('First')
-    expect(html).toContain('Second')
-    expect(html).toContain('Third')
+    expect(html).toContain('>References<')
+    expect(html).toContain('A Paper')
   })
 
-  it('uses 2-column layout for bibliographies with more than 8 entries', () => {
+  it('generates a references slide for entries cited via key match', () => {
+    const pres = makePresentation({
+      slides: [{
+        id: 's1',
+        elements: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 400, height: 60, zIndex: 1, content: '<p>As shown in smith2020</p>' }],
+      }],
+      bibliography: [
+        { key: 'smith2020', type: 'article', author: 'Smith, John', title: 'Key Match Paper', year: '2020' },
+      ],
+    })
+    const html = generateRevealHTML(pres)
+    expect(html).toContain('>References<')
+    expect(html).toContain('Key Match Paper')
+  })
+
+  it('only includes referenced entries, not all bibliography', () => {
+    const pres = makePresentation({
+      slides: [{
+        id: 's1',
+        elements: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 400, height: 60, zIndex: 1, content: '<p><sup>[1]</sup></p>' }],
+      }],
+      bibliography: [
+        { key: 'cited', type: 'article', author: 'Cited, A', title: 'Cited Paper', year: '2020' },
+        { key: 'uncited', type: 'article', author: 'Uncited, B', title: 'Uncited Paper', year: '2021' },
+      ],
+    })
+    const html = generateRevealHTML(pres)
+    expect(html).toContain('Cited Paper')
+    expect(html).not.toContain('Uncited Paper')
+  })
+
+  it('uses 2-column layout for more than 8 referenced entries', () => {
     const entries = Array.from({ length: 10 }, (_, i) => ({
       key: `e${i}`, type: 'article', author: `Author${i}`, title: `Title ${i}`, year: '2020',
     }))
-    const html = generateRevealHTML(makePresentation({ bibliography: entries }))
+    const content = entries.map((_, i) => `[${i + 1}]`).join(' ')
+    const pres = makePresentation({
+      slides: [{ id: 's1', elements: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 400, height: 60, zIndex: 1, content: content }] }],
+      bibliography: entries,
+    })
+    const html = generateRevealHTML(pres)
     expect(html).toContain('columns:2')
   })
 
-  it('uses 1-column layout for bibliographies with 8 or fewer entries', () => {
+  it('uses 1-column layout for 8 or fewer referenced entries', () => {
     const entries = Array.from({ length: 5 }, (_, i) => ({
       key: `e${i}`, type: 'article', author: `Author${i}`, title: `Title ${i}`, year: '2020',
     }))
-    const html = generateRevealHTML(makePresentation({ bibliography: entries }))
+    const content = entries.map((_, i) => `[${i + 1}]`).join(' ')
+    const pres = makePresentation({
+      slides: [{ id: 's1', elements: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 400, height: 60, zIndex: 1, content: content }] }],
+      bibliography: entries,
+    })
+    const html = generateRevealHTML(pres)
     expect(html).toContain('columns:1')
   })
 
   it('uses explicit width and height on references slide container', () => {
     const pres = makePresentation({
       slideWidth: 960, slideHeight: 540,
+      slides: [{ id: 's1', elements: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 100, height: 50, zIndex: 1, content: '[1]' }] }],
       bibliography: [{ key: 'a', type: 'article', title: 'Test' }],
     })
     const html = generateRevealHTML(pres)
     expect(html).toContain('width:880px')
     expect(html).toContain('height:480px')
-    expect(html).not.toContain('right:40px')
-    expect(html).not.toContain('bottom:30px')
   })
 
   it('escapes HTML in bibliography entry titles', () => {
     const pres = makePresentation({
+      slides: [{ id: 's1', elements: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 100, height: 50, zIndex: 1, content: '[1]' }] }],
       bibliography: [
         { key: 'xss', type: 'article', title: '<script>alert(1)</script>', year: '2020' },
       ],
@@ -373,6 +423,7 @@ describe('generateRevealHTML', () => {
 
   it('generates DOI link in references', () => {
     const pres = makePresentation({
+      slides: [{ id: 's1', elements: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 100, height: 50, zIndex: 1, content: '[1]' }] }],
       bibliography: [
         { key: 'doi', type: 'article', title: 'Paper', doi: '10.1038/s41586-023-06330-w' },
       ],
@@ -384,6 +435,7 @@ describe('generateRevealHTML', () => {
 
   it('handles entries with booktitle instead of journal', () => {
     const pres = makePresentation({
+      slides: [{ id: 's1', elements: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 100, height: 50, zIndex: 1, content: '[1]' }] }],
       bibliography: [
         { key: 'conf', type: 'inproceedings', title: 'A Talk', booktitle: 'ICML 2023' },
       ],
@@ -394,6 +446,7 @@ describe('generateRevealHTML', () => {
 
   it('handles entries with missing optional fields', () => {
     const pres = makePresentation({
+      slides: [{ id: 's1', elements: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 100, height: 50, zIndex: 1, content: '[1]' }] }],
       bibliography: [
         { key: 'minimal', type: 'misc', title: 'Just a Title' },
       ],

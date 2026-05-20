@@ -3,6 +3,7 @@
 
 import { shapeSvgString } from './shapeUtils'
 import { pointsToPath } from './drawingUtils'
+import { parseAuthors, formatAuthorsShort } from './bibtexParser'
 
 function buildHtmlEmbed(userHtml, embedW, embedH) {
   const initScript = `<script>const EMBED_WIDTH=${embedW},EMBED_HEIGHT=${embedH};(function(){function fit(){document.querySelectorAll('svg').forEach(function(s){if(s._vb)return;var w=s.getAttribute('width'),h=s.getAttribute('height');if(w&&h&&!s.getAttribute('viewBox'))s.setAttribute('viewBox','0 0 '+parseFloat(w)+' '+parseFloat(h));if(s.getAttribute('viewBox')){s.setAttribute('width','100%');s.setAttribute('height','100%');s._vb=1;}});}window.addEventListener('load',fit);setTimeout(fit,100);setTimeout(fit,400);new MutationObserver(fit).observe(document.documentElement,{childList:true,subtree:true});})();<\/script>`
@@ -393,34 +394,52 @@ export function generateRevealHTML(presentation) {
   }).join('\n')
 
   if (bibliography.length > 0) {
-    const refItems = bibliography.map((entry, i) => {
-      const authors = entry.author || ''
-      const year = entry.year || ''
-      const title = escapeHtml(entry.title || '')
-      const journal = entry.journal || entry.booktitle || ''
-      const vol = entry.volume || ''
-      const pages = entry.pages || ''
-      const doi = entry.doi || ''
-      let line = `<span style="color:${footerColor};font-weight:700;margin-right:6px">[${i + 1}]</span>`
-      line += `${escapeHtml(authors)}`
-      if (year) line += ` (${escapeHtml(year)})`
-      line += `. ${title}.`
-      if (journal) line += ` <em>${escapeHtml(journal)}</em>`
-      if (vol) line += `, ${escapeHtml(vol)}`
-      if (pages) line += `, ${escapeHtml(pages)}`
-      line += '.'
-      if (doi) line += ` <a href="https://doi.org/${escapeHtml(doi)}" target="_blank" rel="noopener" style="color:rgba(99,102,241,0.8);font-size:0.85em">DOI</a>`
-      return `<div style="margin-bottom:8px;line-height:1.5;font-size:14px;color:rgba(255,255,255,0.85)">${line}</div>`
-    }).join('\n          ')
-    const refSlide = `    <section>
+    const allText = (presentation.slides || []).flatMap(s => (s.elements || []).flatMap(el => {
+      const parts = []
+      if (el.content) parts.push(el.content)
+      if (el.citationText) parts.push(el.citationText)
+      return parts
+    })).join(' ')
+
+    const referencedEntries = bibliography.filter((entry, i) => {
+      if (allText.includes(`[${i + 1}]`)) return true
+      const authors = parseAuthors(entry.author)
+      const short = formatAuthorsShort(authors)
+      if (short && allText.includes(short)) return true
+      if (entry.key && allText.includes(entry.key)) return true
+      return false
+    })
+
+    if (referencedEntries.length > 0) {
+      const refItems = referencedEntries.map((entry, i) => {
+        const authors = entry.author || ''
+        const year = entry.year || ''
+        const title = escapeHtml(entry.title || '')
+        const journal = entry.journal || entry.booktitle || ''
+        const vol = entry.volume || ''
+        const pages = entry.pages || ''
+        const doi = entry.doi || ''
+        let line = `<span style="color:${footerColor};font-weight:700;margin-right:6px">[${i + 1}]</span>`
+        line += `${escapeHtml(authors)}`
+        if (year) line += ` (${escapeHtml(year)})`
+        line += `. ${title}.`
+        if (journal) line += ` <em>${escapeHtml(journal)}</em>`
+        if (vol) line += `, ${escapeHtml(vol)}`
+        if (pages) line += `, ${escapeHtml(pages)}`
+        line += '.'
+        if (doi) line += ` <a href="https://doi.org/${escapeHtml(doi)}" target="_blank" rel="noopener" style="color:rgba(99,102,241,0.8);font-size:0.85em">DOI</a>`
+        return `<div style="margin-bottom:8px;line-height:1.5;font-size:14px;color:rgba(255,255,255,0.85)">${line}</div>`
+      }).join('\n          ')
+      const refSlide = `    <section>
       <div style="position:absolute;left:40px;top:30px;width:${slideW - 80}px;height:${slideH - 60}px;overflow:auto;z-index:1">
         <h2 style="font-size:28px;margin:0 0 20px;color:rgba(255,255,255,0.95)">References</h2>
-        <div style="columns:${bibliography.length > 8 ? 2 : 1};column-gap:30px">
+        <div style="columns:${referencedEntries.length > 8 ? 2 : 1};column-gap:30px">
           ${refItems}
         </div>
       </div>
     </section>`
-    slidesHtml += '\n' + refSlide
+      slidesHtml += '\n' + refSlide
+    }
   }
 
   return `<!doctype html>
