@@ -2484,19 +2484,29 @@ app.post('/api/presentations/:id/github/push', async (req, res) => {
     if (!presentation) return res.status(404).json({ error: 'Presentation not found' })
 
     const { token, owner, repo } = config
-    const gh = (endpoint, opts = {}) => fetch(`https://api.github.com${endpoint}`, {
-      ...opts,
-      headers: {
-        'Authorization': `token ${token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json',
-        ...opts.headers,
-      },
-    }).then(async r => {
-      const body = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(body.message || `GitHub API ${r.status}`)
-      return body
-    })
+    const gh = (endpoint, opts = {}) => {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 30000)
+      return fetch(`https://api.github.com${endpoint}`, {
+        ...opts,
+        signal: controller.signal,
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+          ...opts.headers,
+        },
+      }).then(async r => {
+        clearTimeout(timer)
+        const body = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(body.message || `GitHub API ${r.status}`)
+        return body
+      }).catch(err => {
+        clearTimeout(timer)
+        if (err.name === 'AbortError') throw new Error(`GitHub API timeout on ${endpoint}`)
+        throw err
+      })
+    }
 
     // Folder name from presentation title
     const folderName = (presentation.title || 'untitled').replace(/[^a-z0-9_-]/gi, '_').toLowerCase()
