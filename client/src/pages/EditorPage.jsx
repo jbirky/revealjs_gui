@@ -19,7 +19,7 @@ import TableCell from '@tiptap/extension-table-cell'
 import { ChevronLeft, ChevronDown, Play, Download, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup, Monitor, FileText } from 'lucide-react'
 import { api } from '../utils/api'
 import { generateLatexIframeHtml } from '../utils/latexRenderer'
-import { downloadHTML, downloadSlideHTML, presentInWindow, presenterInWindow, previewSlideInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
+import { downloadHTML, downloadSlideHTML, presentInWindow, presenterInWindow, livePresentInWindow, previewSlideInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
 import { exportToPptx } from '../utils/exportPptx'
 import { simplifyPoints } from '../utils/drawingUtils'
 import { generateOfflineHTML } from '../utils/offlineExport'
@@ -257,6 +257,8 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [showThreeModal, setShowThreeModal] = useState(false)
   const [showBibliographyModal, setShowBibliographyModal] = useState(false)
   const [showDiagramModal, setShowDiagramModal] = useState(false)
+  const [liveSession, setLiveSession] = useState(null) // { sessionId, url }
+  const [liveViewers, setLiveViewers] = useState(0)
   const [syncStatus, setSyncStatus] = useState(null) // { installed, remotes, hasConfig }
   const [syncConfig, setSyncConfig] = useState({ username: '', password: '', remoteName: 'protondrive' })
   const [syncResult, setSyncResult] = useState(null) // { type, message }
@@ -1912,6 +1914,21 @@ function draw() {
             )}
           </div>
 
+          {liveSession && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 11 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'pulse 1.5s infinite', flexShrink: 0 }} />
+              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>LIVE</span>
+              <input readOnly value={`${window.location.origin}${liveSession.url}`}
+                style={{ width: 180, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-primary)', fontSize: 11, padding: '2px 6px' }}
+                onClick={e => { e.target.select(); navigator.clipboard.writeText(e.target.value).catch(() => {}) }} />
+              <span style={{ color: 'var(--text-muted)' }}>{liveViewers} viewer{liveViewers !== 1 ? 's' : ''}</span>
+              <button onClick={async () => { await api.stopLiveSession(presentationId, liveSession.sessionId).catch(() => {}); setLiveSession(null); setLiveViewers(0) }}
+                style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '2px 4px' }}>
+                Stop
+              </button>
+            </div>
+          )}
+
           <div style={{ position: 'relative' }}>
             <div style={{ display: 'flex' }}>
               <button
@@ -1953,6 +1970,34 @@ function draw() {
                   >
                     <Monitor size={14} />
                     Presenter Mode
+                  </button>
+                  <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
+                  <button
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', color: liveSession ? 'var(--danger)' : '#ef4444', fontSize: 13, cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    onClick={async () => {
+                      setShowPresentDropdown(false)
+                      if (liveSession) {
+                        await api.stopLiveSession(presentationId, liveSession.sessionId).catch(() => {})
+                        setLiveSession(null)
+                        setLiveViewers(0)
+                        return
+                      }
+                      try {
+                        const { sessionId, url } = await api.startLiveSession(presentationId)
+                        setLiveSession({ sessionId, url })
+                        setLiveViewers(0)
+                        livePresentInWindow(presentation, sessionId, (count) => setLiveViewers(count))
+                      } catch (e) {
+                        alert('Failed to start live session: ' + e.message)
+                      }
+                    }}
+                  >
+                    <span style={{ width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: liveSession ? '#ef4444' : '#ef4444', display: 'block', animation: liveSession ? 'none' : 'none' }} />
+                    </span>
+                    {liveSession ? 'Stop Live Session' : 'Live Present'}
                   </button>
                 </div>
               </>

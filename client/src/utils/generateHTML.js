@@ -1300,6 +1300,58 @@ export function presentInWindow(presentation) {
   setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
+export function livePresentInWindow(presentation, sessionId, onViewerCount) {
+  const baseHtml = generateRevealHTML(presentation)
+  const liveScript = `
+  <script>
+  (function() {
+    var sessionId = '${sessionId}';
+    var badge = document.createElement('div');
+    badge.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;background:rgba(239,68,68,0.9);color:white;padding:6px 12px;border-radius:20px;font-family:-apple-system,sans-serif;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;backdrop-filter:blur(4px);pointer-events:none;';
+    badge.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:white;animation:pulse 1.5s infinite;display:inline-block"></span> LIVE <span id="live-count" style="opacity:0.8">0 viewers</span>';
+    document.body.appendChild(badge);
+    var style = document.createElement('style');
+    style.textContent = '@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}';
+    document.head.appendChild(style);
+
+    var flatMap = [];
+    Reveal.on('ready', function() {
+      Reveal.getSlides().forEach(function(s) { flatMap.push(Reveal.getIndices(s)); });
+      sendSlide();
+    });
+
+    function currentFlat() {
+      var idx = Reveal.getIndices();
+      for (var i = 0; i < flatMap.length; i++) {
+        if (flatMap[i].h === idx.h && flatMap[i].v === idx.v) return i;
+      }
+      return 0;
+    }
+
+    function sendSlide() {
+      fetch('/api/live/' + sessionId + '/slide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flatIndex: currentFlat() })
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        var el = document.getElementById('live-count');
+        if (el) el.textContent = (data.viewers || 0) + ' viewer' + ((data.viewers || 0) !== 1 ? 's' : '');
+        if (window.opener && window.opener.__liveViewerCount) window.opener.__liveViewerCount(data.viewers || 0);
+      }).catch(function() {});
+    }
+
+    Reveal.on('slidechanged', sendSlide);
+  })();
+  <\\/script>`
+  const html = baseHtml.replace('</body>', liveScript + '\n</body>')
+  const blob = new Blob([html], { type: 'text/html' })
+  const url = URL.createObjectURL(blob)
+  const win = window.open(url, '_blank')
+  if (onViewerCount) window.__liveViewerCount = onViewerCount
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
+  return win
+}
+
 export function presenterInWindow(presentation) {
   const html = generatePresenterHTML(presentation)
   const blob = new Blob([html], { type: 'text/html' })

@@ -58,6 +58,19 @@ export const api = {
     return body
   }),
 
+  // Live sessions
+  startLiveSession: (id) => authFetch(`${BASE}/presentations/${id}/live/start`, { method: 'POST' }).then(safeJson),
+  stopLiveSession: (id, sessionId) => authFetch(`${BASE}/presentations/${id}/live/stop`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId })
+  }).then(safeJson),
+  updateLiveSlide: (sessionId, flatIndex) => _fetch(`/api/live/${sessionId}/slide`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ flatIndex })
+  }).then(safeJson),
+
   // Zotero
   getZoteroConfig: () => authFetch(`${BASE}/zotero/config`).then(safeJson),
   saveZoteroConfig: (data) => authFetch(`${BASE}/zotero/config`, {

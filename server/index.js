@@ -1690,6 +1690,202 @@ app.get('/share/:token', requireValidId('token'), async (req, res) => {
   }
 })
 
+// --- Live Sessions ---
+
+const liveSessions = new Map()
+
+function generateSessionCode() {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789'
+  let code = ''
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)]
+  return code
+}
+
+// POST /api/presentations/:id/live/start
+app.post('/api/presentations/:id/live/start', requireValidId(), async (req, res) => {
+  try {
+    const presentation = await storage.getPresentation(req.params.id, req.userId)
+    if (!presentation) return res.status(404).json({ error: 'Not found' })
+
+    let sessionId
+    do { sessionId = generateSessionCode() } while (liveSessions.has(sessionId))
+
+    liveSessions.set(sessionId, {
+      presentationId: req.params.id,
+      userId: req.userId,
+      currentSlide: 0,
+      unlockedSlides: new Set([0]),
+      viewers: new Set(),
+      startedAt: Date.now(),
+    })
+
+    res.json({ sessionId, url: `/live/${sessionId}` })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/presentations/:id/live/stop
+app.post('/api/presentations/:id/live/stop', requireValidId(), async (req, res) => {
+  const { sessionId } = req.body
+  const session = liveSessions.get(sessionId)
+  if (!session || session.userId !== req.userId) return res.status(404).json({ error: 'Session not found' })
+
+  for (const viewer of session.viewers) {
+    viewer.write(`data: ${JSON.stringify({ type: 'ended' })}\n\n`)
+    viewer.end()
+  }
+  liveSessions.delete(sessionId)
+  res.json({ ok: true })
+})
+
+// POST /api/live/:sessionId/slide — presenter updates current slide
+app.post('/api/live/:sessionId/slide', async (req, res) => {
+  const session = liveSessions.get(req.params.sessionId)
+  if (!session) return res.status(404).json({ error: 'Session not found' })
+
+  const { flatIndex } = req.body
+  if (typeof flatIndex !== 'number') return res.status(400).json({ error: 'flatIndex required' })
+
+  session.currentSlide = flatIndex
+  session.unlockedSlides.add(flatIndex)
+
+  const msg = JSON.stringify({
+    type: 'slide',
+    currentSlide: flatIndex,
+    unlocked: [...session.unlockedSlides].sort((a, b) => a - b),
+  })
+  for (const viewer of session.viewers) {
+    viewer.write(`data: ${msg}\n\n`)
+  }
+
+  res.json({ ok: true, viewers: session.viewers.size })
+})
+
+// GET /api/live/:sessionId/stream — SSE for viewers
+app.get('/api/live/:sessionId/stream', (req, res) => {
+  const session = liveSessions.get(req.params.sessionId)
+  if (!session) return res.status(404).json({ error: 'Session not found' })
+
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders()
+
+  session.viewers.add(res)
+
+  const initMsg = JSON.stringify({
+    type: 'init',
+    currentSlide: session.currentSlide,
+    unlocked: [...session.unlockedSlides].sort((a, b) => a - b),
+    viewers: session.viewers.size,
+  })
+  res.write(`data: ${initMsg}\n\n`)
+
+  // Broadcast updated viewer count
+  const countMsg = JSON.stringify({ type: 'viewers', count: session.viewers.size })
+  for (const v of session.viewers) { if (v !== res) v.write(`data: ${countMsg}\n\n`) }
+
+  req.on('close', () => {
+    session.viewers.delete(res)
+    const dcMsg = JSON.stringify({ type: 'viewers', count: session.viewers.size })
+    for (const v of session.viewers) v.write(`data: ${dcMsg}\n\n`)
+  })
+})
+
+// GET /api/live/:sessionId/status — check if session exists
+app.get('/api/live/:sessionId/status', (req, res) => {
+  const session = liveSessions.get(req.params.sessionId)
+  if (!session) return res.status(404).json({ error: 'Session not found' })
+  res.json({ viewers: session.viewers.size, currentSlide: session.currentSlide })
+})
+
+// GET /live/:sessionId — serve viewer page (public, no auth)
+app.get('/live/:id', async (req, res) => {
+  const session = liveSessions.get(req.params.id)
+  if (!session) return res.status(404).send('Live session not found or has ended.')
+
+  try {
+    const presentation = await storage.getPresentation(session.presentationId, session.userId)
+    if (!presentation) return res.status(404).send('Presentation not found')
+
+    const baseHtml = generateRevealHTML(presentation)
+    const liveScript = `
+    <script>
+    // ── Live session viewer ──────────────────────────────────
+    (function() {
+      var sessionId = '${req.params.id}';
+      var unlocked = new Set([0]);
+      var maxUnlocked = 0;
+      var badge = document.createElement('div');
+      badge.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;background:rgba(34,197,94,0.9);color:white;padding:6px 12px;border-radius:20px;font-family:-apple-system,sans-serif;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;backdrop-filter:blur(4px);pointer-events:none;transition:background 0.3s;';
+      badge.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:white;display:inline-block"></span> LIVE';
+      document.body.appendChild(badge);
+
+      var es = new EventSource('/api/live/' + sessionId + '/stream');
+
+      es.onmessage = function(e) {
+        var data = JSON.parse(e.data);
+        if (data.type === 'init' || data.type === 'slide') {
+          data.unlocked.forEach(function(i) { unlocked.add(i); });
+          maxUnlocked = Math.max.apply(null, Array.from(unlocked));
+          if (data.type === 'init') {
+            Reveal.slide(flatToHV(data.currentSlide));
+          }
+        }
+        if (data.type === 'ended') {
+          badge.style.background = 'rgba(100,100,100,0.8)';
+          badge.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#999;display:inline-block"></span> ENDED';
+          es.close();
+        }
+      };
+
+      es.onerror = function() {
+        badge.style.background = 'rgba(239,68,68,0.9)';
+        badge.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:white;display:inline-block"></span> RECONNECTING';
+      };
+
+      // Build flat→(h,v) map after Reveal is ready
+      var flatMap = [];
+      Reveal.on('ready', function() {
+        var slides = Reveal.getSlides();
+        slides.forEach(function(s) {
+          flatMap.push(Reveal.getIndices(s));
+        });
+      });
+
+      function flatToHV(fi) {
+        if (flatMap[fi]) return flatMap[fi];
+        return { h: fi, v: 0 };
+      }
+
+      function currentFlat() {
+        var idx = Reveal.getIndices();
+        for (var i = 0; i < flatMap.length; i++) {
+          if (flatMap[i].h === idx.h && flatMap[i].v === idx.v) return i;
+        }
+        return 0;
+      }
+
+      // Intercept navigation — block forward past unlocked
+      Reveal.on('slidechanged', function(e) {
+        var fi = currentFlat();
+        if (fi > maxUnlocked) {
+          var target = flatMap[maxUnlocked] || { h: 0, v: 0 };
+          Reveal.slide(target.h, target.v);
+        }
+      });
+    })();
+    <\/script>`
+
+    const html = baseHtml.replace('</body>', liveScript + '\n</body>')
+    res.setHeader('Content-Type', 'text/html')
+    res.send(html)
+  } catch (err) {
+    res.status(500).send('Error loading presentation')
+  }
+})
+
 // --- Version History ---
 
 // POST /api/presentations/:id/snapshot
