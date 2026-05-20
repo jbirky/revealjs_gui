@@ -1345,7 +1345,10 @@ export function livePresentInWindow(presentation, sessionId, onViewerCount) {
     Reveal.on('slidechanged', sendSlide);
   })();
   <\\/script>`
-  const html = baseHtml.replace('</body>', liveScript + '\n</body>')
+  const lastBodyIdx = baseHtml.lastIndexOf('</body>')
+  const html = lastBodyIdx >= 0
+    ? baseHtml.slice(0, lastBodyIdx) + liveScript + '\n</body>' + baseHtml.slice(lastBodyIdx + 7)
+    : baseHtml + liveScript
   const blob = new Blob([html], { type: 'text/html' })
   const url = URL.createObjectURL(blob)
   const win = window.open(url, '_blank')

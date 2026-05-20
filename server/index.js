@@ -1878,7 +1878,10 @@ app.get('/live/:id', async (req, res) => {
     })();
     <\/script>`
 
-    const html = baseHtml.replace('</body>', liveScript + '\n</body>')
+    const lastBodyIdx = baseHtml.lastIndexOf('</body>')
+    const html = lastBodyIdx >= 0
+      ? baseHtml.slice(0, lastBodyIdx) + liveScript + '\n</body>' + baseHtml.slice(lastBodyIdx + 7)
+      : baseHtml + liveScript
     res.setHeader('Content-Type', 'text/html')
     res.send(html)
   } catch (err) {
