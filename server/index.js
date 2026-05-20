@@ -2264,7 +2264,32 @@ app.post('/api/presentations/:id/zenodo/publish', requireValidId(), async (req, 
       body: JSON.stringify({}),
     })
     const depositionId = deposition.id
-    const bucketUrl = deposition.links.bucket
+    const bucketUrl = deposition.links?.bucket
+
+    // Helper: upload a file to the deposition (bucket API with fallback to files API)
+    const zenUploadFile = async (filename, buffer, contentType) => {
+      if (bucketUrl) {
+        const r = await fetch(`${bucketUrl}/${filename}`, {
+          method: 'PUT',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+          body: buffer,
+        })
+        if (r.ok) return
+        console.error(`Zenodo bucket upload failed for ${filename}: ${r.status} ${await r.text().catch(() => '')}`)
+      }
+      // Fallback: old files API (multipart form upload)
+      const form = new FormData()
+      form.set('file', new Blob([buffer], { type: contentType }), filename)
+      const r = await fetch(`${baseUrl}/api/deposit/depositions/${depositionId}/files`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: form,
+      })
+      if (!r.ok) {
+        const body = await r.text().catch(() => '')
+        throw new Error(`File upload failed for ${filename}: ${r.status} ${body}`)
+      }
+    }
 
     // 2. Prepare export: rewrite asset paths for self-contained HTML
     const exportPres = JSON.parse(JSON.stringify(presentation))
@@ -2293,21 +2318,11 @@ app.post('/api/presentations/:id/zenodo/publish', requireValidId(), async (req, 
     const htmlContent = generateRevealHTML(exportPres)
     const jsonContent = JSON.stringify(presentation, null, 2)
 
-    // 3. Upload presentation.html
-    await fetch(`${bucketUrl}/presentation.html`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/html' },
-      body: htmlContent,
-    })
+    // 3. Upload presentation files
+    await zenUploadFile('presentation.html', Buffer.from(htmlContent, 'utf8'), 'text/html')
+    await zenUploadFile('presentation.json', Buffer.from(jsonContent, 'utf8'), 'application/json')
 
-    // 4. Upload presentation.json
-    await fetch(`${bucketUrl}/presentation.json`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: jsonContent,
-    })
-
-    // 5. Upload asset files
+    // 4. Upload asset files
     for (const uploadPath of uploadPaths) {
       const relativePath = uploadPath.replace(/^\/uploads\//, '')
       try {
@@ -2325,11 +2340,7 @@ app.post('/api/presentations/:id/zenodo/publish', requireValidId(), async (req, 
           if (!fs.existsSync(filePath)) continue
           fileBuffer = fs.readFileSync(filePath)
         }
-        await fetch(`${bucketUrl}/assets/${assetName(uploadPath)}`, {
-          method: 'PUT',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': contentType },
-          body: fileBuffer,
-        })
+        await zenUploadFile(`assets_${assetName(uploadPath)}`, fileBuffer, contentType)
       } catch (e) { console.error(`Zenodo asset upload failed for ${uploadPath}:`, e.message) }
     }
 
