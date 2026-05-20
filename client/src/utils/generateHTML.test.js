@@ -348,6 +348,18 @@ describe('generateRevealHTML', () => {
     expect(html).toContain('columns:1')
   })
 
+  it('uses explicit width and height on references slide container', () => {
+    const pres = makePresentation({
+      slideWidth: 960, slideHeight: 540,
+      bibliography: [{ key: 'a', type: 'article', title: 'Test' }],
+    })
+    const html = generateRevealHTML(pres)
+    expect(html).toContain('width:880px')
+    expect(html).toContain('height:480px')
+    expect(html).not.toContain('right:40px')
+    expect(html).not.toContain('bottom:30px')
+  })
+
   it('escapes HTML in bibliography entry titles', () => {
     const pres = makePresentation({
       bibliography: [

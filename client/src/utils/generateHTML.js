@@ -413,7 +413,7 @@ export function generateRevealHTML(presentation) {
       return `<div style="margin-bottom:8px;line-height:1.5;font-size:14px;color:rgba(255,255,255,0.85)">${line}</div>`
     }).join('\n          ')
     const refSlide = `    <section>
-      <div style="position:absolute;left:40px;top:30px;right:40px;bottom:30px;overflow:auto">
+      <div style="position:absolute;left:40px;top:30px;width:${slideW - 80}px;height:${slideH - 60}px;overflow:auto;z-index:1">
         <h2 style="font-size:28px;margin:0 0 20px;color:rgba(255,255,255,0.95)">References</h2>
         <div style="columns:${bibliography.length > 8 ? 2 : 1};column-gap:30px">
           ${refItems}
