@@ -2469,6 +2469,9 @@ function draw() {
                   onChange={e => setGithubToken(e.target.value)}
                   placeholder={githubConfig.hasToken ? '••••••••  (leave blank to keep)' : 'ghp_...'}
                 />
+                <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+                  Generate at github.com &rarr; Settings &rarr; Developer settings &rarr; Personal access tokens &rarr; Fine-grained tokens. Required permissions: <strong style={{ color: '#888' }}>Contents</strong> (Read and write), <strong style={{ color: '#888' }}>Metadata</strong> (Read-only).
+                </div>
               </div>
               <div>
                 <label style={{ fontSize: 12, color: '#a0a0b0', display: 'block', marginBottom: 4 }}>Pages URL <span style={{ color: '#666' }}>(optional)</span></label>
