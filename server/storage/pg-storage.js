@@ -328,14 +328,18 @@ class PgStorage extends StorageInterface {
 
   async setZenodoConfig(config, userId) {
     if (!userId) return config
-    const encryptedToken = encrypt(config.token || '')
-    const sandbox = config.sandbox || false
+    const existing = await this.getZenodoConfig(userId)
+    const updated = {
+      token: config.token !== undefined ? config.token : existing.token,
+      sandbox: config.sandbox !== undefined ? config.sandbox : existing.sandbox,
+    }
+    const encryptedToken = encrypt(updated.token)
     await this.query(
       `INSERT INTO zenodo_configs (user_id, token, sandbox) VALUES ($1, $2, $3)
        ON CONFLICT (user_id) DO UPDATE SET token = $2, sandbox = $3`,
-      [userId, encryptedToken, sandbox]
+      [userId, encryptedToken, updated.sandbox]
     )
-    return { token: config.token || '', sandbox }
+    return updated
   }
 
   // --- Plugins ---

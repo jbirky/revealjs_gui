@@ -2536,6 +2536,20 @@ function draw() {
               </button>
             </div>
 
+            <div style={{
+              padding: '8px 12px', borderRadius: 6, fontSize: 13, marginBottom: 12,
+              background: zenodoConfig.hasToken ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+              border: `1px solid ${zenodoConfig.hasToken ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}`,
+              color: zenodoConfig.hasToken ? '#86efac' : '#fca5a5',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              {zenodoConfig.hasToken ? <Check size={14} /> : <X size={14} />}
+              {zenodoConfig.hasToken
+                ? <>Connected to {zenodoConfig.sandbox ? 'Sandbox' : 'Zenodo'}</>
+                : <>No API token saved — add one below to publish</>
+              }
+            </div>
+
             {zenodoPubStatus?.published && (
               <div style={{ padding: '10px 14px', borderRadius: 6, fontSize: 13, background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', color: '#86efac', marginBottom: 16, lineHeight: 1.6 }}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>Previously published</div>
