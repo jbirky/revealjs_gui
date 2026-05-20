@@ -141,6 +141,7 @@ app.get('/api/docs/sidebar', (req, res) => {
       { text: 'Text & Typography', link: 'tutorials/text-typography' },
       { text: 'Transitions', link: 'tutorials/transitions' },
       { text: 'Using LaTeX & Math', link: 'tutorials/using-latex' },
+      { text: 'Version Diff', link: 'features/version-diff' },
       { text: 'Video & Audio', link: 'tutorials/media' },
       { text: 'Zenodo Integration', link: 'features/zenodo' },
     ],
