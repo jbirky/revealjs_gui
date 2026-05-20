@@ -18,6 +18,7 @@ import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
 import { ChevronLeft, ChevronDown, Play, Download, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup, Monitor, FileText } from 'lucide-react'
 import { api } from '../utils/api'
+import DiffViewer from '../components/DiffViewer'
 import { generateLatexIframeHtml } from '../utils/latexRenderer'
 import { downloadHTML, downloadSlideHTML, presentInWindow, presenterInWindow, livePresentInWindow, previewSlideInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
 import { exportToPptx } from '../utils/exportPptx'
@@ -283,6 +284,9 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [gitCommits, setGitCommits] = useState([])
   const [gitLoading, setGitLoading] = useState(false)
   const [gitRestoring, setGitRestoring] = useState(null)
+  const [showDiffViewer, setShowDiffViewer] = useState(false)
+  const [diffOldData, setDiffOldData] = useState(null)
+  const [diffOldLabel, setDiffOldLabel] = useState('')
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [showRulers, setShowRulers] = useState(false)
   const [guides, setGuides] = useState([]) // persistent guide lines: [{ axis: 'x'|'y', position: number }]
@@ -2948,6 +2952,18 @@ function draw() {
                       className="btn btn-secondary"
                       style={{ fontSize: 11, padding: '3px 10px' }}
                       onClick={async () => {
+                        const data = await api.getSnapshotData(presentationId, snap.id)
+                        setDiffOldData(data)
+                        setDiffOldLabel(snap.name || new Date(snap.createdAt).toLocaleString())
+                        setShowDiffViewer(true)
+                      }}
+                    >
+                      Compare
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: 11, padding: '3px 10px' }}
+                      onClick={async () => {
                         if (!confirm('Restore this snapshot? Current changes will be overwritten.')) return
                         const restored = await api.restoreSnapshot(presentationId, snap.id)
                         setPresentation({ ...restored, slides: (restored.slides || []).map(s => s) })
@@ -3007,6 +3023,18 @@ function draw() {
                     <button
                       className="btn btn-secondary"
                       style={{ fontSize: 11, padding: '3px 10px', flexShrink: 0 }}
+                      onClick={async () => {
+                        const data = await api.getGitVersion(presentationId, commit.sha)
+                        setDiffOldData(data)
+                        setDiffOldLabel(`${commit.message.split('\n')[0]} (${commit.sha.slice(0, 7)})`)
+                        setShowDiffViewer(true)
+                      }}
+                    >
+                      Compare
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: 11, padding: '3px 10px', flexShrink: 0 }}
                       disabled={gitRestoring === commit.sha}
                       onClick={async () => {
                         if (!confirm(`Restore from commit ${commit.sha.slice(0, 7)}? Current changes will be overwritten.`)) return
@@ -3028,6 +3056,16 @@ function draw() {
             </div>
           </div>
         </div>
+      )}
+
+      {showDiffViewer && diffOldData && (
+        <DiffViewer
+          oldPresentation={diffOldData}
+          newPresentation={presentation}
+          oldLabel={diffOldLabel}
+          newLabel="Current"
+          onClose={() => { setShowDiffViewer(false); setDiffOldData(null) }}
+        />
       )}
 
       {/* Editor Body */}

@@ -115,6 +115,7 @@ export const api = {
   getSnapshots: (id) => authFetch(`${BASE}/presentations/${id}/snapshots`).then(safeJson),
   restoreSnapshot: (id, snapshotId) => authFetch(`${BASE}/presentations/${id}/restore/${snapshotId}`, { method: 'POST' }).then(safeJson),
   deleteSnapshot: (id, snapshotId) => authFetch(`${BASE}/presentations/${id}/snapshots/${snapshotId}`, { method: 'DELETE' }).then(safeJson),
+  getSnapshotData: (id, snapshotId) => authFetch(`${BASE}/presentations/${id}/snapshots/${snapshotId}/data`).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Failed'); return b }),
 
   // Rclone / Proton Drive
   getRcloneStatus: () => authFetch(`${BASE}/rclone/status`).then(safeJson),

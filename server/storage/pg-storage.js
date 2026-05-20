@@ -270,6 +270,16 @@ class PgStorage extends StorageInterface {
     return true
   }
 
+  async getSnapshotData(presentationId, snapshotId, userId) {
+    if (userId) {
+      const { rows } = await this.query('SELECT 1 FROM presentations WHERE id = $1 AND user_id = $2', [presentationId, userId])
+      if (!rows.length) return null
+    }
+    const { rows } = await this.query('SELECT data FROM snapshots WHERE id = $1 AND presentation_id = $2', [snapshotId, presentationId])
+    if (!rows.length) return null
+    return typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data
+  }
+
   // --- GitHub config ---
 
   async getGithubConfig(userId) {

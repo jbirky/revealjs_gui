@@ -1977,6 +1977,15 @@ app.delete('/api/presentations/:id/snapshots/:snapshotId', requireValidId(), req
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// GET /api/presentations/:id/snapshots/:snapshotId/data - get snapshot data without restoring
+app.get('/api/presentations/:id/snapshots/:snapshotId/data', requireValidId(), requireValidId('snapshotId'), async (req, res) => {
+  try {
+    const data = await storage.getSnapshotData(req.params.id, req.params.snapshotId, req.userId)
+    if (!data) return res.status(404).json({ error: 'Snapshot not found' })
+    res.json(data)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // --- Rclone / Proton Drive Sync ---
 
 const { execFile } = require('child_process')

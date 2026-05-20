@@ -25,6 +25,7 @@ class StorageInterface {
   async listSnapshots(presentationId, userId) { throw new Error('Not implemented') }
   async restoreSnapshot(presentationId, snapshotId, userId) { throw new Error('Not implemented') }
   async deleteSnapshot(presentationId, snapshotId, userId) { throw new Error('Not implemented') }
+  async getSnapshotData(presentationId, snapshotId, userId) { throw new Error('Not implemented') }
 
   async getGithubConfig(userId) { throw new Error('Not implemented') }
   async setGithubConfig(config, userId) { throw new Error('Not implemented') }
