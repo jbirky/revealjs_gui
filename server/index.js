@@ -2218,11 +2218,25 @@ app.delete('/api/zenodo/config', async (req, res) => {
 app.get('/api/presentations/:id/zenodo/status', requireValidId(), async (req, res) => {
   try {
     const { rows } = await storage.query(
-      'SELECT doi, zenodo_url, sandbox, published_at FROM zenodo_publications WHERE presentation_id = $1 AND user_id = $2 ORDER BY published_at DESC LIMIT 1',
+      'SELECT deposition_id, doi, zenodo_url, sandbox, published_at, concept_recid FROM zenodo_publications WHERE presentation_id = $1 AND user_id = $2 ORDER BY published_at DESC LIMIT 1',
       [req.params.id, req.userId]
     )
     if (!rows.length) return res.json({ published: false })
-    res.json({ published: true, doi: rows[0].doi, url: rows[0].zenodo_url, sandbox: rows[0].sandbox, publishedAt: rows[0].published_at })
+    const { rows: allVersions } = await storage.query(
+      'SELECT doi, zenodo_url, published_at FROM zenodo_publications WHERE presentation_id = $1 AND user_id = $2 ORDER BY published_at DESC',
+      [req.params.id, req.userId]
+    )
+    res.json({
+      published: true,
+      depositionId: rows[0].deposition_id,
+      conceptRecid: rows[0].concept_recid,
+      doi: rows[0].doi,
+      url: rows[0].zenodo_url,
+      sandbox: rows[0].sandbox,
+      publishedAt: rows[0].published_at,
+      versionCount: allVersions.length,
+      versions: allVersions,
+    })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -2258,11 +2272,35 @@ app.post('/api/presentations/:id/zenodo/publish', requireValidId(), async (req, 
       return body
     }
 
-    // 1. Create a new deposition
-    const deposition = await zen('/deposit/depositions', {
-      method: 'POST',
-      body: JSON.stringify({}),
-    })
+    // 1. Create deposition — new version if previously published, fresh otherwise
+    const { rows: prevPubs } = await storage.query(
+      'SELECT deposition_id, concept_recid FROM zenodo_publications WHERE presentation_id = $1 AND user_id = $2 AND sandbox = $3 ORDER BY published_at DESC LIMIT 1',
+      [req.params.id, req.userId, config.sandbox]
+    )
+    let deposition, isNewVersion = false
+    if (prevPubs.length && prevPubs[0].deposition_id) {
+      const prevId = prevPubs[0].deposition_id
+      const nvRes = await zen(`/deposit/depositions/${prevId}/actions/newversion`, { method: 'POST' })
+      const draftUrl = nvRes.links?.latest_draft
+      if (!draftUrl) throw new Error('Zenodo did not return a draft URL for the new version')
+      const draftRes = await fetch(draftUrl, { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } })
+      if (!draftRes.ok) throw new Error(`Failed to fetch new version draft: ${draftRes.status}`)
+      deposition = await draftRes.json()
+      isNewVersion = true
+      // Delete old files from the draft so we can upload fresh ones
+      const filesRes = await zen(`/deposit/depositions/${deposition.id}/files`)
+      for (const f of (Array.isArray(filesRes) ? filesRes : [])) {
+        await fetch(`${baseUrl}/api/deposit/depositions/${deposition.id}/files/${f.id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        })
+      }
+    } else {
+      deposition = await zen('/deposit/depositions', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+    }
     const depositionId = deposition.id
     const bucketUrl = deposition.links?.bucket
 
@@ -2373,14 +2411,15 @@ app.post('/api/presentations/:id/zenodo/publish', requireValidId(), async (req, 
 
     const doi = published.doi || published.metadata?.doi || ''
     const zenodoUrl = published.links?.html || published.links?.record_html || `${baseUrl}/records/${depositionId}`
+    const conceptRecid = published.conceptrecid || published.metadata?.relations?.version?.[0]?.parent?.pid_value || ''
 
     // 8. Record in database
     await storage.query(
-      'INSERT INTO zenodo_publications (presentation_id, user_id, deposition_id, doi, zenodo_url, sandbox) VALUES ($1, $2, $3, $4, $5, $6)',
-      [req.params.id, req.userId, depositionId, doi, zenodoUrl, config.sandbox]
+      'INSERT INTO zenodo_publications (presentation_id, user_id, deposition_id, doi, zenodo_url, sandbox, concept_recid) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [req.params.id, req.userId, depositionId, doi, zenodoUrl, config.sandbox, conceptRecid]
     )
 
-    res.json({ doi, url: zenodoUrl, depositionId })
+    res.json({ doi, url: zenodoUrl, depositionId, isNewVersion, conceptRecid })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

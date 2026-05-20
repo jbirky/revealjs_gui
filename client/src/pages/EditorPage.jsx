@@ -432,8 +432,9 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
       }
       if (!meta.creators.length) throw new Error('At least one creator name is required')
       const result = await api.publishToZenodo(presentationId, meta)
-      setZenodoStatus({ type: 'success', message: `Published! DOI: ${result.doi}`, url: result.url, doi: result.doi })
-      setZenodoPubStatus({ published: true, doi: result.doi, url: result.url })
+      const verb = result.isNewVersion ? 'New version published' : 'Published'
+      setZenodoStatus({ type: 'success', message: `${verb}! DOI: ${result.doi}`, url: result.url, doi: result.doi })
+      api.getZenodoStatus(presentationId).then(setZenodoPubStatus).catch(() => {})
     } catch (err) {
       setZenodoStatus({ type: 'error', message: err.message })
     } finally {
@@ -2557,9 +2558,26 @@ function draw() {
 
             {zenodoPubStatus?.published && (
               <div style={{ padding: '10px 14px', borderRadius: 6, fontSize: 13, background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', color: '#86efac', marginBottom: 16, lineHeight: 1.6 }}>
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>Previously published</div>
-                <div>DOI: <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 6px', borderRadius: 3, fontSize: 12 }}>{zenodoPubStatus.doi}</code></div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                  Published{zenodoPubStatus.versionCount > 1 ? ` (${zenodoPubStatus.versionCount} versions)` : ''}
+                </div>
+                <div>Latest DOI: <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 6px', borderRadius: 3, fontSize: 12 }}>{zenodoPubStatus.doi}</code></div>
                 <a href={zenodoPubStatus.url} target="_blank" rel="noopener noreferrer" style={{ color: '#86efac', fontSize: 12 }}>View on Zenodo</a>
+                {zenodoPubStatus.versions?.length > 1 && (
+                  <details style={{ marginTop: 8 }}>
+                    <summary style={{ cursor: 'pointer', fontSize: 12, color: '#6ee7b7' }}>Version history</summary>
+                    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {zenodoPubStatus.versions.map((v, i) => (
+                        <div key={i} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: '#6ee7b7', fontWeight: i === 0 ? 600 : 400 }}>v{zenodoPubStatus.versions.length - i}</span>
+                          <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>{v.doi}</code>
+                          <span style={{ color: '#4ade80', opacity: 0.6 }}>{new Date(v.published_at).toLocaleDateString()}</span>
+                          {i === 0 && <span style={{ fontSize: 10, color: '#22c55e', fontWeight: 600 }}>latest</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
               </div>
             )}
 
@@ -2688,7 +2706,7 @@ function draw() {
                 disabled={zenodoPublishing || !zenodoConfig.hasToken || !zenodoMeta.creators.some(c => c.name.trim())}
                 style={{ width: '100%', justifyContent: 'center', opacity: (zenodoPublishing || !zenodoConfig.hasToken) ? 0.5 : 1 }}
               >
-                {zenodoPublishing ? 'Publishing...' : 'Publish to Zenodo'}
+                {zenodoPublishing ? 'Publishing...' : zenodoPubStatus?.published ? 'Publish New Version' : 'Publish to Zenodo'}
               </button>
 
               {zenodoPublishing && (
