@@ -446,7 +446,8 @@ function buildHtmlEmbed(userHtml, embedW, embedH) {
 }
 
 // Generate reveal.js HTML
-function generateRevealHTML(presentation) {
+function generateRevealHTML(presentation, opts = {}) {
+  const customFonts = opts.customFonts || []
   const theme = presentation.theme || 'black'
   const transition = presentation.transition || 'slide'
   const slideW = presentation.slideWidth || 960
@@ -812,8 +813,8 @@ function generateRevealHTML(presentation) {
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/fonts.css">
   <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/futura-pt">
   <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/bauhaus-93">
-  <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/national-park">
-  <style>
+  <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/national-park">${customFonts.filter(f => f.source === 'google' && f.url).map(f => `\n  <link rel="stylesheet" href="${f.url}">`).join('')}
+  <style>${customFonts.filter(f => f.source === 'upload' && f.url).map(f => `\n    @font-face { font-family: '${f.familyName}'; src: url('${f.url}'); }`).join('')}
     @font-face { font-family: 'Latin Modern Roman'; font-style: normal; font-weight: 400; src: url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-regular.woff2') format('woff2'), url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-regular.woff') format('woff'); }
     @font-face { font-family: 'Latin Modern Roman'; font-style: normal; font-weight: 700; src: url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-bold.woff2') format('woff2'), url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-bold.woff') format('woff'); }
     @font-face { font-family: 'Latin Modern Roman'; font-style: italic; font-weight: 400; src: url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-italic.woff2') format('woff2'), url('https://cdn.jsdelivr.net/npm/lm-web-fonts@0.1.0/fonts/lm-roman10-italic.woff') format('woff'); }
@@ -1515,6 +1516,112 @@ app.delete('/api/uploads/:id', requireValidId(), async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
+})
+
+// --- Custom Fonts ---
+
+// GET /api/fonts - list user's custom fonts
+app.get('/api/fonts', async (req, res) => {
+  try {
+    const { rows } = await storage.query(
+      'SELECT id, family_name, source, url, created_at FROM user_fonts WHERE user_id = $1 ORDER BY family_name',
+      [req.userId]
+    )
+    res.json(rows.map(r => ({ id: r.id, familyName: r.family_name, source: r.source, url: r.url, createdAt: r.created_at })))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/fonts/upload - upload a TTF/OTF/WOFF font file
+app.post('/api/fonts/upload', uploadLimiter, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+    const ext = path.extname(req.file.originalname).toLowerCase()
+    if (!['.ttf', '.otf', '.woff', '.woff2'].includes(ext)) {
+      fs.removeSync(req.file.path)
+      return res.status(400).json({ error: 'Only TTF, OTF, WOFF, and WOFF2 files are supported' })
+    }
+    const familyName = req.body.familyName || path.basename(req.file.originalname, ext)
+
+    let fontUrl
+    if (isR2Enabled()) {
+      const filename = `${uuidv4()}${ext}`
+      const storageKey = `fonts/${req.userId}/${filename}`
+      const contentType = {
+        '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2',
+      }[ext] || 'application/octet-stream'
+      const buffer = fs.readFileSync(req.file.path)
+      await putBufferToR2(storageKey, buffer, contentType)
+      fs.removeSync(req.file.path)
+      fontUrl = `/api/fonts/file/${filename}`
+      await storage.query(
+        'INSERT INTO uploads (presentation_id, user_id, filename, storage_key, content_type, size_bytes) VALUES ($1, $2, $3, $4, $5, $6)',
+        [null, req.userId, `fonts/${filename}`, storageKey, contentType, buffer.length]
+      )
+    } else {
+      const fontsDir = path.join(UPLOADS_DIR, 'fonts')
+      fs.ensureDirSync(fontsDir)
+      const filename = `${uuidv4()}${ext}`
+      fs.moveSync(req.file.path, path.join(fontsDir, filename))
+      fontUrl = `/uploads/fonts/${filename}`
+    }
+
+    const id = uuidv4()
+    await storage.query(
+      'INSERT INTO user_fonts (id, user_id, family_name, source, url) VALUES ($1, $2, $3, $4, $5)',
+      [id, req.userId, familyName, 'upload', fontUrl]
+    )
+    res.json({ id, familyName, source: 'upload', url: fontUrl })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/fonts/file/:filename - serve uploaded font files from R2
+app.get('/api/fonts/file/:filename', async (req, res) => {
+  try {
+    const filename = req.params.filename
+    if (filename.includes('..') || filename.includes('/')) return res.status(400).send('Invalid')
+    if (isR2Enabled()) {
+      const { rows } = await storage.query(
+        "SELECT storage_key, content_type FROM uploads WHERE filename = $1",
+        [`fonts/${filename}`]
+      )
+      if (!rows.length) return res.status(404).send('Not found')
+      const { body, contentType } = await streamFromR2(rows[0].storage_key)
+      res.setHeader('Content-Type', contentType || rows[0].content_type || 'application/octet-stream')
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      body.pipe(res)
+    } else {
+      const filePath = path.join(UPLOADS_DIR, 'fonts', filename)
+      if (!fs.existsSync(filePath)) return res.status(404).send('Not found')
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      res.sendFile(filePath)
+    }
+  } catch (err) { res.status(500).send('Error') }
+})
+
+// POST /api/fonts/google - add a Google Font by family name
+app.post('/api/fonts/google', async (req, res) => {
+  try {
+    const { familyName } = req.body
+    if (!familyName || typeof familyName !== 'string') return res.status(400).json({ error: 'familyName is required' })
+    const url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(familyName)}:wght@100;200;300;400;500;600;700;800;900&display=swap`
+    const id = uuidv4()
+    await storage.query(
+      'INSERT INTO user_fonts (id, user_id, family_name, source, url) VALUES ($1, $2, $3, $4, $5)',
+      [id, req.userId, familyName, 'google', url]
+    )
+    res.json({ id, familyName, source: 'google', url })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /api/fonts/:id - remove a custom font
+app.delete('/api/fonts/:id', requireValidId(), async (req, res) => {
+  try {
+    const { rowCount } = await storage.query(
+      'DELETE FROM user_fonts WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]
+    )
+    if (!rowCount) return res.status(404).json({ error: 'Font not found' })
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // DELETE /api/presentations/:id
@@ -2366,7 +2473,12 @@ app.post('/api/presentations/:id/zenodo/publish', requireValidId(), async (req, 
       if (slide.background?.image?.startsWith('/uploads/')) slide.background.image = `./assets/${assetName(slide.background.image)}`
     }
 
-    let htmlContent = generateRevealHTML(exportPres)
+    const { rows: userFontRows } = await storage.query(
+      'SELECT family_name, source, url FROM user_fonts WHERE user_id = $1', [req.userId]
+    ).catch(() => ({ rows: [] }))
+    const userFonts = userFontRows.map(r => ({ familyName: r.family_name, source: r.source, url: r.url }))
+
+    let htmlContent = generateRevealHTML(exportPres, { customFonts: userFonts })
     const jsonContent = JSON.stringify(presentation, null, 2)
 
     // 2b. Inject citation slide with pre-reserved DOI
@@ -2545,7 +2657,12 @@ app.post('/api/presentations/:id/github/push', async (req, res) => {
       }
       if (slide.background?.image?.startsWith('/uploads/')) slide.background.image = `./assets/${assetName(slide.background.image)}`
     }
-    const htmlContent = generateRevealHTML(exportPres)
+    const { rows: ghFontRows } = await storage.query(
+      'SELECT family_name, source, url FROM user_fonts WHERE user_id = $1', [req.userId]
+    ).catch(() => ({ rows: [] }))
+    const ghUserFonts = ghFontRows.map(r => ({ familyName: r.family_name, source: r.source, url: r.url }))
+
+    const htmlContent = generateRevealHTML(exportPres, { customFonts: ghUserFonts })
     const jsonContent = JSON.stringify(presentation, null, 2)
 
     // Get default branch

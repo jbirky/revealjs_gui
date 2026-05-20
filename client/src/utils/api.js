@@ -166,6 +166,21 @@ export const api = {
     body: JSON.stringify(metadata),
   }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Publish failed'); return b }),
 
+  // Custom fonts
+  getFonts: () => authFetch(`${BASE}/fonts`).then(safeJson),
+  uploadFont: (file, familyName) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (familyName) fd.append('familyName', familyName)
+    return authFetch(`${BASE}/fonts/upload`, { method: 'POST', body: fd }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Upload failed'); return b })
+  },
+  addGoogleFont: (familyName) => authFetch(`${BASE}/fonts/google`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ familyName }),
+  }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Failed'); return b }),
+  deleteFont: (id) => authFetch(`${BASE}/fonts/${id}`, { method: 'DELETE' }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Failed'); return b }),
+
   // File management
   getUploads: () => authFetch(`${BASE}/uploads`).then(safeJson),
   deleteUpload: (id) => authFetch(`${BASE}/uploads/${id}`, { method: 'DELETE' }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Delete failed'); return b }),

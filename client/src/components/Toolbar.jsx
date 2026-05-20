@@ -68,7 +68,7 @@ const GRADIENT_PRESETS_BG = [
   'linear-gradient(135deg, #2c3e50, #3498db)'
 ]
 
-export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddTextPath, onAddImage, onAddImageUpload, onAddShape, onAddNonobjective, onAddModularGrid, onAddHtml, onAddD3, onAddKineticText, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, onAddManim, onAddP5, onAddMathGrid, onAddAnime, onAddThree, onAddDiagram, pluginTypes = [], onAddPluginElement, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers, guides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onImportPptx, drawTool, onSetDrawTool, onUndo, onRedo, canUndo, canRedo }) {
+export default function Toolbar({ editor, editingElementId, showGrid, onToggleGrid, gridSize, onGridSizeChange, onAddText, onAddTextPath, onAddImage, onAddImageUpload, onAddShape, onAddNonobjective, onAddModularGrid, onAddHtml, onAddD3, onAddKineticText, onAddCode, onAddLatex, onAddMarkdown, onAddChart, onAddCallout, onAddIcon, onAddVideo, onAddVideoUpload, onAddAudio, onAddTable, onAddManim, onAddP5, onAddMathGrid, onAddAnime, onAddThree, onAddDiagram, pluginTypes = [], onAddPluginElement, selectedCount, onAlignElements, smartGuidesEnabled, onToggleSmartGuides, slide, onUpdateSlide, onGroupElements, onUngroupElements, showRulers, onToggleRulers, guides = [], onAddGuide, onRemoveGuide, onUpdateGuide, onImportPptx, drawTool, onSetDrawTool, onUndo, onRedo, canUndo, canRedo, customFonts = [], onManageFonts }) {
   const [showTextMenu, setShowTextMenu] = useState(false)
   const [showImageMenu, setShowImageMenu] = useState(false)
   const [showEmbedMenu, setShowEmbedMenu] = useState(false)
@@ -736,6 +736,13 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
             title="Font family"
           >
             <option value="">Default</option>
+            {customFonts.length > 0 && (
+              <optgroup label="My Fonts">
+                {customFonts.map(f => (
+                  <option key={f.id} value={`'${f.familyName}', sans-serif`}>{f.familyName}</option>
+                ))}
+              </optgroup>
+            )}
             <optgroup label="Sans-serif">
               <option value="Arial, sans-serif">Arial</option>
               <option value="'Helvetica Neue', sans-serif">Helvetica</option>
@@ -803,6 +810,15 @@ export default function Toolbar({ editor, editingElementId, showGrid, onToggleGr
               <option value="'Bauhaus 93', Impact, sans-serif">Bauhaus 93</option>
             </optgroup>
           </select>
+          {onManageFonts && (
+            <button
+              onClick={onManageFonts}
+              title="Manage custom fonts"
+              style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-muted)', borderRadius: 4, padding: '3px 6px', fontSize: 11, cursor: 'pointer' }}
+            >
+              +
+            </button>
+          )}
 
           {/* Font Size */}
           <select

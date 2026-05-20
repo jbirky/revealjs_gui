@@ -285,6 +285,10 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [gitLoading, setGitLoading] = useState(false)
   const [gitRestoring, setGitRestoring] = useState(null)
   const [showDiffViewer, setShowDiffViewer] = useState(false)
+  const [showFontManager, setShowFontManager] = useState(false)
+  const [customFonts, setCustomFonts] = useState([])
+  const [fontGoogleName, setFontGoogleName] = useState('')
+  const [fontUploading, setFontUploading] = useState(false)
   const [diffOldData, setDiffOldData] = useState(null)
   const [diffOldLabel, setDiffOldLabel] = useState('')
   const [lastSavedAt, setLastSavedAt] = useState(null)
@@ -380,6 +384,23 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   useEffect(() => {
     api.getGithubConfig().then(setGithubConfig).catch(() => {})
     api.getZenodoConfig().then(setZenodoConfig).catch(() => {})
+    api.getFonts().then(fonts => {
+      if (Array.isArray(fonts)) {
+        setCustomFonts(fonts)
+        fonts.forEach(f => {
+          if (f.source === 'google') {
+            const link = document.createElement('link')
+            link.rel = 'stylesheet'
+            link.href = f.url
+            document.head.appendChild(link)
+          } else if (f.source === 'upload' && f.url) {
+            const style = document.createElement('style')
+            style.textContent = `@font-face { font-family: '${f.familyName}'; src: url('${f.url}'); }`
+            document.head.appendChild(style)
+          }
+        })
+      }
+    }).catch(() => {})
   }, [])
 
   // Load share status
@@ -3068,6 +3089,120 @@ function draw() {
         />
       )}
 
+      {/* Font Manager Modal */}
+      {showFontManager && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowFontManager(false) }}>
+          <div style={{ background: '#1e1e2e', borderRadius: 12, padding: 24, width: 480, maxWidth: '90vw', maxHeight: '80vh', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16, color: '#e0e0e0' }}>Manage Fonts</h3>
+              <button className="btn btn-ghost" onClick={() => setShowFontManager(false)} style={{ padding: 4 }}><X size={16} /></button>
+            </div>
+
+            {/* Upload font */}
+            <div style={{ marginBottom: 16, padding: '12px 14px', background: '#2a2a3e', borderRadius: 8 }}>
+              <div style={{ fontSize: 12, color: '#a0a0b0', fontWeight: 600, marginBottom: 8 }}>Upload a font file</div>
+              <input
+                type="file"
+                accept=".ttf,.otf,.woff,.woff2"
+                disabled={fontUploading}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  setFontUploading(true)
+                  try {
+                    const result = await api.uploadFont(file)
+                    setCustomFonts(prev => [...prev, result])
+                    const style = document.createElement('style')
+                    style.textContent = `@font-face { font-family: '${result.familyName}'; src: url('${result.url}'); }`
+                    document.head.appendChild(style)
+                  } catch (err) { alert('Upload failed: ' + err.message) }
+                  setFontUploading(false)
+                  e.target.value = ''
+                }}
+                style={{ fontSize: 12, color: '#c0c0d0' }}
+              />
+              <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>TTF, OTF, WOFF, or WOFF2</div>
+            </div>
+
+            {/* Add Google Font */}
+            <div style={{ marginBottom: 16, padding: '12px 14px', background: '#2a2a3e', borderRadius: 8 }}>
+              <div style={{ fontSize: 12, color: '#a0a0b0', fontWeight: 600, marginBottom: 8 }}>Add from Google Fonts</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  style={{ flex: 1, padding: '7px 10px', borderRadius: 5, border: '1px solid #3a3a4e', background: '#1e1e2e', color: '#e0e0e0', fontSize: 13, boxSizing: 'border-box' }}
+                  value={fontGoogleName}
+                  onChange={e => setFontGoogleName(e.target.value)}
+                  placeholder="Font name (e.g. Lato)"
+                  onKeyDown={async e => {
+                    if (e.key !== 'Enter' || !fontGoogleName.trim()) return
+                    try {
+                      const result = await api.addGoogleFont(fontGoogleName.trim())
+                      setCustomFonts(prev => [...prev, result])
+                      const link = document.createElement('link')
+                      link.rel = 'stylesheet'
+                      link.href = result.url
+                      document.head.appendChild(link)
+                      setFontGoogleName('')
+                    } catch (err) { alert('Failed: ' + err.message) }
+                  }}
+                />
+                <button
+                  className="btn btn-primary"
+                  style={{ fontSize: 12, padding: '6px 14px' }}
+                  onClick={async () => {
+                    if (!fontGoogleName.trim()) return
+                    try {
+                      const result = await api.addGoogleFont(fontGoogleName.trim())
+                      setCustomFonts(prev => [...prev, result])
+                      const link = document.createElement('link')
+                      link.rel = 'stylesheet'
+                      link.href = result.url
+                      document.head.appendChild(link)
+                      setFontGoogleName('')
+                    } catch (err) { alert('Failed: ' + err.message) }
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+              <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+                Browse at <a href="https://fonts.google.com" target="_blank" rel="noopener noreferrer" style={{ color: '#818cf8' }}>fonts.google.com</a>, then type the exact font name here.
+              </div>
+            </div>
+
+            {/* Font list */}
+            <div style={{ fontSize: 12, color: '#a0a0b0', fontWeight: 600, marginBottom: 8 }}>My Fonts ({customFonts.length})</div>
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              {customFonts.length === 0 ? (
+                <div style={{ color: '#666', fontSize: 13, textAlign: 'center', padding: 20 }}>No custom fonts added yet.</div>
+              ) : (
+                customFonts.map(f => (
+                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderBottom: '1px solid #2a2a3e' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, color: '#e0e0e0', fontFamily: `'${f.familyName}', sans-serif` }}>{f.familyName}</div>
+                      <div style={{ fontSize: 11, color: '#888' }}>{f.source === 'google' ? 'Google Fonts' : 'Uploaded file'}</div>
+                    </div>
+                    <span style={{ fontSize: 16, color: '#c0c0d0', fontFamily: `'${f.familyName}', sans-serif` }}>Aa</span>
+                    <button
+                      className="btn-icon"
+                      style={{ color: 'var(--danger)' }}
+                      title="Remove font"
+                      onClick={async () => {
+                        await api.deleteFont(f.id)
+                        setCustomFonts(prev => prev.filter(x => x.id !== f.id))
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Editor Body */}
       <div className="editor-body">
         <SlidePanel
@@ -3172,6 +3307,8 @@ function draw() {
             onRedo={doRedo}
             canUndo={historyRef.current.length >= 2}
             canRedo={redoStackRef.current.length > 0}
+            customFonts={customFonts}
+            onManageFonts={() => setShowFontManager(true)}
           />
           <div className="canvas-area" style={{ display: 'flex', flexDirection: 'column' }}>
             {isViewingReferences ? (
