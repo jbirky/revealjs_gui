@@ -410,9 +410,14 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const handleZenodoSaveConfig = async () => {
     const data = { sandbox: zenodoConfig.sandbox }
     if (zenodoToken) data.token = zenodoToken
-    const result = await api.saveZenodoConfig(data)
-    setZenodoConfig(result)
-    setZenodoToken('')
+    try {
+      const result = await api.saveZenodoConfig(data)
+      setZenodoConfig(result)
+      setZenodoToken('')
+      setZenodoStatus({ type: 'success', message: 'Settings saved' })
+    } catch (err) {
+      setZenodoStatus({ type: 'error', message: err.message })
+    }
   }
 
   const handleZenodoPublish = async () => {

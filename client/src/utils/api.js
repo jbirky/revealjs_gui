@@ -151,12 +151,12 @@ export const api = {
   }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.message || b.error || 'Fork failed'); return b }),
 
   // Zenodo
-  getZenodoConfig: () => authFetch(`${BASE}/zenodo/config`).then(safeJson),
+  getZenodoConfig: () => authFetch(`${BASE}/zenodo/config`).then(async r => { if (!r.ok) return { hasToken: false, sandbox: false }; return safeJson(r) }),
   saveZenodoConfig: (data) => authFetch(`${BASE}/zenodo/config`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
-  }).then(safeJson),
+  }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Save failed'); return b }),
   deleteZenodoConfig: () => authFetch(`${BASE}/zenodo/config`, { method: 'DELETE' }).then(safeJson),
   getZenodoStatus: (id) => authFetch(`${BASE}/presentations/${id}/zenodo/status`).then(safeJson),
   publishToZenodo: (id, metadata) => authFetch(`${BASE}/presentations/${id}/zenodo/publish`, {
