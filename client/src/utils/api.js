@@ -58,6 +58,23 @@ export const api = {
     return body
   }),
 
+  // Zotero
+  getZoteroConfig: () => authFetch(`${BASE}/zotero/config`).then(safeJson),
+  saveZoteroConfig: (data) => authFetch(`${BASE}/zotero/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(safeJson),
+  deleteZoteroConfig: () => authFetch(`${BASE}/zotero/config`, { method: 'DELETE' }).then(safeJson),
+  zoteroProxy: (path, params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return authFetch(`${BASE}/zotero/proxy/${path}${qs ? '?' + qs : ''}`).then(async r => {
+      const total = parseInt(r.headers.get('Total-Results') || '0', 10)
+      const data = await safeJson(r)
+      return { data, total }
+    })
+  },
+
   // Templates
   getTemplates: () => authFetch(`${BASE}/templates`).then(safeJson),
   getTemplate: (id) => authFetch(`${BASE}/templates/${id}`).then(safeJson),

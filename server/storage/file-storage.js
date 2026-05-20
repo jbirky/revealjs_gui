@@ -5,6 +5,7 @@ const path = require('path')
 const fs = require('fs-extra')
 const { v4: uuidv4 } = require('uuid')
 const StorageInterface = require('./interface')
+const { encrypt, decrypt } = require('../utils/crypto')
 
 class FileStorage extends StorageInterface {
   constructor(dataDir) {
@@ -172,12 +173,29 @@ class FileStorage extends StorageInterface {
     return true
   }
 
-  async getGithubConfig() { return fs.readJson(this.githubConfigFile) }
+  async getGithubConfig() {
+    const config = await fs.readJson(this.githubConfigFile)
+    return { ...config, token: decrypt(config.token || '') }
+  }
   async setGithubConfig(config) {
     const existing = await this.getGithubConfig()
     const updated = { ...existing, ...config }
-    await fs.writeJson(this.githubConfigFile, updated, { spaces: 2 })
+    const toStore = { ...updated, token: encrypt(updated.token || '') }
+    await fs.writeJson(this.githubConfigFile, toStore, { spaces: 2 })
     return updated
+  }
+
+  async getZoteroConfig() {
+    const file = path.join(this.dataDir, 'zotero-config.json')
+    if (!fs.existsSync(file)) return { zoteroUserId: '', apiKey: '' }
+    const config = await fs.readJson(file)
+    return { zoteroUserId: config.zoteroUserId || '', apiKey: decrypt(config.apiKey || '') }
+  }
+  async setZoteroConfig(config) {
+    const file = path.join(this.dataDir, 'zotero-config.json')
+    const toStore = { zoteroUserId: config.zoteroUserId || '', apiKey: encrypt(config.apiKey || '') }
+    await fs.writeJson(file, toStore, { spaces: 2 })
+    return { zoteroUserId: config.zoteroUserId || '', apiKey: config.apiKey || '' }
   }
 
   // --- Plugins (self-hosted: directory-scanned, no marketplace) ---

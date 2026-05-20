@@ -28,6 +28,8 @@ class StorageInterface {
 
   async getGithubConfig(userId) { throw new Error('Not implemented') }
   async setGithubConfig(config, userId) { throw new Error('Not implemented') }
+  async getZoteroConfig(userId) { throw new Error('Not implemented') }
+  async setZoteroConfig(config, userId) { throw new Error('Not implemented') }
 
   async listPlugins() { throw new Error('Not implemented') }
   async getPlugin(slug) { throw new Error('Not implemented') }

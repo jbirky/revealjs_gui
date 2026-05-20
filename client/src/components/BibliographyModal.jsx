@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Jessica Birky
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { parseBibtex, parseAuthors, formatAuthorsShort, formatCitation } from '../utils/bibtexParser'
+import { api } from '../utils/api'
 
 export default function BibliographyModal({ bibliography = [], citationStyle = 'numbered', onUpdate, onInsertCitation, onClose }) {
   const [tab, setTab] = useState('library') // library | import | zotero
@@ -14,6 +15,7 @@ export default function BibliographyModal({ bibliography = [], citationStyle = '
   const [zoteroUserId, setZoteroUserId] = useState('')
   const [zoteroApiKey, setZoteroApiKey] = useState('')
   const [zoteroConnected, setZoteroConnected] = useState(false)
+  const [zoteroSaved, setZoteroSaved] = useState(false)
   const [zoteroItems, setZoteroItems] = useState([])
   const [zoteroSearch, setZoteroSearch] = useState('')
   const [zoteroLoading, setZoteroLoading] = useState(false)
@@ -68,26 +70,31 @@ export default function BibliographyModal({ bibliography = [], citationStyle = '
 
   // ── Zotero ──────────────────────────────────────────────
 
-  async function zoteroFetch(endpoint, params = {}) {
-    const { itemType, ...rest } = params
-    let qs = new URLSearchParams(rest).toString()
-    if (itemType) qs += (qs ? '&' : '') + 'itemType=' + encodeURIComponent(itemType).replace(/%7C%7C/gi, '||')
-    const url = `https://api.zotero.org/users/${zoteroUserId}${endpoint}${qs ? '?' + qs : ''}`
-    const res = await fetch(url, {
-      headers: {
-        'Zotero-API-Version': '3',
-        'Zotero-API-Key': zoteroApiKey,
+  useEffect(() => {
+    api.getZoteroConfig().then(config => {
+      if (config.zoteroUserId && config.hasApiKey) {
+        setZoteroUserId(config.zoteroUserId)
+        setZoteroSaved(true)
+        setZoteroConnected(true)
+        loadZoteroLibrary()
       }
-    })
-    if (!res.ok) {
-      const body = await res.text().catch(() => '')
-      if (res.status === 403) throw new Error('Invalid API key or insufficient permissions')
-      if (res.status === 404) throw new Error('User ID not found')
-      throw new Error(`Zotero API error ${res.status}: ${body || res.statusText}`)
+    }).catch(() => {})
+  }, [])
+
+  async function loadZoteroLibrary() {
+    setZoteroLoading(true)
+    setZoteroError(null)
+    try {
+      const { data: collections } = await api.zoteroProxy('collections', { limit: 100 })
+      setZoteroCollections(collections.map(c => ({ key: c.key, name: c.data.name })))
+      await searchZotero('', '', 0)
+    } catch (e) {
+      setZoteroConnected(false)
+      setZoteroSaved(false)
+      setZoteroError('Saved credentials invalid: ' + e.message)
+    } finally {
+      setZoteroLoading(false)
     }
-    const total = parseInt(res.headers.get('Total-Results') || '0', 10)
-    const data = await res.json()
-    return { data, total }
   }
 
   async function connectZotero() {
@@ -98,10 +105,11 @@ export default function BibliographyModal({ bibliography = [], citationStyle = '
     setZoteroLoading(true)
     setZoteroError(null)
     try {
-      const { data: collections } = await zoteroFetch('/collections', { limit: 100 })
-      setZoteroCollections(collections.map(c => ({ key: c.key, name: c.data.name })))
+      await api.saveZoteroConfig({ zoteroUserId, apiKey: zoteroApiKey })
+      setZoteroApiKey('')
+      setZoteroSaved(true)
       setZoteroConnected(true)
-      await searchZotero('', '', 0)
+      await loadZoteroLibrary()
     } catch (e) {
       setZoteroError('Failed to connect: ' + e.message)
     } finally {
@@ -115,10 +123,10 @@ export default function BibliographyModal({ bibliography = [], citationStyle = '
     try {
       const params = { limit: 25, start: offset, sort: 'dateAdded', direction: 'desc' }
       if (query) { params.q = query; params.qmode = 'titleCreatorYear' }
-      const endpoint = collectionKey
-        ? `/collections/${collectionKey}/items/top`
-        : '/items/top'
-      const { data, total } = await zoteroFetch(endpoint, params)
+      const path = collectionKey
+        ? `collections/${collectionKey}/items/top`
+        : 'items/top'
+      const { data, total } = await api.zoteroProxy(path, params)
       setZoteroItems(data)
       setZoteroTotal(total)
       setZoteroOffset(offset)
@@ -454,7 +462,7 @@ export default function BibliographyModal({ bibliography = [], citationStyle = '
 
                       {/* Disconnect */}
                       <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-                        <button onClick={() => { setZoteroConnected(false); setZoteroItems([]); setZoteroError(null) }}
+                        <button onClick={() => { api.deleteZoteroConfig().catch(() => {}); setZoteroConnected(false); setZoteroSaved(false); setZoteroUserId(''); setZoteroItems([]); setZoteroCollections([]); setZoteroError(null) }}
                           className="btn btn-ghost" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                           Disconnect Zotero
                         </button>

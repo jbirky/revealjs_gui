@@ -1854,6 +1854,59 @@ app.post('/api/github/config', async (req, res) => {
   }
 })
 
+// GET /api/zotero/config - get saved Zotero config (key is masked)
+app.get('/api/zotero/config', async (req, res) => {
+  try {
+    const config = await storage.getZoteroConfig(req.userId)
+    res.json({ zoteroUserId: config.zoteroUserId || '', hasApiKey: !!config.apiKey })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/zotero/config - save Zotero credentials
+app.post('/api/zotero/config', async (req, res) => {
+  try {
+    await storage.setZoteroConfig(req.body, req.userId)
+    res.json({ zoteroUserId: req.body.zoteroUserId || '', hasApiKey: !!req.body.apiKey })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/zotero/config - disconnect Zotero
+app.delete('/api/zotero/config', async (req, res) => {
+  try {
+    await storage.setZoteroConfig({ zoteroUserId: '', apiKey: '' }, req.userId)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/zotero/proxy/* - proxy requests to Zotero API with stored credentials
+app.get('/api/zotero/proxy/*', async (req, res) => {
+  try {
+    const config = await storage.getZoteroConfig(req.userId)
+    if (!config.apiKey || !config.zoteroUserId) {
+      return res.status(400).json({ error: 'Zotero not configured' })
+    }
+    const zoteroPath = req.params[0]
+    const qs = new URL(req.url, 'http://localhost').search
+    const url = `https://api.zotero.org/users/${config.zoteroUserId}/${zoteroPath}${qs}`
+    const zRes = await fetch(url, {
+      headers: { 'Zotero-API-Version': '3', 'Zotero-API-Key': config.apiKey }
+    })
+    const body = await zRes.text()
+    res.status(zRes.status)
+      .set('Content-Type', zRes.headers.get('content-type') || 'application/json')
+      .set('Total-Results', zRes.headers.get('total-results') || '0')
+      .send(body)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/presentations/:id/github/push - push presentation to GitHub
 app.post('/api/presentations/:id/github/push', async (req, res) => {
   try {
