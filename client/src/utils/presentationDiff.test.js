@@ -155,4 +155,93 @@ describe('diffPresentations', () => {
     expect(mod.elements.filter(e => e.status === 'removed')).toHaveLength(1)
     expect(mod.elements.filter(e => e.status === 'content-changed')).toHaveLength(1)
   })
+
+  it('detects image src change as content-changed', () => {
+    const old = makePres([makeSlide('s1', [{ id: 'e1', type: 'image', x: 0, y: 0, width: 200, height: 100, zIndex: 1, src: '/uploads/old.png' }])])
+    const newP = makePres([makeSlide('s1', [{ id: 'e1', type: 'image', x: 0, y: 0, width: 200, height: 100, zIndex: 1, src: '/uploads/new.png' }])])
+    const result = diffPresentations(old, newP)
+    expect(result.slides[0].status).toBe('modified')
+    expect(result.slides[0].elements[0].status).toBe('content-changed')
+  })
+
+  it('detects zIndex change as style-changed', () => {
+    const old = makePres([makeSlide('s1', [makeEl('e1', { zIndex: 1 })])])
+    const newP = makePres([makeSlide('s1', [makeEl('e1', { zIndex: 5 })])])
+    const result = diffPresentations(old, newP)
+    expect(result.slides[0].elements[0].status).toBe('style-changed')
+    expect(result.slides[0].elements[0].changes.some(c => c.includes('zIndex'))).toBe(true)
+  })
+
+  it('detects slide transition change in otherChanges', () => {
+    const old = makePres([makeSlide('s1', [], { transition: 'fade' })])
+    const newP = makePres([makeSlide('s1', [], { transition: 'zoom' })])
+    const result = diffPresentations(old, newP)
+    expect(result.slides[0].otherChanges.some(c => c.includes('fade') && c.includes('zoom'))).toBe(true)
+  })
+
+  it('treats content change as higher priority than style change', () => {
+    const old = makePres([makeSlide('s1', [makeEl('e1', { content: '<p>A</p>', opacity: 1 })])])
+    const newP = makePres([makeSlide('s1', [makeEl('e1', { content: '<p>B</p>', opacity: 0.5 })])])
+    const result = diffPresentations(old, newP)
+    expect(result.slides[0].elements[0].status).toBe('content-changed')
+  })
+
+  it('handles all slides removed', () => {
+    const old = makePres([makeSlide('s1'), makeSlide('s2'), makeSlide('s3')])
+    const newP = makePres([])
+    const result = diffPresentations(old, newP)
+    expect(result.summary.removed).toBe(3)
+    expect(result.summary.added).toBe(0)
+    expect(result.slides).toHaveLength(3)
+  })
+
+  it('handles all slides added', () => {
+    const old = makePres([])
+    const newP = makePres([makeSlide('s1'), makeSlide('s2')])
+    const result = diffPresentations(old, newP)
+    expect(result.summary.added).toBe(2)
+    expect(result.summary.removed).toBe(0)
+  })
+
+  it('provides correct oldIndex and newIndex', () => {
+    const old = makePres([makeSlide('s1'), makeSlide('s2'), makeSlide('s3')])
+    const newP = makePres([makeSlide('s3'), makeSlide('s1')])
+    const result = diffPresentations(old, newP)
+    const s3 = result.slides.find(s => s.slideId === 's3')
+    expect(s3.oldIndex).toBe(2)
+    expect(s3.newIndex).toBe(0)
+    const s1 = result.slides.find(s => s.slideId === 's1')
+    expect(s1.oldIndex).toBe(0)
+    expect(s1.newIndex).toBe(1)
+    const s2 = result.slides.find(s => s.slideId === 's2')
+    expect(s2.status).toBe('removed')
+    expect(s2.oldIndex).toBe(1)
+    expect(s2.newIndex).toBeNull()
+  })
+
+  it('detects element with new style property added', () => {
+    const old = makePres([makeSlide('s1', [makeEl('e1', {})])])
+    const newP = makePres([makeSlide('s1', [makeEl('e1', { opacity: 0.7 })])])
+    const result = diffPresentations(old, newP)
+    expect(result.slides[0].elements[0].status).toBe('style-changed')
+    expect(result.slides[0].elements[0].changes.some(c => c.includes('opacity'))).toBe(true)
+  })
+
+  it('generates change descriptions for moved + resized element', () => {
+    const old = makePres([makeSlide('s1', [makeEl('e1', { x: 50, y: 50, width: 200, height: 100 })])])
+    const newP = makePres([makeSlide('s1', [makeEl('e1', { x: 300, y: 200, width: 400, height: 250 })])])
+    const result = diffPresentations(old, newP)
+    const changes = result.slides[0].elements[0].changes
+    expect(changes).toContain('x: 50 → 300')
+    expect(changes).toContain('y: 50 → 200')
+    expect(changes).toContain('width: 200 → 400')
+    expect(changes).toContain('height: 100 → 250')
+  })
+
+  it('handles shape type change as content-changed', () => {
+    const old = makePres([makeSlide('s1', [{ id: 'e1', type: 'shape', x: 0, y: 0, width: 100, height: 100, zIndex: 1, shape: 'rect' }])])
+    const newP = makePres([makeSlide('s1', [{ id: 'e1', type: 'shape', x: 0, y: 0, width: 100, height: 100, zIndex: 1, shape: 'circle' }])])
+    const result = diffPresentations(old, newP)
+    expect(result.slides[0].elements[0].status).toBe('content-changed')
+  })
 })
