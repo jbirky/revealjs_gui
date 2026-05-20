@@ -138,6 +138,22 @@ export const api = {
   getGitHistory: (id) => authFetch(`${BASE}/presentations/${id}/github/history`).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Failed'); return b }),
   getGitVersion: (id, sha) => authFetch(`${BASE}/presentations/${id}/github/version/${sha}`).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Failed'); return b }),
 
+  // Fork from Git
+  browseGitRepo: (url) => authFetch(`${BASE}/github/browse-repo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Browse failed'); return b }),
+  forkFromGit: (owner, repo, folder, branch) => authFetch(`${BASE}/presentations/fork`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ owner, repo, folder, branch }),
+  }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.message || b.error || 'Fork failed'); return b }),
+
+  // File management
+  getUploads: () => authFetch(`${BASE}/uploads`).then(safeJson),
+  deleteUpload: (id) => authFetch(`${BASE}/uploads/${id}`, { method: 'DELETE' }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Delete failed'); return b }),
+
   // User / plan
   getMe: () => authFetch(`${BASE}/me`).then(safeJson),
 

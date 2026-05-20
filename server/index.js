@@ -18,7 +18,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
 const createStorage = require('./storage')
 const storage = createStorage()
 const { authStack, requireUser, IS_CLOUD, PLAN_LIMITS } = require('./middleware/auth')
-const { isR2Enabled, streamFromR2 } = require('./services/r2')
+const { isR2Enabled, streamFromR2, putBufferToR2, deleteFromR2 } = require('./services/r2')
 const { handleUpload: r2Upload, deleteUploadsForPresentation } = require('./services/upload-service')
 const {
   corsConfig, helmetConfig, apiLimiter, uploadLimiter, authLimiter,
@@ -300,7 +300,7 @@ app.get('/api/me', async (req, res) => {
       [req.userId]
     )
     const { rows: storageRows } = await storage.query(
-      'SELECT COALESCE(storage_used_bytes, 0)::bigint as used FROM users WHERE id = $1', [req.userId]
+      'SELECT COALESCE(SUM(size_bytes), 0)::bigint as used FROM uploads WHERE user_id = $1', [req.userId]
     )
     res.json({
       plan,
@@ -1463,6 +1463,58 @@ app.get('/api/presentations/:id/uploads', async (req, res) => {
   }
 })
 
+// GET /api/uploads - list all uploaded files for the current user
+app.get('/api/uploads', async (req, res) => {
+  try {
+    const { rows } = await storage.query(
+      `SELECT u.id, u.filename, u.content_type, u.size_bytes, u.created_at, u.presentation_id,
+              p.title as presentation_title
+       FROM uploads u
+       LEFT JOIN presentations p ON p.id = u.presentation_id
+       WHERE u.user_id = $1
+       ORDER BY u.created_at DESC`,
+      [req.userId]
+    )
+    res.json(rows.map(r => ({
+      id: r.id,
+      url: `/uploads/${r.filename}`,
+      name: r.filename.split('/').pop(),
+      contentType: r.content_type,
+      size: Number(r.size_bytes || 0),
+      createdAt: r.created_at,
+      presentationId: r.presentation_id,
+      presentationTitle: r.presentation_title || null,
+    })))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/uploads/:id - delete a single uploaded file
+app.delete('/api/uploads/:id', requireValidId(), async (req, res) => {
+  try {
+    const { rows } = await storage.query(
+      'SELECT id, storage_key, size_bytes FROM uploads WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
+    )
+    if (!rows.length) return res.status(404).json({ error: 'File not found' })
+
+    if (isR2Enabled()) {
+      try { await deleteFromR2(rows[0].storage_key) } catch (e) {
+        console.error('R2 delete failed:', e.message)
+      }
+    } else {
+      const localPath = path.join(UPLOADS_DIR, rows[0].storage_key.replace(/^anonymous\//, ''))
+      if (fs.existsSync(localPath)) fs.removeSync(localPath)
+    }
+
+    await storage.query('DELETE FROM uploads WHERE id = $1', [req.params.id])
+    res.json({ success: true, freedBytes: Number(rows[0].size_bytes || 0) })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // DELETE /api/presentations/:id
 app.delete('/api/presentations/:id', requireValidId(), async (req, res) => {
   try {
@@ -2394,6 +2446,176 @@ app.get('/api/presentations/:id/github/version/:sha', requireValidId(), requireV
     const file = await response.json()
     const content = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'))
     res.json(content)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/github/browse-repo - scan a GitHub repo for Parallax presentations
+app.post('/api/github/browse-repo', async (req, res) => {
+  try {
+    const { url } = req.body
+    if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' })
+
+    const match = url.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/|$)/)
+    if (!match) return res.status(400).json({ error: 'Invalid GitHub URL. Expected format: https://github.com/owner/repo' })
+    const [, owner, repo] = match
+
+    const config = await storage.getGithubConfig(req.userId)
+    const headers = { Accept: 'application/vnd.github.v3+json' }
+    if (config.token) headers.Authorization = `token ${config.token}`
+
+    const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers })
+    if (!repoRes.ok) {
+      const body = await repoRes.json().catch(() => ({}))
+      return res.status(repoRes.status).json({ error: body.message || 'Repository not found or not accessible' })
+    }
+    const repoInfo = await repoRes.json()
+    const branch = repoInfo.default_branch || 'main'
+
+    const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`, { headers })
+    if (!treeRes.ok) {
+      return res.status(treeRes.status).json({ error: 'Failed to read repository contents' })
+    }
+    const tree = await treeRes.json()
+
+    const jsonFiles = (tree.tree || []).filter(
+      item => item.type === 'blob' && item.path.endsWith('/presentation.json')
+    )
+
+    const presentations = await Promise.all(jsonFiles.map(async (item) => {
+      const folder = item.path.replace(/\/presentation\.json$/, '')
+      let title = folder.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      let slideCount = 0
+      try {
+        const contentRes = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(item.path)}?ref=${branch}`,
+          { headers }
+        )
+        if (contentRes.ok) {
+          const file = await contentRes.json()
+          const data = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'))
+          if (data.title) title = data.title
+          slideCount = (data.slides || []).length
+        }
+      } catch {}
+      return { folder, title, slideCount }
+    }))
+
+    res.json({ owner, repo, branch, presentations })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/presentations/fork - fork a presentation from a GitHub repo
+app.post('/api/presentations/fork', async (req, res) => {
+  try {
+    if (!(await checkPresentationQuota(req, res))) return
+
+    const { owner, repo, folder, branch: reqBranch } = req.body
+    if (!owner || !repo || !folder) return res.status(400).json({ error: 'owner, repo, and folder are required' })
+    if (!/^[a-z0-9_-]+$/i.test(owner) || !/^[a-z0-9_.-]+$/i.test(repo)) {
+      return res.status(400).json({ error: 'Invalid owner or repo name' })
+    }
+    if (/[\/\\]|\.\./.test(folder)) return res.status(400).json({ error: 'Invalid folder name' })
+
+    const config = await storage.getGithubConfig(req.userId)
+    const headers = { Accept: 'application/vnd.github.v3+json' }
+    if (config.token) headers.Authorization = `token ${config.token}`
+
+    const branch = reqBranch || 'main'
+    const jsonPath = `${folder}/presentation.json`
+
+    const jsonRes = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(jsonPath)}?ref=${branch}`,
+      { headers }
+    )
+    if (!jsonRes.ok) return res.status(404).json({ error: 'presentation.json not found in that folder' })
+    const jsonFile = await jsonRes.json()
+    const presData = JSON.parse(Buffer.from(jsonFile.content, 'base64').toString('utf8'))
+
+    // Discover asset files in the folder's assets/ subdirectory
+    const treeRes = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
+      { headers }
+    )
+    const tree = treeRes.ok ? await treeRes.json() : { tree: [] }
+    const assetPrefix = `${folder}/assets/`
+    const assetFiles = (tree.tree || []).filter(
+      item => item.type === 'blob' && item.path.startsWith(assetPrefix)
+    )
+
+    // Download and re-upload each asset, building a path rewrite map
+    const pathMap = {}
+    for (const asset of assetFiles) {
+      const filename = path.basename(asset.path)
+      try {
+        const blobRes = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/git/blobs/${asset.sha}`,
+          { headers: { ...headers, Accept: 'application/vnd.github.v3+json' } }
+        )
+        if (!blobRes.ok) continue
+        const blob = await blobRes.json()
+        const buffer = Buffer.from(blob.content, 'base64')
+
+        if (isR2Enabled()) {
+          const newFilename = `${uuidv4()}${path.extname(filename)}`
+          const contentType = {
+            '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif', '.svg': 'image/svg+xml', '.webp': 'image/webp',
+            '.mp4': 'video/mp4', '.webm': 'video/webm', '.pdf': 'application/pdf',
+          }[path.extname(filename).toLowerCase()] || 'application/octet-stream'
+          const storageKey = `uploads/${newFilename}`
+          await putBufferToR2(storageKey, buffer, contentType)
+          await storage.query(
+            'INSERT INTO uploads (filename, storage_key, content_type, size_bytes, presentation_id) VALUES ($1, $2, $3, $4, $5)',
+            [newFilename, storageKey, contentType, buffer.length, null]
+          )
+          pathMap[`./assets/${filename}`] = `/uploads/${newFilename}`
+        } else {
+          const destDir = path.join(UPLOADS_DIR, 'forked')
+          fs.ensureDirSync(destDir)
+          const newFilename = `${uuidv4()}${path.extname(filename)}`
+          fs.writeFileSync(path.join(destDir, newFilename), buffer)
+          pathMap[`./assets/${filename}`] = `/uploads/forked/${newFilename}`
+        }
+      } catch (e) { console.error(`Fork asset download failed for ${asset.path}:`, e.message) }
+    }
+
+    // Rewrite asset paths in the presentation data
+    const rewrite = (str) => {
+      let result = str
+      for (const [oldPath, newPath] of Object.entries(pathMap)) {
+        result = result.split(oldPath).join(newPath)
+      }
+      return result
+    }
+    const presStr = rewrite(JSON.stringify(presData))
+    const forkedPres = JSON.parse(presStr)
+
+    // Clean up and create as a new presentation
+    delete forkedPres.id
+    delete forkedPres.createdAt
+    delete forkedPres.updatedAt
+    delete forkedPres.expiresAt
+    forkedPres.title = (forkedPres.title || 'Untitled') + ' (fork)'
+    forkedPres.slides = (forkedPres.slides || []).map(s => ({
+      ...s,
+      id: uuidv4(),
+      elements: (s.elements || []).map(el => ({ ...el, id: uuidv4() }))
+    }))
+
+    const expiresAt = IS_CLOUD && req.userPlan === 'free'
+      ? new Date(Date.now() + (PLAN_LIMITS.free.expirationDays || 30) * 86400000).toISOString()
+      : null
+    const created = await storage.createPresentation(forkedPres, req.userId, expiresAt)
+
+    res.json({
+      ...created,
+      forkedFrom: { owner, repo, folder, branch },
+      assetsImported: Object.keys(pathMap).length,
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

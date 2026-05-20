@@ -76,4 +76,15 @@ async function deleteFromR2(storageKey) {
   await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: storageKey }))
 }
 
-module.exports = { isR2Enabled, uploadToR2, streamFromR2, deleteFromR2 }
+async function putBufferToR2(storageKey, buffer, contentType) {
+  const s3 = getClient()
+  await s3.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: storageKey,
+    Body: buffer,
+    ContentType: contentType || 'application/octet-stream',
+  }))
+  return { storageKey, size: buffer.length }
+}
+
+module.exports = { isR2Enabled, uploadToR2, streamFromR2, deleteFromR2, putBufferToR2 }

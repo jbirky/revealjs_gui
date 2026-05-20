@@ -719,3 +719,5 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 .docs-callout-danger { background: rgba(239,68,68,0.08); border-left: 3px solid #ef4444; }
 .docs-callout-danger strong { color: #ef4444; }
 .docs-markdown iframe { width: 100%; border: none; border-radius: 8px; margin: 8px 0 12px; }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

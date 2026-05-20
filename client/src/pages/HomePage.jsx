@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Jessica Birky
 
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Pencil, Trash2, Presentation, Copy, Sun, Moon, Layout, ExternalLink } from 'lucide-react'
+import { Plus, Pencil, Trash2, Presentation, Copy, Sun, Moon, Layout, ExternalLink, GitFork, Loader, HardDrive, File, Image, Film, Music, FileText, ChevronDown, ChevronUp, Search } from 'lucide-react'
 import { api } from '../utils/api'
 
 import { UserButton } from '@clerk/clerk-react'
@@ -148,6 +148,22 @@ function formatDate(dateStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i]
+}
+
+function fileIcon(contentType) {
+  if (!contentType) return File
+  if (contentType.startsWith('image/')) return Image
+  if (contentType.startsWith('video/')) return Film
+  if (contentType.startsWith('audio/')) return Music
+  if (contentType === 'application/pdf') return FileText
+  return File
+}
+
 function getCardBg(thumbnail) {
   if (!thumbnail) return '#1e1e2e'
   if (thumbnail.type === 'color' && thumbnail.color) return thumbnail.color
@@ -173,6 +189,10 @@ export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) 
   const [form, setForm] = useState({ title: '', theme: 'black', transition: 'slide', templateId: null })
   const [creating, setCreating] = useState(false)
   const [planInfo, setPlanInfo] = useState(null)
+  const [uploads, setUploads] = useState([])
+  const [uploadsOpen, setUploadsOpen] = useState(false)
+  const [uploadFilter, setUploadFilter] = useState('')
+  const [deletingUploadId, setDeletingUploadId] = useState(null)
 
   const atLimit = isCloud && planInfo && planInfo.limits?.maxPresentations != null
     && planInfo.presentationCount >= planInfo.limits.maxPresentations
@@ -185,6 +205,79 @@ export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) 
       console.error('Checkout error:', err)
     }
   }
+
+  const [showForkModal, setShowForkModal] = useState(false)
+  const [forkUrl, setForkUrl] = useState('')
+  const [forkBrowseResult, setForkBrowseResult] = useState(null)
+  const [forkBrowsing, setForkBrowsing] = useState(false)
+  const [forkError, setForkError] = useState('')
+  const [forkingFolder, setForkingFolder] = useState(null)
+
+  async function handleForkBrowse(e) {
+    e.preventDefault()
+    setForkBrowsing(true)
+    setForkError('')
+    setForkBrowseResult(null)
+    try {
+      const result = await api.browseGitRepo(forkUrl)
+      if (result.presentations.length === 0) {
+        setForkError('No presentations found in this repository.')
+      } else {
+        setForkBrowseResult(result)
+      }
+    } catch (err) {
+      setForkError(err.message || 'Failed to browse repository')
+    } finally {
+      setForkBrowsing(false)
+    }
+  }
+
+  async function handleFork(folder) {
+    if (!forkBrowseResult) return
+    setForkingFolder(folder)
+    setForkError('')
+    try {
+      const { owner, repo, branch } = forkBrowseResult
+      const pres = await api.forkFromGit(owner, repo, folder, branch)
+      setShowForkModal(false)
+      setForkUrl('')
+      setForkBrowseResult(null)
+      setForkingFolder(null)
+      onOpen(pres.id, false, pres.title)
+    } catch (err) {
+      setForkError(err.message || 'Fork failed')
+      setForkingFolder(null)
+    }
+  }
+
+  async function loadUploads() {
+    try {
+      const data = await api.getUploads()
+      setUploads(Array.isArray(data) ? data : [])
+    } catch { setUploads([]) }
+  }
+
+  async function handleDeleteUpload(uploadId) {
+    if (!confirm('Delete this file? If it\'s used in a presentation, the image/media will break.')) return
+    setDeletingUploadId(uploadId)
+    try {
+      await api.deleteUpload(uploadId)
+      setUploads(prev => prev.filter(u => u.id !== uploadId))
+      if (isCloud) api.getMe().then(setPlanInfo).catch(() => {})
+    } catch (err) {
+      alert('Failed to delete: ' + (err.message || 'Unknown error'))
+    } finally {
+      setDeletingUploadId(null)
+    }
+  }
+
+  const filteredUploads = uploads.filter(u => {
+    if (!uploadFilter) return true
+    const q = uploadFilter.toLowerCase()
+    return (u.name || '').toLowerCase().includes(q)
+      || (u.presentationTitle || '').toLowerCase().includes(q)
+      || (u.contentType || '').toLowerCase().includes(q)
+  })
 
   const [showBillingModal, setShowBillingModal] = useState(false)
   const [billingStatus, setBillingStatus] = useState(null)
@@ -254,7 +347,10 @@ export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) 
       ])
       setPresentations(Array.isArray(presData) ? presData : [])
       setTemplates(Array.isArray(tmplData) ? tmplData : [])
-      if (isCloud) api.getMe().then(setPlanInfo).catch(() => {})
+      if (isCloud) {
+        api.getMe().then(setPlanInfo).catch(() => {})
+        loadUploads()
+      }
     } catch (err) {
       console.error('Failed to load data', err)
       setPresentations([])
@@ -400,6 +496,12 @@ export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) 
           >
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
           </button>
+          <button className="btn btn-secondary" onClick={() => { setShowForkModal(true); setForkUrl(''); setForkBrowseResult(null); setForkError('') }}
+            disabled={atLimit} title={atLimit ? 'Presentation limit reached' : 'Import a presentation from a GitHub repository'}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <GitFork size={15} />
+            Fork from Git
+          </button>
           <button className="btn btn-primary" onClick={handleOpenModal} disabled={atLimit}
             title={atLimit ? 'Presentation limit reached' : ''}>
             <Plus size={16} />
@@ -430,6 +532,36 @@ export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) 
       </div>
 
       <div className="home-content">
+        {isCloud && planInfo && planInfo.limits?.storageBytes && (
+          <div style={{
+            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+            borderRadius: 10, padding: '12px 16px', marginBottom: 16,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+                <HardDrive size={15} style={{ color: 'var(--text-muted)' }} />
+                Storage
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {formatBytes(planInfo.storageUsed)} / {formatBytes(planInfo.limits.storageBytes)}
+              </div>
+            </div>
+            <div style={{
+              height: 6, borderRadius: 3, background: 'var(--bg-primary)',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                height: '100%', borderRadius: 3, transition: 'width 0.3s ease',
+                width: `${Math.min(100, (planInfo.storageUsed / planInfo.limits.storageBytes) * 100)}%`,
+                background: (planInfo.storageUsed / planInfo.limits.storageBytes) > 0.9
+                  ? '#ef4444'
+                  : (planInfo.storageUsed / planInfo.limits.storageBytes) > 0.7
+                    ? '#f59e0b'
+                    : 'var(--accent)',
+              }} />
+            </div>
+          </div>
+        )}
         {atLimit && (
           <div style={{
             background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
@@ -604,6 +736,119 @@ export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) 
             )
           })}
         </div>
+
+        {/* File Browser Section (cloud mode) */}
+        {isCloud && (
+          <>
+            <div
+              onClick={() => { if (!uploadsOpen) loadUploads(); setUploadsOpen(v => !v) }}
+              style={{
+                marginTop: 40, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                cursor: 'pointer', userSelect: 'none',
+              }}
+            >
+              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <HardDrive size={18} /> Uploaded Files
+                <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>
+                  ({uploads.length} file{uploads.length !== 1 ? 's' : ''})
+                </span>
+              </h2>
+              {uploadsOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </div>
+
+            {uploadsOpen && (
+              <div style={{
+                marginTop: 12, background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                borderRadius: 10, overflow: 'hidden',
+              }}>
+                <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Search size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                  <input
+                    type="text"
+                    placeholder="Filter by name, type, or presentation..."
+                    value={uploadFilter}
+                    onChange={e => setUploadFilter(e.target.value)}
+                    style={{
+                      flex: 1, background: 'none', border: 'none', outline: 'none',
+                      color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit',
+                    }}
+                  />
+                  {uploadFilter && (
+                    <button onClick={() => setUploadFilter('')} style={{
+                      background: 'none', border: 'none', color: 'var(--text-muted)',
+                      cursor: 'pointer', padding: 2, fontSize: 12,
+                    }}>Clear</button>
+                  )}
+                </div>
+
+                {filteredUploads.length === 0 ? (
+                  <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                    {uploads.length === 0 ? 'No uploaded files yet.' : 'No files match your filter.'}
+                  </div>
+                ) : (
+                  <div style={{ maxHeight: 400, overflow: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                          <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600 }}>File</th>
+                          <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600 }}>Presentation</th>
+                          <th style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600 }}>Size</th>
+                          <th style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600 }}>Date</th>
+                          <th style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 600, width: 50 }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredUploads.map(u => {
+                          const Icon = fileIcon(u.contentType)
+                          return (
+                            <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                              <td style={{ padding: '8px 14px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <Icon size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}
+                                    title={u.name}>{u.name}</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '8px 14px', color: 'var(--text-muted)' }}>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 180 }}
+                                  title={u.presentationTitle || '—'}>{u.presentationTitle || '—'}</span>
+                              </td>
+                              <td style={{ padding: '8px 14px', textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
+                                {formatBytes(u.size)}
+                              </td>
+                              <td style={{ padding: '8px 14px', textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                                {formatDate(u.createdAt)}
+                              </td>
+                              <td style={{ padding: '8px 14px', textAlign: 'center' }}>
+                                <button
+                                  onClick={() => handleDeleteUpload(u.id)}
+                                  disabled={deletingUploadId === u.id}
+                                  title="Delete file"
+                                  style={{
+                                    background: 'none', border: 'none', cursor: 'pointer',
+                                    color: deletingUploadId === u.id ? 'var(--text-muted)' : 'var(--danger, #ef4444)',
+                                    padding: 4, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  }}
+                                >
+                                  {deletingUploadId === u.id
+                                    ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                                    : <Trash2 size={14} />
+                                  }
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {showModal && (
@@ -704,6 +949,88 @@ export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) 
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Fork from Git modal */}
+      {showForkModal && (
+        <div className="modal-overlay" onClick={() => setShowForkModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <GitFork size={20} /> Fork from GitHub
+            </h2>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 16px' }}>
+              Import a presentation from any GitHub repository that was exported by Parallax.
+            </p>
+            <form onSubmit={handleForkBrowse}>
+              <div className="form-group">
+                <label>Repository URL</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="https://github.com/owner/repo"
+                    value={forkUrl}
+                    onChange={e => setForkUrl(e.target.value)}
+                    autoFocus
+                    style={{ flex: 1 }}
+                  />
+                  <button type="submit" className="btn btn-primary" disabled={forkBrowsing || !forkUrl.trim()}
+                    style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {forkBrowsing ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> Scanning...</> : 'Browse'}
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {forkError && (
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: '#f87171', marginTop: 8 }}>
+                {forkError}
+              </div>
+            )}
+
+            {forkBrowseResult && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                  Found {forkBrowseResult.presentations.length} presentation{forkBrowseResult.presentations.length !== 1 ? 's' : ''} in{' '}
+                  <strong>{forkBrowseResult.owner}/{forkBrowseResult.repo}</strong>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflow: 'auto' }}>
+                  {forkBrowseResult.presentations.map(p => (
+                    <div key={p.folder} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                      borderRadius: 8, padding: '10px 14px',
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600 }}>{p.title}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          {p.slideCount} slide{p.slideCount !== 1 ? 's' : ''} &middot; {p.folder}/
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => handleFork(p.folder)}
+                        disabled={forkingFolder !== null}
+                        style={{ fontSize: 12, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        {forkingFolder === p.folder
+                          ? <><Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> Forking...</>
+                          : <><GitFork size={13} /> Fork</>
+                        }
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="modal-footer" style={{ marginTop: 16 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowForkModal(false)}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
