@@ -183,6 +183,7 @@ export const api = {
 
   // File management
   getUploads: () => authFetch(`${BASE}/uploads`).then(safeJson),
+  getPresentationUploads: (presentationId) => authFetch(`${BASE}/presentations/${presentationId}/uploads`).then(safeJson),
   deleteUpload: (id) => authFetch(`${BASE}/uploads/${id}`, { method: 'DELETE' }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Delete failed'); return b }),
 
   // User / plan

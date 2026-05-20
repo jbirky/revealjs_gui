@@ -286,6 +286,11 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [gitRestoring, setGitRestoring] = useState(null)
   const [showDiffViewer, setShowDiffViewer] = useState(false)
   const [showFontManager, setShowFontManager] = useState(false)
+  const [showFileBrowser, setShowFileBrowser] = useState(false)
+  const [fileBrowserFiles, setFileBrowserFiles] = useState([])
+  const [fileBrowserLoading, setFileBrowserLoading] = useState(false)
+  const [fileBrowserFilter, setFileBrowserFilter] = useState('all')
+  const [fileBrowserCopied, setFileBrowserCopied] = useState(null)
   const [customFonts, setCustomFonts] = useState([])
   const [fontGoogleName, setFontGoogleName] = useState('')
   const [fontUploading, setFontUploading] = useState(false)
@@ -1931,6 +1936,21 @@ function draw() {
             History
           </button>
 
+          <button
+            className="btn btn-secondary"
+            onClick={async () => {
+              setShowFileBrowser(true)
+              setFileBrowserLoading(true)
+              try { const files = await api.getPresentationUploads(presentationId); setFileBrowserFiles(Array.isArray(files) ? files : []) }
+              catch { setFileBrowserFiles([]) }
+              setFileBrowserLoading(false)
+            }}
+            title="Browse uploaded files"
+          >
+            <Layers size={14} />
+            Files
+          </button>
+
           <div style={{ position: 'relative' }}>
             <button
               className="btn btn-secondary"
@@ -3198,6 +3218,69 @@ function draw() {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* File Browser Modal */}
+      {showFileBrowser && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }}
+          onClick={e => { if (e.target === e.currentTarget) { setShowFileBrowser(false); setFileBrowserCopied(null) } }}>
+          <div style={{ background: 'var(--bg-primary, #0f0f1a)', border: '1px solid var(--border)', borderRadius: 12, width: 700, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>Uploaded Files</span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {['all', 'image', 'video', 'audio'].map(f => (
+                  <button key={f} onClick={() => setFileBrowserFilter(f)}
+                    style={{ padding: '3px 10px', fontSize: 11, borderRadius: 4, border: '1px solid var(--border)', cursor: 'pointer',
+                      background: fileBrowserFilter === f ? 'var(--accent)' : 'var(--bg-hover)', color: fileBrowserFilter === f ? '#fff' : 'var(--text-secondary)' }}>
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+                <button onClick={() => { setShowFileBrowser(false); setFileBrowserCopied(null) }}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '2px 6px' }}>&times;</button>
+              </div>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+              {fileBrowserLoading ? (
+                <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Loading...</div>
+              ) : fileBrowserFiles.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No files uploaded yet</div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+                  {fileBrowserFiles
+                    .filter(f => fileBrowserFilter === 'all' || (f.contentType && f.contentType.startsWith(fileBrowserFilter + '/')))
+                    .map(file => (
+                    <div key={file.id} style={{ background: 'var(--bg-hover)', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden', cursor: 'pointer', position: 'relative' }}
+                      onClick={() => { const url = `${window.location.origin}${file.url}`; navigator.clipboard.writeText(url); setFileBrowserCopied(file.id); setTimeout(() => setFileBrowserCopied(null), 1500) }}>
+                      <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+                        {file.contentType?.startsWith('image/') ? (
+                          <img src={file.url} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : file.contentType?.startsWith('video/') ? (
+                          <video src={file.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+                        ) : (
+                          <span style={{ fontSize: 28, opacity: 0.3 }}>{file.contentType?.startsWith('audio/') ? '🎵' : '📄'}</span>
+                        )}
+                      </div>
+                      <div style={{ padding: '6px 8px' }}>
+                        <div style={{ fontSize: 10, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</div>
+                        <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {file.size ? `${(file.size / 1024).toFixed(0)} KB` : ''}
+                        </div>
+                      </div>
+                      {fileBrowserCopied === file.id && (
+                        <div style={{ position: 'absolute', inset: 0, background: 'rgba(34,197,94,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 600, fontSize: 12 }}>
+                          URL Copied!
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
+              Click a file to copy its URL to clipboard
             </div>
           </div>
         </div>
