@@ -38,6 +38,33 @@ services:
       - NODE_ENV=production
     restart: unless-stopped
 
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest
+    ports:
+      - "127.0.0.1:3004:3000"
+    environment:
+      DATABASE_URL: postgresql://umami:umami@umami-db:5432/umami
+      APP_SECRET: ${UMAMI_APP_SECRET:-replace-me-with-a-random-string}
+    depends_on:
+      umami-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  umami-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: umami
+    volumes:
+      - umami-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U umami"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     command: tunnel --config /etc/cloudflared/config.yml run
@@ -56,3 +83,4 @@ volumes:
     name: revealjs_gui_revealjs-uploads
   parallax-dev-data:
   parallax-dev-uploads:
+  umami-db-data:

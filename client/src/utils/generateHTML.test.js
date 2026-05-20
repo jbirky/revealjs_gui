@@ -256,4 +256,138 @@ describe('generateRevealHTML', () => {
     expect(html).toContain('<svg')
     expect(html).toContain('<ellipse')
   })
+
+  // ── Laser pointer / spotlight ──────────────────────────────────────
+
+  it('excludes laser pointer elements when laserPointer is off', () => {
+    const html = generateRevealHTML(makePresentation({ laserPointer: 'off' }))
+    expect(html).toContain('id="laser-dot"')
+    expect(html).toContain('id="spotlight-overlay"')
+    expect(html).not.toContain("var mode = 'dot'")
+    expect(html).not.toContain("var mode = 'spotlight'")
+  })
+
+  it('includes laser dot JS when laserPointer is dot', () => {
+    const html = generateRevealHTML(makePresentation({ laserPointer: 'dot' }))
+    expect(html).toContain("var mode = 'dot'")
+    expect(html).toContain('#laser-dot')
+    expect(html).toContain("e.key === 'l'")
+  })
+
+  it('includes spotlight JS when laserPointer is spotlight', () => {
+    const html = generateRevealHTML(makePresentation({ laserPointer: 'spotlight' }))
+    expect(html).toContain("var mode = 'spotlight'")
+    expect(html).toContain('drawSpotlight')
+    expect(html).toContain('destination-out')
+  })
+
+  it('includes laser pointer CSS styles', () => {
+    const html = generateRevealHTML(makePresentation({ laserPointer: 'dot' }))
+    expect(html).toContain('#laser-dot {')
+    expect(html).toContain('#spotlight-overlay {')
+  })
+
+  // ── Bibliography / references slide ────────────────────────────────
+
+  it('does not add references slide when bibliography is empty', () => {
+    const html = generateRevealHTML(makePresentation({ bibliography: [] }))
+    expect(html).not.toContain('References')
+  })
+
+  it('does not add references slide when bibliography is undefined', () => {
+    const html = generateRevealHTML(makePresentation())
+    expect(html).not.toContain('>References<')
+  })
+
+  it('generates a references slide when bibliography has entries', () => {
+    const pres = makePresentation({
+      bibliography: [
+        { key: 'smith2020', type: 'article', author: 'Smith, John', title: 'A Paper', year: '2020', journal: 'Nature', volume: '42', pages: '100-110', doi: '10.1234/test' },
+      ],
+    })
+    const html = generateRevealHTML(pres)
+    expect(html).toContain('>References<')
+    expect(html).toContain('[1]')
+    expect(html).toContain('Smith, John')
+    expect(html).toContain('(2020)')
+    expect(html).toContain('A Paper')
+    expect(html).toContain('<em>Nature</em>')
+    expect(html).toContain('10.1234/test')
+  })
+
+  it('generates references for multiple bibliography entries', () => {
+    const pres = makePresentation({
+      bibliography: [
+        { key: 'a', type: 'article', author: 'Alpha, A', title: 'First', year: '2020' },
+        { key: 'b', type: 'article', author: 'Beta, B', title: 'Second', year: '2021' },
+        { key: 'c', type: 'article', author: 'Gamma, G', title: 'Third', year: '2022' },
+      ],
+    })
+    const html = generateRevealHTML(pres)
+    expect(html).toContain('[1]')
+    expect(html).toContain('[2]')
+    expect(html).toContain('[3]')
+    expect(html).toContain('First')
+    expect(html).toContain('Second')
+    expect(html).toContain('Third')
+  })
+
+  it('uses 2-column layout for bibliographies with more than 8 entries', () => {
+    const entries = Array.from({ length: 10 }, (_, i) => ({
+      key: `e${i}`, type: 'article', author: `Author${i}`, title: `Title ${i}`, year: '2020',
+    }))
+    const html = generateRevealHTML(makePresentation({ bibliography: entries }))
+    expect(html).toContain('columns:2')
+  })
+
+  it('uses 1-column layout for bibliographies with 8 or fewer entries', () => {
+    const entries = Array.from({ length: 5 }, (_, i) => ({
+      key: `e${i}`, type: 'article', author: `Author${i}`, title: `Title ${i}`, year: '2020',
+    }))
+    const html = generateRevealHTML(makePresentation({ bibliography: entries }))
+    expect(html).toContain('columns:1')
+  })
+
+  it('escapes HTML in bibliography entry titles', () => {
+    const pres = makePresentation({
+      bibliography: [
+        { key: 'xss', type: 'article', title: '<script>alert(1)</script>', year: '2020' },
+      ],
+    })
+    const html = generateRevealHTML(pres)
+    expect(html).not.toContain('<script>alert(1)</script>')
+    expect(html).toContain('&lt;script&gt;')
+  })
+
+  it('generates DOI link in references', () => {
+    const pres = makePresentation({
+      bibliography: [
+        { key: 'doi', type: 'article', title: 'Paper', doi: '10.1038/s41586-023-06330-w' },
+      ],
+    })
+    const html = generateRevealHTML(pres)
+    expect(html).toContain('href="https://doi.org/10.1038/s41586-023-06330-w"')
+    expect(html).toContain('>DOI<')
+  })
+
+  it('handles entries with booktitle instead of journal', () => {
+    const pres = makePresentation({
+      bibliography: [
+        { key: 'conf', type: 'inproceedings', title: 'A Talk', booktitle: 'ICML 2023' },
+      ],
+    })
+    const html = generateRevealHTML(pres)
+    expect(html).toContain('<em>ICML 2023</em>')
+  })
+
+  it('handles entries with missing optional fields', () => {
+    const pres = makePresentation({
+      bibliography: [
+        { key: 'minimal', type: 'misc', title: 'Just a Title' },
+      ],
+    })
+    const html = generateRevealHTML(pres)
+    expect(html).toContain('Just a Title')
+    expect(html).toContain('[1]')
+  })
 })

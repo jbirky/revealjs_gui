@@ -16,7 +16,7 @@ import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
-import { ChevronLeft, ChevronDown, Play, Download, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup, Monitor } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Play, Download, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup, Monitor, FileText } from 'lucide-react'
 import { api } from '../utils/api'
 import { generateLatexIframeHtml } from '../utils/latexRenderer'
 import { downloadHTML, downloadSlideHTML, presentInWindow, presenterInWindow, previewSlideInWindow, exportPDF, generateRevealHTML } from '../utils/generateHTML'
@@ -34,6 +34,8 @@ import KineticTextModal from '../components/KineticTextModal'
 import MathGridModal from '../components/MathGridModal'
 import AnimeModal from '../components/AnimeModal'
 import ThreeModal from '../components/ThreeModal'
+import BibliographyModal from '../components/BibliographyModal'
+import { formatCitation } from '../utils/bibtexParser'
 import { MathNode } from '../extensions/MathExtension'
 import { FontSize } from '../extensions/FontSize'
 import { FontFamily } from '../extensions/FontFamily'
@@ -251,6 +253,7 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [showMathGridModal, setShowMathGridModal] = useState(false)
   const [showAnimeModal, setShowAnimeModal] = useState(false)
   const [showThreeModal, setShowThreeModal] = useState(false)
+  const [showBibliographyModal, setShowBibliographyModal] = useState(false)
   const [syncStatus, setSyncStatus] = useState(null) // { installed, remotes, hasConfig }
   const [syncConfig, setSyncConfig] = useState({ username: '', password: '', remoteName: 'protondrive' })
   const [syncResult, setSyncResult] = useState(null) // { type, message }
@@ -1751,6 +1754,19 @@ function draw() {
 
           <button
             className="btn btn-secondary"
+            onClick={() => setShowBibliographyModal(true)}
+            title="Bibliography & Citations"
+          >
+            <FileText size={14} />
+            {(presentation.bibliography || []).length > 0 && (
+              <span style={{ fontSize: 9, background: 'var(--accent)', color: 'white', borderRadius: 8, padding: '0 4px', lineHeight: '14px', fontWeight: 700 }}>
+                {presentation.bibliography.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            className="btn btn-secondary"
             onClick={() => setShowFindReplace(v => !v)}
             title="Find & Replace (Ctrl+F)"
           >
@@ -2089,6 +2105,19 @@ function draw() {
                 </label>
               </div>
 
+              {/* Laser Pointer */}
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500 }}>Laser Pointer</div>
+                <select className="prop-input" value={presentation.laserPointer || 'off'}
+                  onChange={e => setPresentation(prev => ({ ...prev, laserPointer: e.target.value }))}
+                  style={{ width: '100%', padding: '6px 8px' }}>
+                  <option value="off">Off</option>
+                  <option value="dot">Laser Dot</option>
+                  <option value="spotlight">Spotlight</option>
+                </select>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Press L during presentation to toggle</div>
+              </div>
+
               {/* Overview Panel */}
               <div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500 }}>Slide Overview (present mode)</div>
@@ -2253,6 +2282,24 @@ function draw() {
                     )}
                   </div>
                 )}
+
+              {/* Bibliography */}
+              <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>Bibliography</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {(presentation.bibliography || []).length} references
+                      {(presentation.bibliography || []).length > 0 && ' — auto-generated references slide'}
+                    </div>
+                  </div>
+                  <button onClick={() => { setShowDefaultSettings(false); setShowBibliographyModal(true) }}
+                    className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}>
+                    Manage Bibliography
+                  </button>
+                </div>
+              </div>
+
               </div>
             </div>
           </div>
@@ -3253,6 +3300,22 @@ function draw() {
           onClose={() => setShowThreeModal(false)}
           slideW={slideW}
           slideH={slideH}
+        />
+      )}
+
+      {/* Bibliography Modal */}
+      {showBibliographyModal && (
+        <BibliographyModal
+          bibliography={presentation.bibliography || []}
+          citationStyle={presentation.citationStyle || 'numbered'}
+          onUpdate={updates => setPresentation(prev => ({ ...prev, ...updates }))}
+          onInsertCitation={(entry, index) => {
+            const cite = formatCitation(entry, presentation.citationStyle || 'numbered', index)
+            if (editor && editingElementId) {
+              editor.chain().focus().insertContent(`<sup style="color:#6366f1;font-weight:700;cursor:default">${cite}</sup>`).run()
+            }
+          }}
+          onClose={() => setShowBibliographyModal(false)}
         />
       )}
 

@@ -475,6 +475,9 @@ function generateRevealHTML(presentation) {
   const footerTimeMode = presentation.footerTimeMode || 'none'
   const timerDuration = presentation.timerDuration ?? 20
   const showTimeWidget = footerTimeMode !== 'none'
+  const laserPointer = presentation.laserPointer || 'off'
+  const bibliography = presentation.bibliography || []
+  const citationStyle = presentation.citationStyle || 'numbered'
 
   const slideEntries = (presentation.slides || []).map((slide, slideIndex) => {
     const bgAttrs = getBackgroundAttrs(slide.background)
@@ -723,11 +726,42 @@ function generateRevealHTML(presentation) {
     columns = allSlides.map((_, i) => [i])
   }
 
-  const slidesHtml = columns.map(idxs => {
+  let slidesHtml = columns.map(idxs => {
     const sections = idxs.map(i => slideEntries[i]?.html || '').join('\n')
     if (idxs.length === 1) return sections
     return `    <section>\n${sections}\n    </section>`
   }).join('\n')
+
+  if (bibliography.length > 0) {
+    const refItems = bibliography.map((entry, i) => {
+      const authors = entry.author || ''
+      const year = entry.year || ''
+      const title = escapeHtml(entry.title || '')
+      const journal = entry.journal || entry.booktitle || ''
+      const vol = entry.volume || ''
+      const pages = entry.pages || ''
+      const doi = entry.doi || ''
+      let line = `<span style="color:${sanitizeCSSValue(footerColor)};font-weight:700;margin-right:6px">[${i + 1}]</span>`
+      line += `${escapeHtml(authors)}`
+      if (year) line += ` (${escapeHtml(year)})`
+      line += `. ${title}.`
+      if (journal) line += ` <em>${escapeHtml(journal)}</em>`
+      if (vol) line += `, ${escapeHtml(vol)}`
+      if (pages) line += `, ${escapeHtml(pages)}`
+      line += '.'
+      if (doi) line += ` <a href="https://doi.org/${escapeHtml(doi)}" target="_blank" rel="noopener" style="color:rgba(99,102,241,0.8);font-size:0.85em">DOI</a>`
+      return `<div style="margin-bottom:8px;line-height:1.5;font-size:14px;color:rgba(255,255,255,0.85)">${line}</div>`
+    }).join('\n          ')
+    const refSlide = `    <section>
+      <div style="position:absolute;left:40px;top:30px;right:40px;bottom:30px;overflow:auto">
+        <h2 style="font-size:28px;margin:0 0 20px;color:rgba(255,255,255,0.95)">References</h2>
+        <div style="columns:${bibliography.length > 8 ? 2 : 1};column-gap:30px">
+          ${refItems}
+        </div>
+      </div>
+    </section>`
+    slidesHtml += '\n' + refSlide
+  }
 
   return `<!doctype html>
 <html>
@@ -808,6 +842,9 @@ function generateRevealHTML(presentation) {
     .fragment.flip-up { transform:perspective(600px) rotateX(90deg); opacity:0; transition:transform 0.6s ease, opacity 0.3s ease; }
     .fragment.flip-down { transform:perspective(600px) rotateX(-90deg); opacity:0; transition:transform 0.6s ease, opacity 0.3s ease; }
     .fragment.flip-up.visible,.fragment.flip-down.visible { transform:none; opacity:1; }
+    /* Laser pointer / spotlight */
+    #laser-dot { position:fixed;width:12px;height:12px;border-radius:50%;background:radial-gradient(circle,#ff0000 0%,#ff0000 60%,rgba(255,0,0,0.4) 100%);box-shadow:0 0 8px 2px rgba(255,0,0,0.6);pointer-events:none;z-index:99999;display:none;transform:translate(-50%,-50%); }
+    #spotlight-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:99998;display:none; }
     /* Slide overview panel */
     #overview-toggle { position:fixed;top:16px;left:16px;z-index:9999;background:rgba(0,0,0,0.5);color:white;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px;backdrop-filter:blur(4px);transition:background 0.15s; }
     #overview-toggle:hover { background:rgba(0,0,0,0.75); }
@@ -835,6 +872,8 @@ ${slidesHtml}
   <button id="fs-btn" title="Enter fullscreen (F)" onclick="document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()">&#x26F6; Fullscreen</button>
   <button id="overview-toggle" title="Slide overview (G)">&#x25A6; Overview</button>
   <div id="overview-panel"><div class="ov-header"><span>Slides</span><span id="ov-count"></span></div><div class="ov-body ${presentation.overviewLayout || 'linear'}" id="ov-body"></div></div>
+  <div id="laser-dot"></div>
+  <canvas id="spotlight-overlay"></canvas>
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
@@ -1097,6 +1136,56 @@ ${(() => {
     })();
 `
 })()}
+${laserPointer !== 'off' ? `
+    // ── Laser pointer / spotlight ────────────────────────────────────
+    (function() {
+      var mode = '${laserPointer}';
+      var active = false;
+      var dot = document.getElementById('laser-dot');
+      var canvas = document.getElementById('spotlight-overlay');
+      var ctx = canvas.getContext('2d');
+      var mx = 0, my = 0;
+
+      function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; if (active && mode === 'spotlight') drawSpotlight(); }
+      window.addEventListener('resize', resize);
+      resize();
+
+      function drawSpotlight() {
+        var w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.fillRect(0, 0, w, h);
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-out';
+        var grad = ctx.createRadialGradient(mx, my, 0, mx, my, 120);
+        grad.addColorStop(0, 'rgba(0,0,0,1)');
+        grad.addColorStop(0.7, 'rgba(0,0,0,0.9)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(mx, my, 120, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      document.addEventListener('mousemove', function(e) {
+        mx = e.clientX; my = e.clientY;
+        if (!active) return;
+        if (mode === 'dot') { dot.style.left = mx + 'px'; dot.style.top = my + 'px'; }
+        else { drawSpotlight(); }
+      });
+
+      document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.key === 'l' || e.key === 'L') {
+          e.preventDefault();
+          active = !active;
+          if (mode === 'dot') { dot.style.display = active ? 'block' : 'none'; }
+          else { canvas.style.display = active ? 'block' : 'none'; if (active) drawSpotlight(); }
+        }
+      });
+    })();
+` : ''}
 ${showTimeWidget ? `
     (function() {
       var mode = '${footerTimeMode}';
