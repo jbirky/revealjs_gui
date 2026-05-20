@@ -800,13 +800,36 @@ export default function HomePage({ onOpen, theme, onToggleTheme, initialSlug }) 
                       <tbody>
                         {filteredUploads.map(u => {
                           const Icon = fileIcon(u.contentType)
+                          const isImage = u.contentType?.startsWith('image/')
+                          const isVideo = u.contentType?.startsWith('video/')
                           return (
                             <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}
                               onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                               onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                               <td style={{ padding: '8px 14px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <Icon size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                  {isImage ? (
+                                    <img src={u.url} alt="" style={{
+                                      width: 36, height: 36, borderRadius: 4, objectFit: 'cover',
+                                      flexShrink: 0, background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                                    }} />
+                                  ) : isVideo ? (
+                                    <div style={{
+                                      width: 36, height: 36, borderRadius: 4, flexShrink: 0,
+                                      background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    }}>
+                                      <Film size={16} style={{ color: 'var(--text-muted)' }} />
+                                    </div>
+                                  ) : (
+                                    <div style={{
+                                      width: 36, height: 36, borderRadius: 4, flexShrink: 0,
+                                      background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    }}>
+                                      <Icon size={16} style={{ color: 'var(--text-muted)' }} />
+                                    </div>
+                                  )}
                                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}
                                     title={u.name}>{u.name}</span>
                                 </div>
