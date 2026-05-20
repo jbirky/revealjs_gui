@@ -151,32 +151,29 @@ export default function LandingPage({ onSignIn }) {
 
         {/* Pricing */}
         <section className="landing-section">
-          <h2 className="landing-section-title">Simple pricing</h2>
+          <h2 className="landing-section-title">Free to use</h2>
           <p className="landing-section-sub">
-            Start for free, upgrade when you need more.
+            Get started with Parallax at no cost.
           </p>
-          <div className="landing-pricing-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', maxWidth: 700, margin: '0 auto' }}>
-            {PLANS.map(plan => (
-              <div key={plan.name} className={`landing-price-card ${plan.highlighted ? 'landing-price-highlighted' : ''}`}>
-                {plan.highlighted && <div className="landing-price-badge">Most Popular</div>}
-                <h3>{plan.name}</h3>
-                <div className="landing-price-amount">
-                  {plan.price}<span>{plan.period}</span>
-                </div>
-                <ul>
-                  {plan.features.map(f => (
-                    <li key={f}><Check size={16} /> {f}</li>
-                  ))}
-                </ul>
-                <button
-                  className={plan.highlighted ? 'landing-btn-primary' : 'landing-btn-ghost'}
-                  style={{ width: '100%', justifyContent: 'center' }}
-                  onClick={onSignIn}
-                >
-                  {plan.cta}
-                </button>
+          <div className="landing-pricing-grid" style={{ gridTemplateColumns: '1fr', maxWidth: 360, margin: '0 auto' }}>
+            <div className="landing-price-card landing-price-highlighted">
+              <h3>{PLANS[0].name}</h3>
+              <div className="landing-price-amount">
+                {PLANS[0].price}
               </div>
-            ))}
+              <ul>
+                {PLANS[0].features.map(f => (
+                  <li key={f}><Check size={16} /> {f}</li>
+                ))}
+              </ul>
+              <button
+                className="landing-btn-primary"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={onSignIn}
+              >
+                Get Started
+              </button>
+            </div>
           </div>
         </section>
 
