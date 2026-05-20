@@ -2353,8 +2353,52 @@ app.post('/api/presentations/:id/zenodo/publish', requireValidId(), async (req, 
       if (slide.background?.image?.startsWith('/uploads/')) slide.background.image = `./assets/${assetName(slide.background.image)}`
     }
 
-    const htmlContent = generateRevealHTML(exportPres)
+    let htmlContent = generateRevealHTML(exportPres)
     const jsonContent = JSON.stringify(presentation, null, 2)
+
+    // 2b. Inject citation slide with pre-reserved DOI
+    const preresDoi = deposition.metadata?.prereserve_doi?.doi || ''
+    if (preresDoi) {
+      const year = new Date().getFullYear()
+      const title = escapeHtml(presentation.title || 'Untitled Presentation')
+      const authorNames = creators.map(c => escapeHtml(c.name)).join(' and ')
+      const firstAuthorLast = (creators[0]?.name || 'Author').split(',')[0].trim().toLowerCase().replace(/\s+/g, '')
+      const bibKey = `${firstAuthorLast}${year}${(presentation.title || 'presentation').split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, '')}`
+      const doiUrl = `https://doi.org/${preresDoi}`
+
+      const bibtex = [
+        `@misc{${bibKey},`,
+        `  author    = {${creators.map(c => c.name).join(' and ')}},`,
+        `  title     = {${presentation.title || 'Untitled Presentation'}},`,
+        `  year      = {${year}},`,
+        `  publisher = {Zenodo},`,
+        `  doi       = {${preresDoi}},`,
+        `  url       = {${doiUrl}}`,
+        `}`,
+      ].join('\n')
+
+      const slideW = presentation.slideWidth || 960
+      const slideH = presentation.slideHeight || 540
+      const citationSlide = `
+    <section>
+      <div style="position:absolute;left:40px;top:30px;width:${slideW - 80}px;height:${slideH - 60}px;overflow:auto;z-index:1">
+        <h2 style="font-size:28px;margin:0 0 20px;color:rgba(255,255,255,0.95)">Cite this Presentation</h2>
+        <div style="margin-bottom:20px;">
+          <div style="font-size:14px;color:rgba(255,255,255,0.5);margin-bottom:6px;">DOI</div>
+          <a href="${doiUrl}" target="_blank" rel="noopener" style="font-size:20px;color:#818cf8;text-decoration:underline;word-break:break-all;">${doiUrl}</a>
+        </div>
+        <div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.5);margin-bottom:6px;">BibTeX</div>
+          <pre style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:14px 18px;font-size:13px;line-height:1.6;color:rgba(255,255,255,0.85);font-family:'Fira Code','JetBrains Mono',monospace;overflow-x:auto;white-space:pre;margin:0;">${escapeHtml(bibtex)}</pre>
+        </div>
+      </div>
+    </section>`
+
+      htmlContent = htmlContent.replace(
+        '    </div>\n  </div>',
+        citationSlide + '\n    </div>\n  </div>'
+      )
+    }
 
     // 3. Upload presentation files
     await zenUploadFile('presentation.html', Buffer.from(htmlContent, 'utf8'), 'text/html')
