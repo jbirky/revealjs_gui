@@ -126,6 +126,7 @@ app.get('/api/docs/sidebar', (req, res) => {
       { text: 'LaTeX & Math', link: 'features/latex' },
       { text: 'Charts', link: 'features/charts' },
       { text: 'Export & Sharing', link: 'features/export' },
+      { text: 'Zenodo Integration', link: 'features/zenodo' },
     ],
     tutorials: [
       { text: 'Your First Presentation', link: 'tutorials/first-presentation' },
