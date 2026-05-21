@@ -1619,15 +1619,21 @@ function CanvasElement({ element, isSelected, isEditing, isCropping, cropState, 
         const sandboxUrl = pluginEntry?.manifest?.sandbox && slug
           ? `/api/plugins/${slug}/assets/${pluginEntry.manifest.sandbox.replace(/^\.\//, '')}`
           : null
+        const hasExternalEditor = element.type === 'plugin:dynamical-system'
         return (
-          <PluginSandbox
-            sandboxUrl={sandboxUrl}
-            pluginData={element.pluginData}
-            width={element.width}
-            height={element.height}
-            isSelected={isSelected}
-            onDataUpdate={(patch) => onUpdateElement?.(element.id, { pluginData: { ...(element.pluginData || {}), ...patch } })}
-          />
+          <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+            <PluginSandbox
+              sandboxUrl={sandboxUrl}
+              pluginData={element.pluginData}
+              width={element.width}
+              height={element.height}
+              isSelected={isSelected && !hasExternalEditor}
+              onDataUpdate={(patch) => onUpdateElement?.(element.id, { pluginData: { ...(element.pluginData || {}), ...patch } })}
+            />
+            {hasExternalEditor && isSelected && (
+              <div style={{ position: 'absolute', inset: 0, cursor: 'grab' }} />
+            )}
+          </div>
         )
       })()}
 
