@@ -16,7 +16,7 @@ import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
-import { ChevronLeft, ChevronDown, Play, Download, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup, Monitor, FileText } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Play, Download, Github, Settings, Check, X, Search, Share2, Video, Music, Table2, Layers, Clock, CloudUpload, History, FileDown, Group, Ungroup, Monitor, FileText, Database } from 'lucide-react'
 import { api } from '../utils/api'
 import DiffViewer from '../components/DiffViewer'
 import { generateLatexIframeHtml } from '../utils/latexRenderer'
@@ -37,6 +37,7 @@ import AnimeModal from '../components/AnimeModal'
 import ThreeModal from '../components/ThreeModal'
 import BibliographyModal from '../components/BibliographyModal'
 import DiagramModal from '../components/DiagramModal'
+import DatasetPanel from '../components/DatasetPanel'
 import EquationPalette from '../components/EquationPalette'
 import { formatCitation, getReferencedEntries, parseAuthors, formatAuthorsFull } from '../utils/bibtexParser'
 import { MathNode } from '../extensions/MathExtension'
@@ -291,6 +292,7 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [fileBrowserLoading, setFileBrowserLoading] = useState(false)
   const [fileBrowserFilter, setFileBrowserFilter] = useState('all')
   const [fileBrowserCopied, setFileBrowserCopied] = useState(null)
+  const [showDatasetPanel, setShowDatasetPanel] = useState(false)
   const [customFonts, setCustomFonts] = useState([])
   const [fontGoogleName, setFontGoogleName] = useState('')
   const [fontUploading, setFontUploading] = useState(false)
@@ -1951,6 +1953,15 @@ function draw() {
             Files
           </button>
 
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowDatasetPanel(true)}
+            title="Manage datasets"
+          >
+            <Database size={14} />
+            Data
+          </button>
+
           <div style={{ position: 'relative' }}>
             <button
               className="btn btn-secondary"
@@ -3284,6 +3295,10 @@ function draw() {
             </div>
           </div>
         </div>
+      )}
+
+      {showDatasetPanel && (
+        <DatasetPanel presentationId={presentationId} onClose={() => setShowDatasetPanel(false)} />
       )}
 
       {/* Editor Body */}
