@@ -38,6 +38,7 @@ import ThreeModal from '../components/ThreeModal'
 import BibliographyModal from '../components/BibliographyModal'
 import DiagramModal from '../components/DiagramModal'
 import DatasetPanel from '../components/DatasetPanel'
+import DynSysEditor from '../components/DynSysEditor'
 import EquationPalette from '../components/EquationPalette'
 import { formatCitation, getReferencedEntries, parseAuthors, formatAuthorsFull } from '../utils/bibtexParser'
 import { MathNode } from '../extensions/MathExtension'
@@ -293,6 +294,7 @@ export default function EditorPage({ presentationId, isTemplate = false, onGoHom
   const [fileBrowserFilter, setFileBrowserFilter] = useState('all')
   const [fileBrowserCopied, setFileBrowserCopied] = useState(null)
   const [showDatasetPanel, setShowDatasetPanel] = useState(false)
+  const [dynSysEditorState, setDynSysEditorState] = useState(null)
   const [customFonts, setCustomFonts] = useState([])
   const [fontGoogleName, setFontGoogleName] = useState('')
   const [fontUploading, setFontUploading] = useState(false)
@@ -3301,6 +3303,17 @@ function draw() {
         <DatasetPanel presentationId={presentationId} onClose={() => setShowDatasetPanel(false)} />
       )}
 
+      {dynSysEditorState && (
+        <DynSysEditor
+          initialData={dynSysEditorState.data}
+          onApply={(newData) => {
+            updateElement(dynSysEditorState.elementId, { pluginData: newData })
+            setDynSysEditorState(null)
+          }}
+          onCancel={() => setDynSysEditorState(null)}
+        />
+      )}
+
       {/* Editor Body */}
       <div className="editor-body">
         <SlidePanel
@@ -3498,6 +3511,10 @@ function draw() {
               onOpenCodeEditor={openCodeEditor}
               onOpenLatexEditor={openLatexEditor}
               onOpenManimEditor={openManimEditor}
+              onOpenDynSysEditor={(elementId) => {
+                const el = currentSlide?.elements?.find(e => e.id === elementId)
+                if (el) setDynSysEditorState({ elementId, data: { ...(el.pluginData || {}) } })
+              }}
               onAddImage={async (file, dropX, dropY) => {
                 const result = await api.uploadFile(file)
                 if (result.url) addImageElement(result.url, dropX, dropY)

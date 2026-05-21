@@ -4,33 +4,6 @@
 <style>
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: -apple-system, 'Inter', sans-serif; }
   canvas { display: block; }
-  .controls {
-    position: absolute; top: 0; left: 0; right: 0;
-    background: rgba(15,15,26,0.92); backdrop-filter: blur(8px);
-    padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-    font-size: 11px; color: #c0c0d0; border-bottom: 1px solid rgba(255,255,255,0.08);
-    z-index: 10; transition: opacity 0.15s;
-  }
-  .controls.hidden { opacity: 0; pointer-events: none; }
-  .ctrl-label { color: #8888a0; font-size: 10px; margin-right: 2px; }
-  .ctrl-input {
-    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
-    color: #e0e0f0; padding: 3px 6px; border-radius: 4px; font-size: 11px;
-    font-family: 'SF Mono', 'Fira Code', monospace; outline: none; width: 140px;
-  }
-  .ctrl-input:focus { border-color: #6366f1; }
-  .ctrl-btn {
-    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
-    color: #c0c0d0; padding: 3px 8px; border-radius: 4px; font-size: 10px;
-    cursor: pointer; white-space: nowrap;
-  }
-  .ctrl-btn:hover { background: rgba(255,255,255,0.12); }
-  .ctrl-btn.active { background: rgba(99,102,241,0.3); border-color: #6366f1; color: #a5b4fc; }
-  .ctrl-select {
-    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
-    color: #c0c0d0; padding: 3px 6px; border-radius: 4px; font-size: 10px; outline: none;
-  }
-  .ctrl-sep { width: 1px; height: 18px; background: rgba(255,255,255,0.08); margin: 0 2px; }
   .hint {
     position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
     background: rgba(15,15,26,0.85); color: #8888a0; font-size: 10px;
@@ -42,28 +15,6 @@
 </head>
 <body>
 <canvas id="cv"></canvas>
-<div class="controls hidden" id="ctrls">
-  <span class="ctrl-label">dx/dt =</span>
-  <input class="ctrl-input" id="inp-dx" spellcheck="false">
-  <span class="ctrl-label">dy/dt =</span>
-  <input class="ctrl-input" id="inp-dy" spellcheck="false">
-  <div class="ctrl-sep"></div>
-  <select class="ctrl-select" id="preset-sel">
-    <option value="">Preset...</option>
-    <option value="pendulum">Damped Pendulum</option>
-    <option value="vanderpol">Van der Pol</option>
-    <option value="lotka">Lotka-Volterra</option>
-    <option value="saddle">Linear Saddle</option>
-    <option value="spiral">Stable Spiral</option>
-    <option value="center">Center</option>
-    <option value="duffing">Duffing</option>
-  </select>
-  <div class="ctrl-sep"></div>
-  <button class="ctrl-btn" id="btn-field">Field</button>
-  <button class="ctrl-btn" id="btn-null">Nullclines</button>
-  <button class="ctrl-btn" id="btn-fp">Fixed Pts</button>
-  <button class="ctrl-btn" id="btn-clear">Clear Paths</button>
-</div>
 <div class="hint" id="hint">Click to add trajectories &middot; Shift+click to remove</div>
 <script>
 (function() {
@@ -71,19 +22,10 @@
   if (!api) return;
   var cv = document.getElementById('cv');
   var ctx = cv.getContext('2d');
-  var ctrls = document.getElementById('ctrls');
   var hint = document.getElementById('hint');
-  var inpDx = document.getElementById('inp-dx');
-  var inpDy = document.getElementById('inp-dy');
-  var presetSel = document.getElementById('preset-sel');
-  var btnField = document.getElementById('btn-field');
-  var btnNull = document.getElementById('btn-null');
-  var btnFp = document.getElementById('btn-fp');
-  var btnClear = document.getElementById('btn-clear');
   var TRAJ_COLORS = ['#f472b6','#34d399','#fbbf24','#60a5fa','#a78bfa','#f87171','#38bdf8','#fb923c'];
   var data = {};
   var ctrlH = 0;
-  var showControls = false;
 
   // ---- Expression parser ----
   function parseExpr(str) {
@@ -294,8 +236,7 @@
     cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
     ctx.setTransform(dpr,0,0,dpr,0,0);
 
-    ctrlH = showControls ? ctrls.offsetHeight : 0;
-    padL = 0; padT = ctrlH;
+    padL = 0; padT = 0;
     W = cw; H = ch - ctrlH;
 
     var fx = compileExpr(data.dxdt);
@@ -434,44 +375,6 @@
   }
   function fmt(v) { return Math.abs(v) < 1e-10 ? '0' : (Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0)) ? v.toExponential(1) : parseFloat(v.toPrecision(4)).toString(); }
 
-  // ---- Controls ----
-  function syncControls() {
-    inpDx.value = data.dxdt || '';
-    inpDy.value = data.dydt || '';
-    btnField.className = 'ctrl-btn' + (data.showField !== false ? ' active' : '');
-    btnNull.className = 'ctrl-btn' + (data.showNullclines ? ' active' : '');
-    btnFp.className = 'ctrl-btn' + (data.showFixedPoints ? ' active' : '');
-  }
-
-  function applyInputs() {
-    api.updateData({ dxdt: inpDx.value, dydt: inpDy.value });
-  }
-  inpDx.addEventListener('change', applyInputs);
-  inpDy.addEventListener('change', applyInputs);
-  inpDx.addEventListener('keydown', function(e) { if (e.key === 'Enter') applyInputs(); });
-  inpDy.addEventListener('keydown', function(e) { if (e.key === 'Enter') applyInputs(); });
-
-  var PRESETS = {
-    pendulum: { dxdt:'y', dydt:'-sin(x) - 0.3*y', xMin:-8,xMax:8,yMin:-5,yMax:5, trajectories:[{x:1,y:0},{x:-3,y:2},{x:5,y:-1}] },
-    vanderpol: { dxdt:'y', dydt:'2*(1 - x^2)*y - x', xMin:-5,xMax:5,yMin:-5,yMax:5, trajectories:[{x:0.1,y:0},{x:3,y:3},{x:-2,y:-4}] },
-    lotka: { dxdt:'x*(1.5 - y)', dydt:'y*(x - 1)', xMin:-0.5,xMax:5,yMin:-0.5,yMax:5, trajectories:[{x:1,y:1},{x:2,y:3},{x:0.5,y:0.5}] },
-    saddle: { dxdt:'x', dydt:'-y', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:1,y:1},{x:-1,y:2},{x:2,y:-1},{x:-2,y:-2}] },
-    spiral: { dxdt:'-0.5*x + y', dydt:'-x - 0.5*y', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:3,y:0},{x:-2,y:2},{x:0,y:-3}] },
-    center: { dxdt:'y', dydt:'-x', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:1,y:0},{x:2,y:0},{x:3,y:0}] },
-    duffing: { dxdt:'y', dydt:'x - x^3 - 0.2*y', xMin:-3,xMax:3,yMin:-2,yMax:2, trajectories:[{x:0.1,y:0},{x:-0.1,y:0},{x:1.5,y:1}] },
-  };
-  presetSel.addEventListener('change', function() {
-    var p = PRESETS[presetSel.value];
-    if (!p) return;
-    api.updateData(Object.assign({}, p, {showField:data.showField!==false, showNullclines:!!data.showNullclines, showFixedPoints:!!data.showFixedPoints, gridDensity:data.gridDensity||18, dt:data.dt||0.03, maxSteps:data.maxSteps||2000, fieldColor:data.fieldColor, bgColor:data.bgColor}));
-    presetSel.value = '';
-  });
-
-  btnField.addEventListener('click', function() { api.updateData({showField: data.showField === false}); });
-  btnNull.addEventListener('click', function() { api.updateData({showNullclines: !data.showNullclines}); });
-  btnFp.addEventListener('click', function() { api.updateData({showFixedPoints: !data.showFixedPoints}); });
-  btnClear.addEventListener('click', function() { api.updateData({trajectories: []}); });
-
   // ---- Click to add/remove trajectories ----
   cv.addEventListener('click', function(e) {
     var rect = cv.getBoundingClientRect();
@@ -495,21 +398,6 @@
     api.updateData({trajectories: trajs});
   });
 
-  // Show/hide controls on pointer proximity
-  var controlsVisible = false;
-  document.addEventListener('pointermove', function(e) {
-    var rect = cv.getBoundingClientRect();
-    var my = e.clientY - rect.top;
-    var shouldShow = my < 60;
-    if (shouldShow !== controlsVisible) {
-      controlsVisible = shouldShow;
-      showControls = shouldShow;
-      ctrls.className = 'controls' + (shouldShow ? '' : ' hidden');
-      hint.className = 'hint' + (shouldShow ? '' : ' show');
-      requestAnimationFrame(function() { render(); });
-    }
-  });
-
   // Show hint briefly on load
   setTimeout(function() { hint.className = 'hint show'; }, 300);
   setTimeout(function() { hint.className = 'hint'; }, 3500);
@@ -517,7 +405,6 @@
   // ---- Init ----
   function onData(d) {
     data = d;
-    syncControls();
     render(d);
   }
   onData(api.data);

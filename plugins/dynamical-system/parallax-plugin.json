@@ -1,6 +1,6 @@
 {
-  "id": "com.parallax.phase-portrait",
-  "name": "Phase Portrait",
+  "id": "com.parallax.dynamical-system",
+  "name": "Dynamical System",
   "version": "1.0.0",
   "parallaxEngine": ">=1.0.0",
   "author": {
@@ -8,14 +8,14 @@
     "url": "https://parallax-presentations.com"
   },
   "license": "AGPL-3.0",
-  "description": "Interactive 2D phase portrait for dynamical systems — visualize vector fields, trajectories, nullclines, and fixed points.",
+  "description": "Interactive 2D dynamical system — phase portraits, time series, vector fields, trajectories, nullclines, and fixed points.",
   "main": "./plugin.js",
   "sandbox": "./sandbox.html",
   "contributes": {
     "elementTypes": [
       {
-        "type": "phase-portrait",
-        "label": "Phase Portrait",
+        "type": "dynamical-system",
+        "label": "Dynamical System",
         "defaultSize": { "width": 600, "height": 500 },
         "defaultData": {
           "dxdt": "y",
@@ -36,7 +36,8 @@
           "fieldColor": "rgba(100,160,255,0.35)",
           "bgColor": "#0f0f1a",
           "dt": 0.03,
-          "maxSteps": 2000
+          "maxSteps": 2000,
+          "tMax": 30
         },
         "toolbar": {
           "menu": "embed",
@@ -46,9 +47,9 @@
     ],
     "exportHooks": [
       {
-        "id": "phase-portrait-static",
+        "id": "dynamical-system-static",
         "formats": ["html"],
-        "description": "Renders phase portrait as static canvas snapshot"
+        "description": "Renders dynamical system as static snapshot"
       }
     ]
   },

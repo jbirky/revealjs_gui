@@ -1413,6 +1413,26 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
             </div>
           )}
 
+          {/* Dynamical System options */}
+          {selectedElement.type === 'plugin:dynamical-system' && (() => {
+            const pd = selectedElement.pluginData || {}
+            return (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>Dynamical System</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2, fontFamily: "'SF Mono','Fira Code',monospace" }}>
+                dx/dt = {pd.dxdt || '?'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, fontFamily: "'SF Mono','Fira Code',monospace" }}>
+                dy/dt = {pd.dydt || '?'}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 8 }}>
+                {(pd.trajectories || []).length} trajectories
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Double-click element to open editor</p>
+            </div>
+            )
+          })()}
+
           {/* Layer buttons */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
             <button className="btn btn-secondary" style={{ flex: 1, fontSize: 11, padding: '5px 8px', justifyContent: 'center' }} onClick={onBringForward}>↑ Forward</button>
