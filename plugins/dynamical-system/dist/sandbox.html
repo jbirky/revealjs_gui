@@ -114,7 +114,7 @@
     return 0;
   }
   function compileExpr(str) {
-    try { var ast = parseExpr(str || '0'); return function(x,y) { return evalAST(ast,{x:x,y:y}); }; }
+    try { var ast = parseExpr(str || '0'); return function(x,y,z) { return evalAST(ast,{x:x,y:y,z:z||0}); }; }
     catch(e) { return function(){return 0;}; }
   }
 
@@ -141,6 +141,20 @@
     bwd.reverse();
     bwd.pop();
     return bwd.concat(fwd);
+  }
+
+  function integrateForward3D(fx,fy,fz,x0,y0,z0,dt,steps) {
+    var pts = [{t:0,x:x0,y:y0,z:z0}]; var x=x0,y=y0,z=z0;
+    for (var i=0;i<steps;i++) {
+      var k1x=fx(x,y,z),k1y=fy(x,y,z),k1z=fz(x,y,z);
+      var k2x=fx(x+dt/2*k1x,y+dt/2*k1y,z+dt/2*k1z),k2y=fy(x+dt/2*k1x,y+dt/2*k1y,z+dt/2*k1z),k2z=fz(x+dt/2*k1x,y+dt/2*k1y,z+dt/2*k1z);
+      var k3x=fx(x+dt/2*k2x,y+dt/2*k2y,z+dt/2*k2z),k3y=fy(x+dt/2*k2x,y+dt/2*k2y,z+dt/2*k2z),k3z=fz(x+dt/2*k2x,y+dt/2*k2y,z+dt/2*k2z);
+      var k4x=fx(x+dt*k3x,y+dt*k3y,z+dt*k3z),k4y=fy(x+dt*k3x,y+dt*k3y,z+dt*k3z),k4z=fz(x+dt*k3x,y+dt*k3y,z+dt*k3z);
+      x+=dt/6*(k1x+2*k2x+2*k3x+k4x); y+=dt/6*(k1y+2*k2y+2*k3y+k4y); z+=dt/6*(k1z+2*k2z+2*k3z+k4z);
+      if (isNaN(x)||isNaN(y)||isNaN(z)||Math.abs(x)>1e6||Math.abs(y)>1e6||Math.abs(z)>1e6) break;
+      pts.push({t:(i+1)*dt,x:x,y:y,z:z});
+    }
+    return pts;
   }
 
   // ---- Fixed point finder (Newton's method from grid samples) ----
@@ -226,11 +240,86 @@
     ctx.stroke();
   }
 
+  var rotX = -0.5, rotY = 0.6;
+  var dragState = null;
+
   function render(d) {
     data = d || data;
+    if (data.rotX != null && !dragState) rotX = data.rotX;
+    if (data.rotY != null && !dragState) rotY = data.rotY;
+    if (data.viewMode === '3d') return render3D();
     if (data.viewMode === 'timeseries') return renderTimeSeries();
     return renderPhase();
   }
+
+  function render3D() {
+    var dpr = window.devicePixelRatio || 1;
+    var cw = cv.parentElement ? cv.parentElement.clientWidth : api.width;
+    var ch = cv.parentElement ? cv.parentElement.clientHeight : api.height;
+    cv.width = cw * dpr; cv.height = ch * dpr;
+    cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    var fx = compileExpr(data.dxdt), fy = compileExpr(data.dydt), fz = compileExpr(data.dzdt || '0');
+    var trajs = data.trajectories || [];
+    var dt = data.dt || 0.005, steps = data.maxSteps || 12000;
+    var ccx = cw / 2, ccy = ch / 2;
+
+    ctx.fillStyle = data.bgColor || '#0f0f1a'; ctx.fillRect(0, 0, cw, ch);
+
+    var allPts = trajs.map(function(tr) { return integrateForward3D(fx, fy, fz, tr.x, tr.y, tr.z || 0, dt, steps); });
+    var rMax = 1;
+    for (var ai = 0; ai < allPts.length; ai++) for (var pi = 0; pi < allPts[ai].length; pi++) {
+      var r = Math.max(Math.abs(allPts[ai][pi].x), Math.abs(allPts[ai][pi].y), Math.abs(allPts[ai][pi].z || 0));
+      if (r > rMax && isFinite(r)) rMax = r;
+    }
+    var scale = Math.min(cw, ch) * 0.38 / rMax;
+    var cosX = Math.cos(rotX), sinX = Math.sin(rotX), cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+    function project(px, py, pz) {
+      var x1 = px * cosY + pz * sinY, z1 = -px * sinY + pz * cosY;
+      var y1 = py * cosX - z1 * sinX;
+      return { sx: ccx + x1 * scale, sy: ccy - y1 * scale };
+    }
+    // Axes
+    var axLen = rMax * 0.6;
+    var axData = [{l:'x',c:'#ef4444',e:[axLen,0,0]},{l:'y',c:'#22c55e',e:[0,axLen,0]},{l:'z',c:'#60a5fa',e:[0,0,axLen]}];
+    ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
+    for (var a = 0; a < axData.length; a++) {
+      var o = project(0,0,0), e = project(axData[a].e[0],axData[a].e[1],axData[a].e[2]);
+      ctx.strokeStyle = axData[a].c; ctx.beginPath(); ctx.moveTo(o.sx, o.sy); ctx.lineTo(e.sx, e.sy); ctx.stroke();
+      ctx.fillStyle = axData[a].c; ctx.font = '11px -apple-system,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(axData[a].l, e.sx + (e.sx - o.sx) * 0.15, e.sy + (e.sy - o.sy) * 0.15);
+    }
+    ctx.globalAlpha = 1;
+    // Trajectories
+    for (var ti = 0; ti < allPts.length; ti++) {
+      var pts = allPts[ti], col = TRAJ_COLORS[ti % TRAJ_COLORS.length];
+      if (pts.length < 2) continue;
+      for (var i = 1; i < pts.length; i++) {
+        var p0 = project(pts[i-1].x, pts[i-1].y, pts[i-1].z || 0);
+        var p1 = project(pts[i].x, pts[i].y, pts[i].z || 0);
+        ctx.strokeStyle = col; ctx.lineWidth = 1.2;
+        ctx.globalAlpha = 0.15 + 0.75 * (i / pts.length);
+        ctx.beginPath(); ctx.moveTo(p0.sx, p0.sy); ctx.lineTo(p1.sx, p1.sy); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      var sp = project(pts[0].x, pts[0].y, pts[0].z || 0);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(sp.sx, sp.sy, 3, 0, 2 * Math.PI); ctx.fill();
+    }
+  }
+
+  // Drag-to-rotate for 3D view
+  cv.addEventListener('mousedown', function(e) {
+    if (data.viewMode !== '3d') return;
+    dragState = { startX: e.clientX, startY: e.clientY, startRotX: rotX, startRotY: rotY };
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!dragState) return;
+    rotX = dragState.startRotX + (e.clientY - dragState.startY) * 0.005;
+    rotY = dragState.startRotY + (e.clientX - dragState.startX) * 0.005;
+    render();
+  });
+  document.addEventListener('mouseup', function() { dragState = null; });
 
   function renderTimeSeries() {
     var dpr = window.devicePixelRatio || 1;

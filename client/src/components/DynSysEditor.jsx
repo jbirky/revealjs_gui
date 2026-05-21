@@ -4,15 +4,23 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 
 const TRAJ_COLORS = ['#f472b6','#34d399','#fbbf24','#60a5fa','#a78bfa','#f87171','#38bdf8','#fb923c']
-const PRESETS = {
-  pendulum: { dxdt:'y', dydt:'-sin(x) - 0.3*y', xMin:-8,xMax:8,yMin:-5,yMax:5, trajectories:[{x:1,y:0},{x:-3,y:2},{x:5,y:-1}] },
-  vanderpol: { dxdt:'y', dydt:'2*(1 - x^2)*y - x', xMin:-5,xMax:5,yMin:-5,yMax:5, trajectories:[{x:0.1,y:0},{x:3,y:3},{x:-2,y:-4}] },
-  lotka: { dxdt:'x*(1.5 - y)', dydt:'y*(x - 1)', xMin:-0.5,xMax:5,yMin:-0.5,yMax:5, trajectories:[{x:1,y:1},{x:2,y:3},{x:0.5,y:0.5}] },
-  saddle: { dxdt:'x', dydt:'-y', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:1,y:1},{x:-1,y:2},{x:2,y:-1},{x:-2,y:-2}] },
-  spiral: { dxdt:'-0.5*x + y', dydt:'-x - 0.5*y', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:3,y:0},{x:-2,y:2},{x:0,y:-3}] },
-  center: { dxdt:'y', dydt:'-x', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:1,y:0},{x:2,y:0},{x:3,y:0}] },
-  duffing: { dxdt:'y', dydt:'x - x^3 - 0.2*y', xMin:-3,xMax:3,yMin:-2,yMax:2, trajectories:[{x:0.1,y:0},{x:-0.1,y:0},{x:1.5,y:1}] },
+const PRESETS_2D = {
+  pendulum: { dxdt:'y', dydt:'-sin(x) - 0.3*y', dzdt:'', xMin:-8,xMax:8,yMin:-5,yMax:5, trajectories:[{x:1,y:0},{x:-3,y:2},{x:5,y:-1}] },
+  vanderpol: { dxdt:'y', dydt:'2*(1 - x^2)*y - x', dzdt:'', xMin:-5,xMax:5,yMin:-5,yMax:5, trajectories:[{x:0.1,y:0},{x:3,y:3},{x:-2,y:-4}] },
+  lotka: { dxdt:'x*(1.5 - y)', dydt:'y*(x - 1)', dzdt:'', xMin:-0.5,xMax:5,yMin:-0.5,yMax:5, trajectories:[{x:1,y:1},{x:2,y:3},{x:0.5,y:0.5}] },
+  saddle: { dxdt:'x', dydt:'-y', dzdt:'', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:1,y:1},{x:-1,y:2},{x:2,y:-1},{x:-2,y:-2}] },
+  spiral: { dxdt:'-0.5*x + y', dydt:'-x - 0.5*y', dzdt:'', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:3,y:0},{x:-2,y:2},{x:0,y:-3}] },
+  center: { dxdt:'y', dydt:'-x', dzdt:'', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:1,y:0},{x:2,y:0},{x:3,y:0}] },
+  duffing: { dxdt:'y', dydt:'x - x^3 - 0.2*y', dzdt:'', xMin:-3,xMax:3,yMin:-2,yMax:2, trajectories:[{x:0.1,y:0},{x:-0.1,y:0},{x:1.5,y:1}] },
 }
+const PRESETS_3D = {
+  lorenz: { dxdt:'10*(y-x)', dydt:'x*(28-z)-y', dzdt:'x*y-8/3*z', xMin:-25,xMax:25,yMin:-30,yMax:30, trajectories:[{x:1,y:1,z:1},{x:-5,y:-5,z:25}], dt:0.005, maxSteps:12000, tMax:50 },
+  rossler: { dxdt:'-y-z', dydt:'x+0.2*y', dzdt:'0.2+z*(x-5.7)', xMin:-15,xMax:15,yMin:-15,yMax:15, trajectories:[{x:1,y:1,z:0}], dt:0.01, maxSteps:10000, tMax:80 },
+  chen: { dxdt:'35*(y-x)', dydt:'-7*x+28*y-x*z', dzdt:'x*y-3*z', xMin:-30,xMax:30,yMin:-30,yMax:30, trajectories:[{x:1,y:1,z:1}], dt:0.003, maxSteps:15000, tMax:40 },
+  thomas: { dxdt:'sin(y)-0.2*x', dydt:'sin(z)-0.2*y', dzdt:'sin(x)-0.2*z', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:1,y:0,z:0},{x:0.1,y:0.1,z:-0.1}], dt:0.03, maxSteps:8000, tMax:200 },
+  aizawa: { dxdt:'(z-0.7)*x-3.5*y', dydt:'3.5*x+(z-0.7)*y', dzdt:'0.6+0.95*z-z^3/3-(x^2+y^2)*(1+0.25*z)+0.1*z*x^3', xMin:-2,xMax:2,yMin:-2,yMax:2, trajectories:[{x:0.1,y:0,z:0}], dt:0.005, maxSteps:15000, tMax:60 },
+}
+const ALL_PRESETS = { ...PRESETS_2D, ...PRESETS_3D }
 
 // ---- Expression parser (same as sandbox) ----
 function tokenize(s) {
@@ -64,7 +72,7 @@ function evalAST(node,vars) {
   if (node.op==='fn') { const fn=FNS[node.name]; if(!fn) return 0; return fn(...node.args.map(n=>evalAST(n,vars))) }
   return 0
 }
-function compileExpr(str) { try { const ast = parseAdd(tokenize(str||'0'),{i:0}); return (x,y)=>evalAST(ast,{x,y}) } catch { return ()=>0 } }
+function compileExpr(str) { try { const ast = parseAdd(tokenize(str||'0'),{i:0}); return (x,y,z)=>evalAST(ast,{x,y,z:z||0}) } catch { return ()=>0 } }
 
 // ---- RK4 ----
 function integrateForward(fx,fy,x0,y0,dt,steps,bounds) {
@@ -83,6 +91,19 @@ function integrateBoth(fx,fy,x0,y0,dt,steps,bounds) {
   const fwd = integrateForward(fx,fy,x0,y0,dt,steps,bounds)
   const bwd = integrateForward(fx,fy,x0,y0,-dt,steps,bounds); bwd.reverse(); bwd.pop()
   return bwd.concat(fwd)
+}
+function integrateForward3D(fx,fy,fz,x0,y0,z0,dt,steps) {
+  const pts = [{t:0,x:x0,y:y0,z:z0}]; let x=x0,y=y0,z=z0
+  for (let i=0;i<steps;i++) {
+    const k1x=fx(x,y,z),k1y=fy(x,y,z),k1z=fz(x,y,z)
+    const k2x=fx(x+dt/2*k1x,y+dt/2*k1y,z+dt/2*k1z),k2y=fy(x+dt/2*k1x,y+dt/2*k1y,z+dt/2*k1z),k2z=fz(x+dt/2*k1x,y+dt/2*k1y,z+dt/2*k1z)
+    const k3x=fx(x+dt/2*k2x,y+dt/2*k2y,z+dt/2*k2z),k3y=fy(x+dt/2*k2x,y+dt/2*k2y,z+dt/2*k2z),k3z=fz(x+dt/2*k2x,y+dt/2*k2y,z+dt/2*k2z)
+    const k4x=fx(x+dt*k3x,y+dt*k3y,z+dt*k3z),k4y=fy(x+dt*k3x,y+dt*k3y,z+dt*k3z),k4z=fz(x+dt*k3x,y+dt*k3y,z+dt*k3z)
+    x+=dt/6*(k1x+2*k2x+2*k3x+k4x); y+=dt/6*(k1y+2*k2y+2*k3y+k4y); z+=dt/6*(k1z+2*k2z+2*k3z+k4z)
+    if (isNaN(x)||isNaN(y)||isNaN(z)||Math.abs(x)>1e6||Math.abs(y)>1e6||Math.abs(z)>1e6) break
+    pts.push({t:(i+1)*dt,x,y,z})
+  }
+  return pts
 }
 
 // ---- Fixed points ----
@@ -203,7 +224,8 @@ function drawTimeSeries(canvas, d) {
   canvas.width = cw * dpr; canvas.height = ch * dpr
   c.setTransform(dpr,0,0,dpr,0,0)
 
-  const fx = compileExpr(d.dxdt), fy = compileExpr(d.dydt)
+  const fx = compileExpr(d.dxdt), fy = compileExpr(d.dydt), fz = d.dzdt ? compileExpr(d.dzdt) : null
+  const is3D = !!fz
   const tMax = d.tMax || 30, dt = d.dt || 0.03
   const steps = Math.min(Math.ceil(tMax / dt), 50000)
   const trajs = d.trajectories || []
@@ -212,10 +234,16 @@ function drawTimeSeries(canvas, d) {
 
   c.fillStyle = d.bgColor || '#0f0f1a'; c.fillRect(0, 0, cw, ch)
 
-  const allPts = trajs.map(tr => integrateForward(fx, fy, tr.x, tr.y, dt, steps, null))
+  const allPts = is3D
+    ? trajs.map(tr => integrateForward3D(fx, fy, fz, tr.x, tr.y, tr.z || 0, dt, steps))
+    : trajs.map(tr => integrateForward(fx, fy, tr.x, tr.y, dt, steps, null))
 
   let vMin = Infinity, vMax = -Infinity
-  for (const pts of allPts) for (const p of pts) { if (p.x < vMin) vMin = p.x; if (p.x > vMax) vMax = p.x; if (p.y < vMin) vMin = p.y; if (p.y > vMax) vMax = p.y }
+  for (const pts of allPts) for (const p of pts) {
+    if (p.x < vMin) vMin = p.x; if (p.x > vMax) vMax = p.x
+    if (p.y < vMin) vMin = p.y; if (p.y > vMax) vMax = p.y
+    if (is3D && p.z != null) { if (p.z < vMin) vMin = p.z; if (p.z > vMax) vMax = p.z }
+  }
   if (!isFinite(vMin)) { vMin = -1; vMax = 1 }
   const vPad = (vMax - vMin) * 0.08 || 1; vMin -= vPad; vMax += vPad
 
@@ -231,42 +259,108 @@ function drawTimeSeries(canvas, d) {
   for (let gt = 0; gt <= tMax; gt += tStep) { const sx = toSx(gt); c.beginPath(); c.moveTo(sx, pad.t); c.lineTo(sx, pad.t + H); c.stroke(); c.fillText(fmt(gt), sx, pad.t + H + 2) }
   c.textAlign = 'right'; c.textBaseline = 'middle'
   for (let gv = Math.ceil(vMin / vStep) * vStep; gv <= vMax; gv += vStep) { const sy = toSy(gv); c.beginPath(); c.moveTo(pad.l, sy); c.lineTo(pad.l + W, sy); c.stroke(); c.fillText(fmt(gv), pad.l - 4, sy) }
-
   c.strokeStyle = 'rgba(255,255,255,0.18)'; c.lineWidth = 1
   if (vMin <= 0 && vMax >= 0) { const zy = toSy(0); c.beginPath(); c.moveTo(pad.l, zy); c.lineTo(pad.l + W, zy); c.stroke() }
 
   for (let ti = 0; ti < allPts.length; ti++) {
     const pts = allPts[ti], col = TRAJ_COLORS[ti % TRAJ_COLORS.length]
     if (pts.length < 2) continue
-    // x(t) — solid
     c.strokeStyle = col; c.lineWidth = 1.8; c.globalAlpha = 0.9; c.setLineDash([])
     c.beginPath(); c.moveTo(toSx(pts[0].t), toSy(pts[0].x))
     for (let i = 1; i < pts.length; i++) c.lineTo(toSx(pts[i].t), toSy(pts[i].x))
     c.stroke()
-    // y(t) — dashed
     c.setLineDash([5, 3])
     c.beginPath(); c.moveTo(toSx(pts[0].t), toSy(pts[0].y))
     for (let i = 1; i < pts.length; i++) c.lineTo(toSx(pts[i].t), toSy(pts[i].y))
     c.stroke()
+    if (is3D) {
+      c.setLineDash([2, 2])
+      c.beginPath(); c.moveTo(toSx(pts[0].t), toSy(pts[0].z))
+      for (let i = 1; i < pts.length; i++) c.lineTo(toSx(pts[i].t), toSy(pts[i].z))
+      c.stroke()
+    }
     c.setLineDash([]); c.globalAlpha = 1
   }
   c.restore()
 
-  // Axis labels
   c.fillStyle = 'rgba(255,255,255,0.35)'; c.font = '12px -apple-system,sans-serif'
   c.textAlign = 'center'; c.textBaseline = 'bottom'; c.fillText('t', pad.l + W / 2, ch - 1)
   c.save(); c.translate(10, pad.t + H / 2); c.rotate(-Math.PI / 2); c.textBaseline = 'top'; c.fillText('value', 0, 0); c.restore()
 
-  // Legend
   if (trajs.length > 0) {
+    const legendH = is3D ? 42 : 28
     c.font = '10px -apple-system,sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle'
     const lx = pad.l + 8, ly = pad.t + 10
-    c.fillStyle = 'rgba(255,255,255,0.15)'; c.fillRect(lx - 4, ly - 8, 80, 28)
-    c.fillStyle = 'rgba(255,255,255,0.5)'; c.setLineDash([]); c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 1.5
-    c.beginPath(); c.moveTo(lx, ly); c.lineTo(lx + 16, ly); c.stroke()
-    c.fillText('x(t)', lx + 20, ly)
-    c.setLineDash([4, 2]); c.beginPath(); c.moveTo(lx, ly + 14); c.lineTo(lx + 16, ly + 14); c.stroke()
-    c.fillText('y(t)', lx + 20, ly + 14); c.setLineDash([])
+    c.fillStyle = 'rgba(15,15,26,0.7)'; c.fillRect(lx - 4, ly - 8, 80, legendH)
+    c.fillStyle = 'rgba(255,255,255,0.5)'; c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 1.5; c.setLineDash([])
+    c.beginPath(); c.moveTo(lx, ly); c.lineTo(lx + 16, ly); c.stroke(); c.fillText('x(t)', lx + 20, ly)
+    c.setLineDash([5, 3]); c.beginPath(); c.moveTo(lx, ly + 14); c.lineTo(lx + 16, ly + 14); c.stroke(); c.fillText('y(t)', lx + 20, ly + 14)
+    if (is3D) { c.setLineDash([2, 2]); c.beginPath(); c.moveTo(lx, ly + 28); c.lineTo(lx + 16, ly + 28); c.stroke(); c.fillText('z(t)', lx + 20, ly + 28) }
+    c.setLineDash([])
+  }
+}
+
+// ---- 3D Attractor renderer ----
+function draw3D(canvas, d, rotX, rotY) {
+  const c = canvas.getContext('2d')
+  const dpr = window.devicePixelRatio || 1
+  const cw = canvas.clientWidth, ch = canvas.clientHeight
+  canvas.width = cw * dpr; canvas.height = ch * dpr
+  c.setTransform(dpr,0,0,dpr,0,0)
+
+  const fx = compileExpr(d.dxdt), fy = compileExpr(d.dydt), fz = compileExpr(d.dzdt || '0')
+  const trajs = d.trajectories || []
+  const dt = d.dt || 0.005, steps = d.maxSteps || 12000
+  const cx = cw / 2, cy = ch / 2
+
+  c.fillStyle = d.bgColor || '#0f0f1a'; c.fillRect(0, 0, cw, ch)
+
+  const allPts = trajs.map(tr => integrateForward3D(fx, fy, fz, tr.x, tr.y, tr.z || 0, dt, steps))
+
+  let rMax = 1
+  for (const pts of allPts) for (const p of pts) {
+    const r = Math.max(Math.abs(p.x), Math.abs(p.y), Math.abs(p.z || 0))
+    if (r > rMax && isFinite(r)) rMax = r
+  }
+  const scale = Math.min(cw, ch) * 0.38 / rMax
+
+  const cosX = Math.cos(rotX), sinX = Math.sin(rotX), cosY = Math.cos(rotY), sinY = Math.sin(rotY)
+  function project(px, py, pz) {
+    const x1 = px * cosY + pz * sinY, z1 = -px * sinY + pz * cosY
+    const y1 = py * cosX - z1 * sinX
+    return { sx: cx + x1 * scale, sy: cy - y1 * scale, depth: py * sinX + z1 * cosX }
+  }
+
+  // Axis frame
+  const axLen = rMax * 0.6
+  const axes = [
+    { label: 'x', color: '#ef4444', end: [axLen, 0, 0] },
+    { label: 'y', color: '#22c55e', end: [0, axLen, 0] },
+    { label: 'z', color: '#60a5fa', end: [0, 0, axLen] },
+  ]
+  c.globalAlpha = 0.35; c.lineWidth = 1
+  for (const ax of axes) {
+    const o = project(0, 0, 0), e = project(...ax.end)
+    c.strokeStyle = ax.color; c.beginPath(); c.moveTo(o.sx, o.sy); c.lineTo(e.sx, e.sy); c.stroke()
+    c.fillStyle = ax.color; c.font = '11px -apple-system,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'
+    c.fillText(ax.label, e.sx + (e.sx - o.sx) * 0.15, e.sy + (e.sy - o.sy) * 0.15)
+  }
+  c.globalAlpha = 1
+
+  // Trajectories
+  for (let ti = 0; ti < allPts.length; ti++) {
+    const pts = allPts[ti], col = TRAJ_COLORS[ti % TRAJ_COLORS.length]
+    if (pts.length < 2) continue
+    const projected = pts.map(p => project(p.x, p.y, p.z || 0))
+    c.strokeStyle = col; c.lineWidth = 1.2
+    for (let i = 1; i < projected.length; i++) {
+      const alpha = 0.15 + 0.75 * (i / projected.length)
+      c.globalAlpha = alpha
+      c.beginPath(); c.moveTo(projected[i - 1].sx, projected[i - 1].sy); c.lineTo(projected[i].sx, projected[i].sy); c.stroke()
+    }
+    c.globalAlpha = 1
+    const start = projected[0]
+    c.fillStyle = col; c.beginPath(); c.arc(start.sx, start.sy, 3, 0, 2 * Math.PI); c.fill()
   }
 }
 
@@ -274,8 +368,12 @@ export default function DynSysEditor({ initialData, onApply, onCancel }) {
   const [d, setD] = useState(() => ({ viewMode: 'phase', ...initialData }))
   const phaseRef = useRef(null)
   const tsRef = useRef(null)
+  const threeDRef = useRef(null)
   const rafRef = useRef(null)
+  const [rot, setRot] = useState({ x: initialData.rotX ?? -0.5, y: initialData.rotY ?? 0.6 })
+  const dragRef = useRef(null)
 
+  const is3D = !!(d.dzdt && d.dzdt.trim())
   const upd = useCallback((patch) => setD(prev => ({ ...prev, ...patch })), [])
 
   useEffect(() => {
@@ -283,9 +381,10 @@ export default function DynSysEditor({ initialData, onApply, onCancel }) {
     rafRef.current = requestAnimationFrame(() => {
       if (phaseRef.current) drawPhase(phaseRef.current, d)
       if (tsRef.current) drawTimeSeries(tsRef.current, d)
+      if (threeDRef.current && is3D) draw3D(threeDRef.current, d, rot.x, rot.y)
     })
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [d])
+  }, [d, rot, is3D])
 
   function handlePhaseClick(e) {
     const rect = phaseRef.current.getBoundingClientRect()
@@ -307,6 +406,14 @@ export default function DynSysEditor({ initialData, onApply, onCancel }) {
     upd({ trajectories: trajs })
   }
 
+  function handle3DMouseDown(e) { dragRef.current = { startX: e.clientX, startY: e.clientY, startRotX: rot.x, startRotY: rot.y } }
+  function handle3DMouseMove(e) {
+    if (!dragRef.current) return
+    const dx = e.clientX - dragRef.current.startX, dy = e.clientY - dragRef.current.startY
+    setRot({ x: dragRef.current.startRotX + dy * 0.005, y: dragRef.current.startRotY + dx * 0.005 })
+  }
+  function handle3DMouseUp() { dragRef.current = null }
+
   const monoFont = "'SF Mono','Fira Code',monospace"
   const inputStyle = { background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#e0e0f0', padding: '4px 8px', borderRadius: 4, fontSize: 12, fontFamily: monoFont, outline: 'none', width: 160 }
   const labelStyle = { fontSize: 11, color: '#8888a0', marginRight: 4 }
@@ -324,15 +431,26 @@ export default function DynSysEditor({ initialData, onApply, onCancel }) {
           <input style={inputStyle} value={d.dxdt || ''} onChange={e => upd({ dxdt: e.target.value })} spellCheck="false" />
           <span style={labelStyle}>dy/dt =</span>
           <input style={inputStyle} value={d.dydt || ''} onChange={e => upd({ dydt: e.target.value })} spellCheck="false" />
-          <select style={{ ...btnStyle, padding: '4px 6px' }} value="" onChange={e => { const p = PRESETS[e.target.value]; if (p) upd(p) }}>
+          <span style={labelStyle}>dz/dt =</span>
+          <input style={{ ...inputStyle, width: 140 }} value={d.dzdt || ''} onChange={e => upd({ dzdt: e.target.value })} spellCheck="false" placeholder="(empty = 2D)" />
+          <select style={{ ...btnStyle, padding: '4px 6px' }} value="" onChange={e => { const p = ALL_PRESETS[e.target.value]; if (p) upd(p) }}>
             <option value="">Preset...</option>
-            <option value="pendulum">Damped Pendulum</option>
-            <option value="vanderpol">Van der Pol</option>
-            <option value="lotka">Lotka-Volterra</option>
-            <option value="saddle">Linear Saddle</option>
-            <option value="spiral">Stable Spiral</option>
-            <option value="center">Center</option>
-            <option value="duffing">Duffing</option>
+            <optgroup label="2D Systems">
+              <option value="pendulum">Damped Pendulum</option>
+              <option value="vanderpol">Van der Pol</option>
+              <option value="lotka">Lotka-Volterra</option>
+              <option value="saddle">Linear Saddle</option>
+              <option value="spiral">Stable Spiral</option>
+              <option value="center">Center</option>
+              <option value="duffing">Duffing</option>
+            </optgroup>
+            <optgroup label="3D Attractors">
+              <option value="lorenz">Lorenz</option>
+              <option value="rossler">R&ouml;ssler</option>
+              <option value="chen">Chen</option>
+              <option value="thomas">Thomas</option>
+              <option value="aizawa">Aizawa</option>
+            </optgroup>
           </select>
           <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)', margin: '0 2px' }} />
           <button style={d.showField !== false ? activeBtnStyle : btnStyle} onClick={() => upd({ showField: d.showField === false })}>Field</button>
@@ -341,37 +459,48 @@ export default function DynSysEditor({ initialData, onApply, onCancel }) {
           <button style={btnStyle} onClick={() => upd({ trajectories: [] })}>Clear</button>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={onCancel}>Cancel</button>
-            <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => onApply(d)}>Apply</button>
+            <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => onApply({ ...d, rotX: rot.x, rotY: rot.y })}>Apply</button>
           </div>
         </div>
 
-        {/* Body: split panes */}
-        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        {/* Body: panes */}
+        <div style={{ flex: 1, display: 'flex', minHeight: 0 }} onMouseMove={handle3DMouseMove} onMouseUp={handle3DMouseUp} onMouseLeave={handle3DMouseUp}>
           {/* Phase portrait */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border, #333)', outline: d.viewMode === 'phase' ? '2px solid #6366f1' : 'none', outlineOffset: -2, borderRadius: 0 }}>
-            <div
-              onClick={() => upd({ viewMode: 'phase' })}
-              style={{ padding: '6px 12px', fontSize: 11, color: d.viewMode === 'phase' ? '#a5b4fc' : '#8888a0', borderBottom: '1px solid var(--border, #333)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: d.viewMode === 'phase' ? 'rgba(99,102,241,0.08)' : 'transparent', transition: 'background 0.15s' }}
-            >
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border, #333)', outline: d.viewMode === 'phase' ? '2px solid #6366f1' : 'none', outlineOffset: -2 }}>
+            <div onClick={() => upd({ viewMode: 'phase' })} style={{ padding: '6px 12px', fontSize: 11, color: d.viewMode === 'phase' ? '#a5b4fc' : '#8888a0', borderBottom: '1px solid var(--border, #333)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: d.viewMode === 'phase' ? 'rgba(99,102,241,0.08)' : 'transparent' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {d.viewMode === 'phase' && <span style={{ width: 6, height: 6, borderRadius: 3, background: '#6366f1', flexShrink: 0 }} />}
-                Phase Portrait — click to add, shift+click to remove
+                Phase Portrait
               </span>
-              <span style={{ fontFamily: monoFont, fontSize: 10 }}>x∈[{d.xMin},{d.xMax}] y∈[{d.yMin},{d.yMax}]</span>
+              <span style={{ fontFamily: monoFont, fontSize: 10 }}>click to add</span>
             </div>
             <div style={{ flex: 1, position: 'relative' }}>
               <canvas ref={phaseRef} onClick={handlePhaseClick} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: 'crosshair' }} />
             </div>
           </div>
+
+          {/* 3D Attractor (only when dzdt is set) */}
+          {is3D && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border, #333)', outline: d.viewMode === '3d' ? '2px solid #6366f1' : 'none', outlineOffset: -2 }}>
+              <div onClick={() => upd({ viewMode: '3d' })} style={{ padding: '6px 12px', fontSize: 11, color: d.viewMode === '3d' ? '#a5b4fc' : '#8888a0', borderBottom: '1px solid var(--border, #333)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: d.viewMode === '3d' ? 'rgba(99,102,241,0.08)' : 'transparent' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {d.viewMode === '3d' && <span style={{ width: 6, height: 6, borderRadius: 3, background: '#6366f1', flexShrink: 0 }} />}
+                  3D Attractor
+                </span>
+                <span style={{ fontFamily: monoFont, fontSize: 10 }}>drag to rotate</span>
+              </div>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <canvas ref={threeDRef} onMouseDown={handle3DMouseDown} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab' }} />
+              </div>
+            </div>
+          )}
+
           {/* Time series */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', outline: d.viewMode === 'timeseries' ? '2px solid #6366f1' : 'none', outlineOffset: -2, borderRadius: 0 }}>
-            <div
-              onClick={() => upd({ viewMode: 'timeseries' })}
-              style={{ padding: '6px 12px', fontSize: 11, color: d.viewMode === 'timeseries' ? '#a5b4fc' : '#8888a0', borderBottom: '1px solid var(--border, #333)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: d.viewMode === 'timeseries' ? 'rgba(99,102,241,0.08)' : 'transparent', transition: 'background 0.15s' }}
-            >
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', outline: d.viewMode === 'timeseries' ? '2px solid #6366f1' : 'none', outlineOffset: -2 }}>
+            <div onClick={() => upd({ viewMode: 'timeseries' })} style={{ padding: '6px 12px', fontSize: 11, color: d.viewMode === 'timeseries' ? '#a5b4fc' : '#8888a0', borderBottom: '1px solid var(--border, #333)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: d.viewMode === 'timeseries' ? 'rgba(99,102,241,0.08)' : 'transparent' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {d.viewMode === 'timeseries' && <span style={{ width: 6, height: 6, borderRadius: 3, background: '#6366f1', flexShrink: 0 }} />}
-                Time Series — x(t) solid, y(t) dashed
+                Time Series
               </span>
               <span style={{ fontFamily: monoFont, fontSize: 10 }}>{(d.trajectories||[]).length} trajectories</span>
             </div>
@@ -405,7 +534,7 @@ export default function DynSysEditor({ initialData, onApply, onCancel }) {
           </label>
           <div style={{ marginLeft: 'auto', fontSize: 10, color: '#8888a0', display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 6, height: 6, borderRadius: 3, background: '#6366f1' }} />
-            Slide shows: {d.viewMode === 'timeseries' ? 'Time Series' : 'Phase Portrait'}
+            Slide shows: {d.viewMode === '3d' ? '3D Attractor' : d.viewMode === 'timeseries' ? 'Time Series' : 'Phase Portrait'}
             <span style={{ color: '#666', marginLeft: 4 }}>(click pane header to change)</span>
           </div>
         </div>

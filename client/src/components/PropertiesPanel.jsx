@@ -1426,7 +1426,7 @@ export default function PropertiesPanel({ slide, selectedElement, onUpdateSlide,
                 dy/dt = {pd.dydt || '?'}
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
-                {(pd.trajectories || []).length} trajectories &middot; View: {pd.viewMode === 'timeseries' ? 'Time Series' : 'Phase Portrait'}
+                {(pd.trajectories || []).length} trajectories &middot; View: {pd.viewMode === '3d' ? '3D Attractor' : pd.viewMode === 'timeseries' ? 'Time Series' : 'Phase Portrait'}
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Double-click element to open editor</p>
             </div>

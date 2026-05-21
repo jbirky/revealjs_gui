@@ -38,7 +38,10 @@
           "dt": 0.03,
           "maxSteps": 2000,
           "tMax": 30,
-          "viewMode": "phase"
+          "viewMode": "phase",
+          "dzdt": "",
+          "rotX": -0.5,
+          "rotY": 0.6
         },
         "toolbar": {
           "menu": "embed",
