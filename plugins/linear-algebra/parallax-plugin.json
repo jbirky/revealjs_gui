@@ -1,0 +1,96 @@
+{
+  "id": "com.parallax.linear-algebra",
+  "name": "Linear Algebra",
+  "version": "1.0.0",
+  "parallaxEngine": ">=1.0.0",
+  "author": {
+    "name": "Parallax",
+    "url": "https://parallax-presentations.com"
+  },
+  "license": "AGPL-3.0",
+  "description": "Matrix display with block partitions, animated 2D linear transformations, and step-by-step matrix operations.",
+  "main": "./plugin.js",
+  "sandbox": "./sandbox.html",
+  "contributes": {
+    "elementTypes": [
+      {
+        "type": "linalg-matrix",
+        "label": "Matrix",
+        "defaultSize": { "width": 320, "height": 260 },
+        "defaultData": {
+          "mode": "matrix",
+          "entries": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+          "name": "A",
+          "style": "brackets",
+          "fontSize": 24,
+          "color": "#ffffff",
+          "bgColor": "#0f0f1a",
+          "blockRows": [],
+          "blockCols": [],
+          "highlightCells": [],
+          "highlightColor": "rgba(96, 165, 250, 0.25)"
+        },
+        "toolbar": {
+          "menu": "embed",
+          "position": "after:html"
+        }
+      },
+      {
+        "type": "linalg-transform",
+        "label": "Linear Transform",
+        "defaultSize": { "width": 500, "height": 500 },
+        "defaultData": {
+          "mode": "transform",
+          "matrix": [[2, 1], [0, 1]],
+          "showGrid": true,
+          "showOriginalGrid": true,
+          "showBasis": true,
+          "showEigen": false,
+          "showUnitCircle": false,
+          "showDeterminant": true,
+          "animate": true,
+          "gridRange": 5,
+          "gridDensity": 10,
+          "bgColor": "#0f0f1a",
+          "gridColor": "rgba(100, 160, 255, 0.25)",
+          "basisColors": ["#ef4444", "#22c55e"],
+          "eigenColor": "#fbbf24",
+          "vectors": []
+        },
+        "toolbar": {
+          "menu": "embed",
+          "position": "after:html"
+        }
+      },
+      {
+        "type": "linalg-operation",
+        "label": "Matrix Operation",
+        "defaultSize": { "width": 700, "height": 300 },
+        "defaultData": {
+          "mode": "operation",
+          "operation": "multiply",
+          "matrixA": [[2, 1], [0, 3]],
+          "matrixB": [[1, 4], [2, 5]],
+          "currentStep": -1,
+          "fontSize": 22,
+          "color": "#ffffff",
+          "bgColor": "#0f0f1a",
+          "highlightColor": "rgba(251, 191, 36, 0.2)",
+          "showResult": true
+        },
+        "toolbar": {
+          "menu": "embed",
+          "position": "after:html"
+        }
+      }
+    ],
+    "exportHooks": [
+      {
+        "id": "linalg-static",
+        "formats": ["html"],
+        "description": "Renders linear algebra elements as static HTML"
+      }
+    ]
+  },
+  "permissions": []
+}

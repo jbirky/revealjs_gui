@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: -apple-system, 'Inter', sans-serif; }
+  canvas { display: block; }
+  .hint {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    background: rgba(15,15,26,0.85); color: #8888a0; font-size: 10px;
+    padding: 3px 10px; border-radius: 10px; pointer-events: none;
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .hint.show { opacity: 1; }
+  .overlay {
+    position: absolute; bottom: 8px; right: 10px;
+    color: rgba(255,255,255,0.35); font-size: 11px;
+    font-family: monospace; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div class="hint" id="hint"></div>
+<div class="overlay" id="overlay"></div>
+<script>
+(function() {
+  var api = window.parallax;
+  if (!api) return;
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var hint = document.getElementById('hint');
+  var overlay = document.getElementById('overlay');
+  var data = {};
+  var cw, ch, dpr;
+
+  function setupCanvas() {
+    dpr = window.devicePixelRatio || 1;
+    cw = cv.parentElement ? cv.parentElement.clientWidth : api.width;
+    ch = cv.parentElement ? cv.parentElement.clientHeight : api.height;
+    cv.width = cw * dpr; cv.height = ch * dpr;
+    cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function fmtEntry(v) {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    if (typeof v !== 'number') return String(v);
+    if (Number.isInteger(v)) return String(v);
+    var s = v.toFixed(2).replace(/\.?0+$/, '');
+    return s || '0';
+  }
+
+  // ---- Drawing: arrow ----
+  function drawArrowLine(x1, y1, x2, y2, headSize) {
+    var dx = x2 - x1, dy = y2 - y1;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return;
+    var ux = dx / len, uy = dy / len;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - ux * headSize + uy * headSize * 0.4, y2 - uy * headSize - ux * headSize * 0.4);
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - ux * headSize - uy * headSize * 0.4, y2 - uy * headSize + ux * headSize * 0.4);
+    ctx.stroke();
+  }
+
+  // ---- Drawing: bracket pair ----
+  function drawBracketPair(lx, ty, rx, by, style, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    var capW = Math.max(6, Math.min(10, (rx - lx) * 0.04));
+
+    if (style === 'parens') {
+      var midY = (ty + by) / 2, curve = capW * 1.8;
+      ctx.beginPath();
+      ctx.moveTo(lx + capW, ty);
+      ctx.quadraticCurveTo(lx - curve * 0.3, midY, lx + capW, by);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(rx - capW, ty);
+      ctx.quadraticCurveTo(rx + curve * 0.3, midY, rx - capW, by);
+      ctx.stroke();
+    } else if (style === 'bars') {
+      ctx.beginPath(); ctx.moveTo(lx, ty); ctx.lineTo(lx, by); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(rx, ty); ctx.lineTo(rx, by); ctx.stroke();
+    } else if (style === 'double-bars') {
+      var gap = 4;
+      ctx.beginPath();
+      ctx.moveTo(lx, ty); ctx.lineTo(lx, by);
+      ctx.moveTo(lx + gap, ty); ctx.lineTo(lx + gap, by);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(rx, ty); ctx.lineTo(rx, by);
+      ctx.moveTo(rx - gap, ty); ctx.lineTo(rx - gap, by);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(lx + capW, ty); ctx.lineTo(lx, ty); ctx.lineTo(lx, by); ctx.lineTo(lx + capW, by);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(rx - capW, ty); ctx.lineTo(rx, ty); ctx.lineTo(rx, by); ctx.lineTo(rx - capW, by);
+      ctx.stroke();
+    }
+  }
+
+  // ---- Eigenvectors of 2x2 ----
+  function computeEigen(m) {
+    var a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
+    var tr = a + d, det = a * d - b * c;
+    var disc = tr * tr - 4 * det;
+    if (disc < 0) return [];
+    var sq = Math.sqrt(disc);
+    var results = [];
+    var lambdas = [( tr + sq) / 2, (tr - sq) / 2];
+    for (var li = 0; li < 2; li++) {
+      var lam = lambdas[li];
+      var vx, vy;
+      if (Math.abs(b) > 1e-10) { vx = b; vy = lam - a; }
+      else if (Math.abs(c) > 1e-10) { vx = lam - d; vy = c; }
+      else { vx = (li === 0) ? 1 : 0; vy = (li === 0) ? 0 : 1; }
+      var len = Math.sqrt(vx * vx + vy * vy);
+      if (len > 1e-10) {
+        var dup = false;
+        for (var ri = 0; ri < results.length; ri++) {
+          if (Math.abs(results[ri].lambda - lam) < 1e-8) { dup = true; break; }
+        }
+        if (!dup) results.push({ x: vx / len, y: vy / len, lambda: lam });
+      }
+    }
+    return results;
+  }
+
+  // ==================================================
+  // MODE: Matrix Display
+  // ==================================================
+  function renderMatrix() {
+    var entries = data.entries || [[1, 0], [0, 1]];
+    var rows = entries.length;
+    var cols = (entries[0] || []).length;
+    if (cols === 0) return;
+
+    var fontSize = data.fontSize || 24;
+    var style = data.style || 'brackets';
+    var name = data.name || '';
+    var color = data.color || '#ffffff';
+
+    ctx.font = fontSize + 'px monospace';
+    var maxEntryW = 0;
+    for (var r = 0; r < rows; r++)
+      for (var c = 0; c < cols; c++) {
+        var w = ctx.measureText(fmtEntry(entries[r][c])).width;
+        if (w > maxEntryW) maxEntryW = w;
+      }
+
+    var cellW = maxEntryW + fontSize * 0.6;
+    var cellH = fontSize * 1.6;
+    var bracketGap = fontSize * 0.35;
+    var matW = cols * cellW;
+    var matH = rows * cellH;
+
+    var nameW = 0;
+    if (name) {
+      ctx.font = 'italic ' + (fontSize * 1.1) + 'px Georgia, serif';
+      nameW = ctx.measureText(name + ' = ').width + fontSize * 0.2;
+    }
+
+    var totalW = nameW + bracketGap * 2 + matW;
+    var ox = (cw - totalW) / 2;
+    var oy = (ch - matH) / 2;
+
+    if (name) {
+      ctx.font = 'italic ' + (fontSize * 1.1) + 'px Georgia, serif';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(name + ' =', ox, oy + matH / 2);
+    }
+
+    var contentX = ox + nameW + bracketGap;
+    var contentY = oy;
+
+    // Cell highlights
+    var highlights = data.highlightCells || [];
+    for (var hi = 0; hi < highlights.length; hi++) {
+      var hl = highlights[hi];
+      if (hl.row >= 0 && hl.row < rows && hl.col >= 0 && hl.col < cols) {
+        ctx.fillStyle = data.highlightColor || 'rgba(96, 165, 250, 0.25)';
+        ctx.fillRect(contentX + hl.col * cellW, contentY + hl.row * cellH, cellW, cellH);
+      }
+    }
+
+    // Entries
+    ctx.font = fontSize + 'px monospace';
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (var r = 0; r < rows; r++)
+      for (var c = 0; c < cols; c++)
+        ctx.fillText(fmtEntry(entries[r][c]), contentX + c * cellW + cellW / 2, contentY + r * cellH + cellH / 2);
+
+    // Block partitions
+    var blockRows = data.blockRows || [];
+    var blockCols = data.blockCols || [];
+    ctx.strokeStyle = color; ctx.globalAlpha = 0.3;
+    ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+    for (var i = 0; i < blockRows.length; i++) {
+      var py = contentY + blockRows[i] * cellH;
+      ctx.beginPath();
+      ctx.moveTo(contentX - bracketGap * 0.3, py);
+      ctx.lineTo(contentX + matW + bracketGap * 0.3, py);
+      ctx.stroke();
+    }
+    for (var i = 0; i < blockCols.length; i++) {
+      var px = contentX + blockCols[i] * cellW;
+      ctx.beginPath();
+      ctx.moveTo(px, contentY - bracketGap * 0.3);
+      ctx.lineTo(px, contentY + matH + bracketGap * 0.3);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+
+    // Brackets
+    drawBracketPair(
+      contentX - bracketGap, contentY - bracketGap * 0.8,
+      contentX + matW + bracketGap, contentY + matH + bracketGap * 0.8,
+      style, color
+    );
+  }
+
+  // ==================================================
+  // MODE: Transform Visualization
+  // ==================================================
+  var animT = 1, animFrame = null, prevMatrixStr = '';
+
+  function startTransformAnim() {
+    animT = 0;
+    if (animFrame) cancelAnimationFrame(animFrame);
+    (function step() {
+      animT = Math.min(animT + 0.018, 1);
+      setupCanvas();
+      ctx.fillStyle = data.bgColor || '#0f0f1a';
+      ctx.fillRect(0, 0, cw, ch);
+      renderTransform();
+      if (animT < 1) animFrame = requestAnimationFrame(step);
+      else animFrame = null;
+    })();
+  }
+
+  function renderTransform() {
+    var m = data.matrix || [[1, 0], [0, 1]];
+    var range = data.gridRange || 5;
+    var density = data.gridDensity || 10;
+
+    var aspect = cw / ch;
+    var xRange, yRange;
+    if (aspect >= 1) { yRange = range; xRange = range * aspect; }
+    else { xRange = range; yRange = range / aspect; }
+
+    function toSx(x) { return cw / 2 + x / xRange * (cw / 2); }
+    function toSy(y) { return ch / 2 - y / yRange * (ch / 2); }
+
+    // Eased interpolation from identity to target
+    var t = animT;
+    var ease = t < 1 ? 1 - Math.pow(1 - t, 3) : 1;
+    var im = [
+      [1 + (m[0][0] - 1) * ease, m[0][1] * ease],
+      [m[1][0] * ease, 1 + (m[1][1] - 1) * ease]
+    ];
+
+    function applyM(x, y) {
+      return { x: im[0][0] * x + im[0][1] * y, y: im[1][0] * x + im[1][1] * y };
+    }
+
+    var ext = range * 3;
+
+    // Original grid (faint)
+    if (data.showOriginalGrid !== false) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.lineWidth = 0.5;
+      for (var i = -density; i <= density; i++) {
+        ctx.beginPath(); ctx.moveTo(toSx(i), 0); ctx.lineTo(toSx(i), ch); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, toSy(i)); ctx.lineTo(cw, toSy(i)); ctx.stroke();
+      }
+    }
+
+    // Transformed grid
+    if (data.showGrid !== false) {
+      ctx.strokeStyle = data.gridColor || 'rgba(100, 160, 255, 0.25)';
+      ctx.lineWidth = 0.8;
+      for (var i = -density; i <= density; i++) {
+        var p1 = applyM(i, -ext), p2 = applyM(i, ext);
+        ctx.beginPath(); ctx.moveTo(toSx(p1.x), toSy(p1.y)); ctx.lineTo(toSx(p2.x), toSy(p2.y)); ctx.stroke();
+        p1 = applyM(-ext, i); p2 = applyM(ext, i);
+        ctx.beginPath(); ctx.moveTo(toSx(p1.x), toSy(p1.y)); ctx.lineTo(toSx(p2.x), toSy(p2.y)); ctx.stroke();
+      }
+    }
+
+    // Axes
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, toSy(0)); ctx.lineTo(cw, toSy(0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(toSx(0), 0); ctx.lineTo(toSx(0), ch); ctx.stroke();
+
+    // Origin dot
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.beginPath(); ctx.arc(toSx(0), toSy(0), 3, 0, 2 * Math.PI); ctx.fill();
+
+    // Unit circle
+    if (data.showUnitCircle) {
+      ctx.strokeStyle = 'rgba(167, 139, 250, 0.2)';
+      ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.arc(toSx(0), toSy(0), Math.abs(toSx(1) - toSx(0)), 0, 2 * Math.PI); ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = 'rgba(167, 139, 250, 0.6)'; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (var i = 0; i <= 120; i++) {
+        var angle = (i / 120) * 2 * Math.PI;
+        var tp = applyM(Math.cos(angle), Math.sin(angle));
+        if (i === 0) ctx.moveTo(toSx(tp.x), toSy(tp.y));
+        else ctx.lineTo(toSx(tp.x), toSy(tp.y));
+      }
+      ctx.closePath(); ctx.stroke();
+    }
+
+    // Eigenvectors
+    if (data.showEigen) {
+      var eigens = computeEigen(m);
+      var eigenColor = data.eigenColor || '#fbbf24';
+      ctx.strokeStyle = eigenColor; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+      for (var ei = 0; ei < eigens.length; ei++) {
+        var ev = eigens[ei];
+        var sc = Math.max(xRange, yRange) * 1.5;
+        ctx.beginPath();
+        ctx.moveTo(toSx(-ev.x * sc), toSy(-ev.y * sc));
+        ctx.lineTo(toSx(ev.x * sc), toSy(ev.y * sc));
+        ctx.stroke();
+        ctx.font = '11px -apple-system, sans-serif';
+        ctx.fillStyle = eigenColor; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+        ctx.fillText('λ=' + ev.lambda.toFixed(2), toSx(ev.x * 2.5) + 6, toSy(ev.y * 2.5) - 4);
+      }
+      ctx.setLineDash([]);
+    }
+
+    // Basis vectors
+    if (data.showBasis !== false) {
+      var colors = data.basisColors || ['#ef4444', '#22c55e'];
+      var e1 = applyM(1, 0), e2 = applyM(0, 1);
+
+      ctx.strokeStyle = colors[0]; ctx.lineWidth = 2.5;
+      drawArrowLine(toSx(0), toSy(0), toSx(e1.x), toSy(e1.y), 8);
+      ctx.strokeStyle = colors[1]; ctx.lineWidth = 2.5;
+      drawArrowLine(toSx(0), toSy(0), toSx(e2.x), toSy(e2.y), 8);
+
+      ctx.font = 'bold 13px -apple-system, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      var off = 16;
+      var e1sx = toSx(e1.x), e1sy = toSy(e1.y), osx = toSx(0), osy = toSy(0);
+      var e1len = Math.sqrt(Math.pow(e1sx - osx, 2) + Math.pow(e1sy - osy, 2));
+      if (e1len > 5) {
+        ctx.fillStyle = colors[0];
+        ctx.fillText('e₁', e1sx + (e1sx - osx) / e1len * off, e1sy + (e1sy - osy) / e1len * off);
+      }
+      var e2sx = toSx(e2.x), e2sy = toSy(e2.y);
+      var e2len = Math.sqrt(Math.pow(e2sx - osx, 2) + Math.pow(e2sy - osy, 2));
+      if (e2len > 5) {
+        ctx.fillStyle = colors[1];
+        ctx.fillText('e₂', e2sx + (e2sx - osx) / e2len * off, e2sy + (e2sy - osy) / e2len * off);
+      }
+    }
+
+    // Custom vectors
+    var vectors = data.vectors || [];
+    var VCOLS = ['#f472b6','#34d399','#fbbf24','#60a5fa','#a78bfa','#f87171','#38bdf8','#fb923c'];
+    for (var vi = 0; vi < vectors.length; vi++) {
+      var v = vectors[vi], tv = applyM(v.x, v.y);
+      var col = VCOLS[vi % VCOLS.length];
+      // Original (thin, faint)
+      ctx.strokeStyle = col; ctx.globalAlpha = 0.35; ctx.lineWidth = 1.5;
+      drawArrowLine(toSx(0), toSy(0), toSx(v.x), toSy(v.y), 6);
+      // Transformed (thick)
+      ctx.globalAlpha = 0.9; ctx.lineWidth = 2.5;
+      drawArrowLine(toSx(0), toSy(0), toSx(tv.x), toSy(tv.y), 8);
+      ctx.globalAlpha = 1;
+      // Dot at original
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(toSx(v.x), toSy(v.y), 3, 0, 2 * Math.PI); ctx.fill();
+    }
+
+    // Determinant overlay
+    if (data.showDeterminant !== false) {
+      var det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
+      overlay.textContent = 'det = ' + det.toFixed(2);
+      overlay.style.display = 'block';
+    } else {
+      overlay.style.display = 'none';
+    }
+  }
+
+  // ==================================================
+  // MODE: Operation Step-Through
+  // ==================================================
+  function renderOperation() {
+    var op = data.operation || 'multiply';
+    var A = data.matrixA || [[1, 0], [0, 1]];
+    var B = data.matrixB || [[1, 0], [0, 1]];
+    var step = data.currentStep != null ? data.currentStep : -1;
+    var fontSize = data.fontSize || 22;
+    var color = data.color || '#ffffff';
+
+    if (op !== 'multiply') return;
+
+    var rA = A.length, cA = (A[0] || []).length;
+    var rB = B.length, cB = (B[0] || []).length;
+
+    if (cA !== rB) {
+      ctx.font = fontSize + 'px -apple-system, sans-serif';
+      ctx.fillStyle = '#ef4444'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('Dimension mismatch: ' + rA + '×' + cA + ' × ' + rB + '×' + cB, cw / 2, ch / 2);
+      return;
+    }
+
+    // Compute result
+    var C = [];
+    for (var i = 0; i < rA; i++) {
+      C[i] = [];
+      for (var j = 0; j < cB; j++) {
+        var s = 0;
+        for (var k = 0; k < cA; k++) s += A[i][k] * B[k][j];
+        C[i][j] = s;
+      }
+    }
+
+    var totalSteps = rA * cB;
+    var stepRow = step >= 0 ? Math.floor(step / cB) : -1;
+    var stepCol = step >= 0 ? step % cB : -1;
+
+    ctx.font = fontSize + 'px monospace';
+
+    function measureMat(entries) {
+      var r = entries.length, c = (entries[0] || []).length, maxW = 0;
+      for (var i = 0; i < r; i++)
+        for (var j = 0; j < c; j++) {
+          var w = ctx.measureText(fmtEntry(entries[i][j])).width;
+          if (w > maxW) maxW = w;
+        }
+      var cellW = maxW + fontSize * 0.5;
+      var cellH = fontSize * 1.6;
+      var gap = fontSize * 0.3;
+      return { r: r, c: c, cellW: cellW, cellH: cellH, gap: gap,
+               tw: gap * 2 + c * cellW, th: r * cellH };
+    }
+
+    var lA = measureMat(A), lB = measureMat(B), lC = measureMat(C);
+    var opGap = fontSize * 1.2;
+    var totalW = lA.tw + opGap + lB.tw + opGap + lC.tw;
+    var maxH = Math.max(lA.th, lB.th, lC.th);
+    var dotH = step >= 0 ? fontSize * 1.8 : 0;
+    var startX = (cw - totalW) / 2;
+    var startY = (ch - maxH - dotH) / 2;
+
+    function drawMat(entries, layout, x, y, hlRow, hlCol) {
+      var cx = x + layout.gap, cy = y;
+
+      if (hlRow >= 0 && hlRow < layout.r) {
+        ctx.fillStyle = data.highlightColor || 'rgba(251, 191, 36, 0.2)';
+        ctx.fillRect(cx, cy + hlRow * layout.cellH, layout.c * layout.cellW, layout.cellH);
+      }
+      if (hlCol >= 0 && hlCol < layout.c) {
+        ctx.fillStyle = data.highlightColor || 'rgba(251, 191, 36, 0.2)';
+        ctx.fillRect(cx + hlCol * layout.cellW, cy, layout.cellW, layout.r * layout.cellH);
+      }
+
+      ctx.font = fontSize + 'px monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (var r = 0; r < layout.r; r++)
+        for (var c = 0; c < layout.c; c++) {
+          var isHL = (hlRow >= 0 && r === hlRow) || (hlCol >= 0 && c === hlCol);
+          ctx.fillStyle = isHL ? '#fbbf24' : color;
+          ctx.fillText(fmtEntry(entries[r][c]),
+            cx + c * layout.cellW + layout.cellW / 2,
+            cy + r * layout.cellH + layout.cellH / 2);
+        }
+
+      drawBracketPair(x, cy - layout.gap * 0.8,
+        x + layout.tw, cy + layout.r * layout.cellH + layout.gap * 0.8,
+        'brackets', color);
+    }
+
+    // Matrix A
+    var xA = startX, yA = startY + (maxH - lA.th) / 2;
+    drawMat(A, lA, xA, yA, stepRow, -1);
+
+    // Operator x
+    ctx.font = fontSize + 'px -apple-system, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('×', xA + lA.tw + opGap / 2, startY + maxH / 2);
+
+    // Matrix B
+    var xB = xA + lA.tw + opGap, yB = startY + (maxH - lB.th) / 2;
+    drawMat(B, lB, xB, yB, -1, stepCol);
+
+    // Operator =
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText('=', xB + lB.tw + opGap / 2, startY + maxH / 2);
+
+    // Result matrix C
+    var xC = xB + lB.tw + opGap, yC = startY + (maxH - lC.th) / 2;
+    if (step >= 0 && data.showResult !== false) {
+      var partial = [];
+      for (var i = 0; i < rA; i++) {
+        partial[i] = [];
+        for (var j = 0; j < cB; j++) {
+          partial[i][j] = (i * cB + j <= step) ? C[i][j] : '·';
+        }
+      }
+      drawMat(partial, lC, xC, yC, stepRow, stepCol);
+    } else if (data.showResult !== false) {
+      drawMat(C, lC, xC, yC, -1, -1);
+    } else {
+      var blank = [];
+      for (var i = 0; i < rA; i++) { blank[i] = []; for (var j = 0; j < cB; j++) blank[i][j] = '·'; }
+      drawMat(blank, lC, xC, yC, -1, -1);
+    }
+
+    // Dot product detail
+    if (step >= 0 && step < totalSteps) {
+      var terms = [];
+      for (var k = 0; k < cA; k++)
+        terms.push(fmtEntry(A[stepRow][k]) + '·' + fmtEntry(B[k][stepCol]));
+      var dotStr = terms.join(' + ') + ' = ' + fmtEntry(C[stepRow][stepCol]);
+      ctx.font = (fontSize * 0.7) + 'px monospace';
+      ctx.fillStyle = '#fbbf24'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(dotStr, cw / 2, startY + maxH + fontSize * 0.6);
+    }
+  }
+
+  // ==================================================
+  // Main render dispatcher
+  // ==================================================
+  function render(d) {
+    data = d || data;
+    setupCanvas();
+    ctx.fillStyle = data.bgColor || '#0f0f1a';
+    ctx.fillRect(0, 0, cw, ch);
+    overlay.style.display = 'none';
+
+    switch (data.mode) {
+      case 'matrix': renderMatrix(); break;
+      case 'operation': renderOperation(); break;
+      case 'transform':
+      default: renderTransform(); break;
+    }
+  }
+
+  // ---- Events ----
+  cv.addEventListener('click', function(e) {
+    var rect = cv.getBoundingClientRect();
+    var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+
+    if (data.mode === 'transform') {
+      var range = data.gridRange || 5;
+      var aspect = cw / ch;
+      var xRange = aspect >= 1 ? range * aspect : range;
+      var yRange = aspect >= 1 ? range : range / aspect;
+      var wx = (mx - cw / 2) / (cw / 2) * xRange;
+      var wy = -(my - ch / 2) / (ch / 2) * yRange;
+      var vectors = (data.vectors || []).slice();
+      if (e.shiftKey) {
+        var best = -1, bestD = Infinity;
+        for (var i = 0; i < vectors.length; i++) {
+          var d = Math.pow(vectors[i].x - wx, 2) + Math.pow(vectors[i].y - wy, 2);
+          if (d < bestD) { bestD = d; best = i; }
+        }
+        if (best >= 0) vectors.splice(best, 1);
+      } else {
+        vectors.push({ x: Math.round(wx * 10) / 10, y: Math.round(wy * 10) / 10 });
+      }
+      api.updateData({ vectors: vectors });
+    } else if (data.mode === 'operation') {
+      var A = data.matrixA || [[1, 0], [0, 1]];
+      var B = data.matrixB || [[1, 0], [0, 1]];
+      var total = A.length * ((B[0] || []).length);
+      var cur = data.currentStep != null ? data.currentStep : -1;
+      if (e.shiftKey) api.updateData({ currentStep: -1 });
+      else api.updateData({ currentStep: cur >= total - 1 ? -1 : cur + 1 });
+    }
+  });
+
+  cv.addEventListener('dblclick', function() {
+    if (data.mode === 'transform') startTransformAnim();
+  });
+
+  // ---- Hints ----
+  function showHint(text) {
+    hint.textContent = text;
+    setTimeout(function() { hint.className = 'hint show'; }, 300);
+    setTimeout(function() { hint.className = 'hint'; }, 3500);
+  }
+
+  // ---- Init ----
+  data = api.data;
+  prevMatrixStr = JSON.stringify(data.matrix || []);
+
+  if (data.mode === 'transform' && data.animate !== false) {
+    startTransformAnim();
+    showHint('Click to add vectors · Shift+click to remove · Double-click to replay');
+  } else if (data.mode === 'operation') {
+    render(data);
+    showHint('Click to step through · Shift+click to reset');
+  } else {
+    render(data);
+  }
+
+  api.onDataChanged(function(d) {
+    var matChanged = JSON.stringify(d.matrix) !== prevMatrixStr;
+    data = d;
+    prevMatrixStr = JSON.stringify(d.matrix || []);
+    if (d.mode === 'transform' && d.animate !== false && matChanged) {
+      startTransformAnim();
+    } else {
+      render(d);
+    }
+  });
+
+  api.onResize(function() {
+    if (data.mode === 'transform' && animFrame) return;
+    render();
+  });
+
+  api.onCaptureSnapshot(function() {
+    return { dataUrl: cv.toDataURL('image/png') };
+  });
+})();
+</script>
+</body>
+</html>
