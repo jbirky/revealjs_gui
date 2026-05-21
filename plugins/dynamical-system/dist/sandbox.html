@@ -25,7 +25,6 @@
   var hint = document.getElementById('hint');
   var TRAJ_COLORS = ['#f472b6','#34d399','#fbbf24','#60a5fa','#a78bfa','#f87171','#38bdf8','#fb923c'];
   var data = {};
-  var ctrlH = 0;
 
   // ---- Expression parser ----
   function parseExpr(str) {
@@ -229,6 +228,81 @@
 
   function render(d) {
     data = d || data;
+    if (data.viewMode === 'timeseries') return renderTimeSeries();
+    return renderPhase();
+  }
+
+  function renderTimeSeries() {
+    var dpr = window.devicePixelRatio || 1;
+    var cw = cv.parentElement ? cv.parentElement.clientWidth : api.width;
+    var ch = cv.parentElement ? cv.parentElement.clientHeight : api.height;
+    cv.width = cw * dpr; cv.height = ch * dpr;
+    cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    var fx = compileExpr(data.dxdt), fy = compileExpr(data.dydt);
+    var tMax = data.tMax || 30, dt = data.dt || 0.03;
+    var steps = Math.min(Math.ceil(tMax / dt), 50000);
+    var trajs = data.trajectories || [];
+    var pad = { l: 40, r: 16, t: 12, b: 28 };
+    var plotW = cw - pad.l - pad.r, plotH = ch - pad.t - pad.b;
+
+    ctx.fillStyle = data.bgColor || '#0f0f1a'; ctx.fillRect(0, 0, cw, ch);
+
+    var allPts = trajs.map(function(tr) { return integrate(fx, fy, tr.x, tr.y, dt, steps, -1e6, 1e6, -1e6, 1e6); });
+    var vMin = Infinity, vMax = -Infinity;
+    for (var ai = 0; ai < allPts.length; ai++) for (var pi = 0; pi < allPts[ai].length; pi++) {
+      var p = allPts[ai][pi];
+      if (p.x < vMin) vMin = p.x; if (p.x > vMax) vMax = p.x;
+      if (p.y < vMin) vMin = p.y; if (p.y > vMax) vMax = p.y;
+    }
+    if (!isFinite(vMin)) { vMin = -1; vMax = 1; }
+    var vPad = (vMax - vMin) * 0.08 || 1; vMin -= vPad; vMax += vPad;
+
+    var tsToSx = function(t) { return pad.l + (t / tMax) * plotW; };
+    var tsToSy = function(v) { return pad.t + (1 - (v - vMin) / (vMax - vMin)) * plotH; };
+
+    ctx.save(); ctx.beginPath(); ctx.rect(pad.l, pad.t, plotW, plotH); ctx.clip();
+
+    var tStep = niceStep(tMax), vStep = niceStep(vMax - vMin);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 0.5;
+    ctx.font = '10px -apple-system, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (var gt = 0; gt <= tMax; gt += tStep) { var sx = tsToSx(gt); ctx.beginPath(); ctx.moveTo(sx, pad.t); ctx.lineTo(sx, pad.t + plotH); ctx.stroke(); ctx.fillText(fmt(gt), sx, pad.t + plotH + 2); }
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (var gv = Math.ceil(vMin / vStep) * vStep; gv <= vMax; gv += vStep) { var sy = tsToSy(gv); ctx.beginPath(); ctx.moveTo(pad.l, sy); ctx.lineTo(pad.l + plotW, sy); ctx.stroke(); ctx.fillText(fmt(gv), pad.l - 4, sy); }
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
+    if (vMin <= 0 && vMax >= 0) { var zy = tsToSy(0); ctx.beginPath(); ctx.moveTo(pad.l, zy); ctx.lineTo(pad.l + plotW, zy); ctx.stroke(); }
+
+    for (var ti = 0; ti < allPts.length; ti++) {
+      var pts = allPts[ti], col = TRAJ_COLORS[ti % TRAJ_COLORS.length];
+      if (pts.length < 2) continue;
+      ctx.strokeStyle = col; ctx.lineWidth = 1.8; ctx.globalAlpha = 0.9; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(tsToSx(0), tsToSy(pts[0].x));
+      for (var i = 1; i < pts.length; i++) ctx.lineTo(tsToSx(i * (data.dt || 0.03)), tsToSy(pts[i].x));
+      ctx.stroke();
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath(); ctx.moveTo(tsToSx(0), tsToSy(pts[0].y));
+      for (var i = 1; i < pts.length; i++) ctx.lineTo(tsToSx(i * (data.dt || 0.03)), tsToSy(pts[i].y));
+      ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '12px -apple-system, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('t', pad.l + plotW / 2, ch - 1);
+    ctx.save(); ctx.translate(10, pad.t + plotH / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = 'top'; ctx.fillText('value', 0, 0); ctx.restore();
+    if (trajs.length > 0) {
+      ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      var lx = pad.l + 8, ly = pad.t + 10;
+      ctx.fillStyle = 'rgba(15,15,26,0.7)'; ctx.fillRect(lx - 4, ly - 8, 80, 28);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 16, ly); ctx.stroke(); ctx.fillText('x(t)', lx + 20, ly);
+      ctx.setLineDash([4, 2]); ctx.beginPath(); ctx.moveTo(lx, ly + 14); ctx.lineTo(lx + 16, ly + 14); ctx.stroke();
+      ctx.fillText('y(t)', lx + 20, ly + 14); ctx.setLineDash([]);
+    }
+  }
+
+  function renderPhase() {
     var dpr = window.devicePixelRatio || 1;
     var cw = cv.parentElement ? cv.parentElement.clientWidth : api.width;
     var ch = cv.parentElement ? cv.parentElement.clientHeight : api.height;
@@ -237,7 +311,7 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);
 
     padL = 0; padT = 0;
-    W = cw; H = ch - ctrlH;
+    W = cw; H = ch;
 
     var fx = compileExpr(data.dxdt);
     var fy = compileExpr(data.dydt);
@@ -379,7 +453,7 @@
   cv.addEventListener('click', function(e) {
     var rect = cv.getBoundingClientRect();
     var mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    if (my < ctrlH) return;
+    if (data.viewMode === 'timeseries') return;
     var wx = toWx(mx), wy = toWy(my);
     if (wx < data.xMin || wx > data.xMax || wy < data.yMin || wy > data.yMax) return;
 
@@ -398,8 +472,8 @@
     api.updateData({trajectories: trajs});
   });
 
-  // Show hint briefly on load
-  setTimeout(function() { hint.className = 'hint show'; }, 300);
+  // Show hint briefly on load (phase mode only)
+  setTimeout(function() { if (data.viewMode !== 'timeseries') hint.className = 'hint show'; }, 300);
   setTimeout(function() { hint.className = 'hint'; }, 3500);
 
   // ---- Init ----

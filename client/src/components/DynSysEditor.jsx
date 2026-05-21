@@ -271,7 +271,7 @@ function drawTimeSeries(canvas, d) {
 }
 
 export default function DynSysEditor({ initialData, onApply, onCancel }) {
-  const [d, setD] = useState(() => ({ ...initialData }))
+  const [d, setD] = useState(() => ({ viewMode: 'phase', ...initialData }))
   const phaseRef = useRef(null)
   const tsRef = useRef(null)
   const rafRef = useRef(null)
@@ -348,9 +348,15 @@ export default function DynSysEditor({ initialData, onApply, onCancel }) {
         {/* Body: split panes */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           {/* Phase portrait */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border, #333)' }}>
-            <div style={{ padding: '6px 12px', fontSize: 11, color: '#8888a0', borderBottom: '1px solid var(--border, #333)', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Phase Portrait — click to add, shift+click to remove</span>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border, #333)', outline: d.viewMode === 'phase' ? '2px solid #6366f1' : 'none', outlineOffset: -2, borderRadius: 0 }}>
+            <div
+              onClick={() => upd({ viewMode: 'phase' })}
+              style={{ padding: '6px 12px', fontSize: 11, color: d.viewMode === 'phase' ? '#a5b4fc' : '#8888a0', borderBottom: '1px solid var(--border, #333)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: d.viewMode === 'phase' ? 'rgba(99,102,241,0.08)' : 'transparent', transition: 'background 0.15s' }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {d.viewMode === 'phase' && <span style={{ width: 6, height: 6, borderRadius: 3, background: '#6366f1', flexShrink: 0 }} />}
+                Phase Portrait — click to add, shift+click to remove
+              </span>
               <span style={{ fontFamily: monoFont, fontSize: 10 }}>x∈[{d.xMin},{d.xMax}] y∈[{d.yMin},{d.yMax}]</span>
             </div>
             <div style={{ flex: 1, position: 'relative' }}>
@@ -358,9 +364,15 @@ export default function DynSysEditor({ initialData, onApply, onCancel }) {
             </div>
           </div>
           {/* Time series */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '6px 12px', fontSize: 11, color: '#8888a0', borderBottom: '1px solid var(--border, #333)', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Time Series — x(t) solid, y(t) dashed</span>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', outline: d.viewMode === 'timeseries' ? '2px solid #6366f1' : 'none', outlineOffset: -2, borderRadius: 0 }}>
+            <div
+              onClick={() => upd({ viewMode: 'timeseries' })}
+              style={{ padding: '6px 12px', fontSize: 11, color: d.viewMode === 'timeseries' ? '#a5b4fc' : '#8888a0', borderBottom: '1px solid var(--border, #333)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: d.viewMode === 'timeseries' ? 'rgba(99,102,241,0.08)' : 'transparent', transition: 'background 0.15s' }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {d.viewMode === 'timeseries' && <span style={{ width: 6, height: 6, borderRadius: 3, background: '#6366f1', flexShrink: 0 }} />}
+                Time Series — x(t) solid, y(t) dashed
+              </span>
               <span style={{ fontFamily: monoFont, fontSize: 10 }}>{(d.trajectories||[]).length} trajectories</span>
             </div>
             <div style={{ flex: 1, position: 'relative' }}>
@@ -391,6 +403,11 @@ export default function DynSysEditor({ initialData, onApply, onCancel }) {
             t max <input type="range" min="5" max="100" value={d.tMax || 30} onChange={e => upd({ tMax: Number(e.target.value) })} style={{ width: 80, accentColor: '#6366f1' }} />
             <span style={{ fontFamily: monoFont, fontSize: 10, minWidth: 24 }}>{d.tMax || 30}</span>
           </label>
+          <div style={{ marginLeft: 'auto', fontSize: 10, color: '#8888a0', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 3, background: '#6366f1' }} />
+            Slide shows: {d.viewMode === 'timeseries' ? 'Time Series' : 'Phase Portrait'}
+            <span style={{ color: '#666', marginLeft: 4 }}>(click pane header to change)</span>
+          </div>
         </div>
       </div>
     </div>

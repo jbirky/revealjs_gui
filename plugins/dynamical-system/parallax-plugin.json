@@ -37,7 +37,8 @@
           "bgColor": "#0f0f1a",
           "dt": 0.03,
           "maxSteps": 2000,
-          "tMax": 30
+          "tMax": 30,
+          "viewMode": "phase"
         },
         "toolbar": {
           "menu": "embed",
