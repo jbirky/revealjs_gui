@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: -apple-system, 'Inter', sans-serif; }
+  canvas { display: block; }
+  .controls {
+    position: absolute; top: 0; left: 0; right: 0;
+    background: rgba(15,15,26,0.92); backdrop-filter: blur(8px);
+    padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    font-size: 11px; color: #c0c0d0; border-bottom: 1px solid rgba(255,255,255,0.08);
+    z-index: 10; transition: opacity 0.15s;
+  }
+  .controls.hidden { opacity: 0; pointer-events: none; }
+  .ctrl-label { color: #8888a0; font-size: 10px; margin-right: 2px; }
+  .ctrl-input {
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+    color: #e0e0f0; padding: 3px 6px; border-radius: 4px; font-size: 11px;
+    font-family: 'SF Mono', 'Fira Code', monospace; outline: none; width: 140px;
+  }
+  .ctrl-input:focus { border-color: #6366f1; }
+  .ctrl-btn {
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+    color: #c0c0d0; padding: 3px 8px; border-radius: 4px; font-size: 10px;
+    cursor: pointer; white-space: nowrap;
+  }
+  .ctrl-btn:hover { background: rgba(255,255,255,0.12); }
+  .ctrl-btn.active { background: rgba(99,102,241,0.3); border-color: #6366f1; color: #a5b4fc; }
+  .ctrl-select {
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+    color: #c0c0d0; padding: 3px 6px; border-radius: 4px; font-size: 10px; outline: none;
+  }
+  .ctrl-sep { width: 1px; height: 18px; background: rgba(255,255,255,0.08); margin: 0 2px; }
+  .hint {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    background: rgba(15,15,26,0.85); color: #8888a0; font-size: 10px;
+    padding: 3px 10px; border-radius: 10px; pointer-events: none;
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .hint.show { opacity: 1; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div class="controls hidden" id="ctrls">
+  <span class="ctrl-label">dx/dt =</span>
+  <input class="ctrl-input" id="inp-dx" spellcheck="false">
+  <span class="ctrl-label">dy/dt =</span>
+  <input class="ctrl-input" id="inp-dy" spellcheck="false">
+  <div class="ctrl-sep"></div>
+  <select class="ctrl-select" id="preset-sel">
+    <option value="">Preset...</option>
+    <option value="pendulum">Damped Pendulum</option>
+    <option value="vanderpol">Van der Pol</option>
+    <option value="lotka">Lotka-Volterra</option>
+    <option value="saddle">Linear Saddle</option>
+    <option value="spiral">Stable Spiral</option>
+    <option value="center">Center</option>
+    <option value="duffing">Duffing</option>
+  </select>
+  <div class="ctrl-sep"></div>
+  <button class="ctrl-btn" id="btn-field">Field</button>
+  <button class="ctrl-btn" id="btn-null">Nullclines</button>
+  <button class="ctrl-btn" id="btn-fp">Fixed Pts</button>
+  <button class="ctrl-btn" id="btn-clear">Clear Paths</button>
+</div>
+<div class="hint" id="hint">Click to add trajectories &middot; Shift+click to remove</div>
+<script>
+(function() {
+  var api = window.parallax;
+  if (!api) return;
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var ctrls = document.getElementById('ctrls');
+  var hint = document.getElementById('hint');
+  var inpDx = document.getElementById('inp-dx');
+  var inpDy = document.getElementById('inp-dy');
+  var presetSel = document.getElementById('preset-sel');
+  var btnField = document.getElementById('btn-field');
+  var btnNull = document.getElementById('btn-null');
+  var btnFp = document.getElementById('btn-fp');
+  var btnClear = document.getElementById('btn-clear');
+  var TRAJ_COLORS = ['#f472b6','#34d399','#fbbf24','#60a5fa','#a78bfa','#f87171','#38bdf8','#fb923c'];
+  var data = {};
+  var ctrlH = 0;
+  var showControls = false;
+
+  // ---- Expression parser ----
+  function parseExpr(str) {
+    var tokens = tokenize(str);
+    var pos = {i: 0};
+    var ast = parseAdd(tokens, pos);
+    return ast;
+  }
+  function tokenize(s) {
+    var t = [], i = 0;
+    while (i < s.length) {
+      var c = s[i];
+      if (c === ' ') { i++; continue; }
+      if ('+-*/^(),'.indexOf(c) >= 0) { t.push({type:'op',val:c}); i++; continue; }
+      if ((c >= '0' && c <= '9') || c === '.') {
+        var n = '';
+        while (i < s.length && ((s[i] >= '0' && s[i] <= '9') || s[i] === '.')) n += s[i++];
+        t.push({type:'num',val:parseFloat(n)}); continue;
+      }
+      if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c === '_') {
+        var id = '';
+        while (i < s.length && ((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= '0' && s[i] <= '9') || s[i] === '_')) id += s[i++];
+        t.push({type:'id',val:id}); continue;
+      }
+      i++;
+    }
+    return t;
+  }
+  function peek(t,p) { return p.i < t.length ? t[p.i] : null; }
+  function eat(t,p) { return t[p.i++]; }
+  function parseAdd(t,p) {
+    var left = parseMul(t,p);
+    while (peek(t,p) && (peek(t,p).val==='+' || peek(t,p).val==='-')) {
+      var op = eat(t,p).val; left = {op:op, a:left, b:parseMul(t,p)};
+    }
+    return left;
+  }
+  function parseMul(t,p) {
+    var left = parsePow(t,p);
+    while (peek(t,p) && (peek(t,p).val==='*' || peek(t,p).val==='/')) {
+      var op = eat(t,p).val; left = {op:op, a:left, b:parsePow(t,p)};
+    }
+    return left;
+  }
+  function parsePow(t,p) {
+    var left = parseUnary(t,p);
+    if (peek(t,p) && peek(t,p).val==='^') { eat(t,p); left = {op:'^', a:left, b:parsePow(t,p)}; }
+    return left;
+  }
+  function parseUnary(t,p) {
+    if (peek(t,p) && peek(t,p).val==='-') { eat(t,p); return {op:'neg', a:parseUnary(t,p)}; }
+    if (peek(t,p) && peek(t,p).val==='+') { eat(t,p); return parseUnary(t,p); }
+    return parseAtom(t,p);
+  }
+  function parseAtom(t,p) {
+    var tk = peek(t,p);
+    if (!tk) return {op:'num',val:0};
+    if (tk.type==='num') { eat(t,p); return {op:'num',val:tk.val}; }
+    if (tk.type==='id') {
+      eat(t,p);
+      if (peek(t,p) && peek(t,p).val==='(') {
+        eat(t,p);
+        var args = [parseAdd(t,p)];
+        while (peek(t,p) && peek(t,p).val===',') { eat(t,p); args.push(parseAdd(t,p)); }
+        if (peek(t,p) && peek(t,p).val===')') eat(t,p);
+        return {op:'fn',name:tk.val,args:args};
+      }
+      if (tk.val==='pi') return {op:'num',val:Math.PI};
+      if (tk.val==='e') return {op:'num',val:Math.E};
+      return {op:'var',name:tk.val};
+    }
+    if (tk.val==='(') { eat(t,p); var inner = parseAdd(t,p); if (peek(t,p)&&peek(t,p).val===')') eat(t,p); return inner; }
+    eat(t,p);
+    return {op:'num',val:0};
+  }
+  var FNS = {sin:Math.sin,cos:Math.cos,tan:Math.tan,exp:Math.exp,log:Math.log,sqrt:Math.sqrt,abs:Math.abs,atan:Math.atan,atan2:Math.atan2,tanh:Math.tanh,sign:Math.sign,asin:Math.asin,acos:Math.acos,pow:Math.pow,min:Math.min,max:Math.max};
+  function evalAST(node,vars) {
+    if (node.op==='num') return node.val;
+    if (node.op==='var') return vars[node.name]||0;
+    if (node.op==='neg') return -evalAST(node.a,vars);
+    if (node.op==='+') return evalAST(node.a,vars)+evalAST(node.b,vars);
+    if (node.op==='-') return evalAST(node.a,vars)-evalAST(node.b,vars);
+    if (node.op==='*') return evalAST(node.a,vars)*evalAST(node.b,vars);
+    if (node.op==='/') { var d=evalAST(node.b,vars); return d===0?0:evalAST(node.a,vars)/d; }
+    if (node.op==='^') return Math.pow(evalAST(node.a,vars),evalAST(node.b,vars));
+    if (node.op==='fn') { var fn=FNS[node.name]; if(!fn) return 0; var a=node.args.map(function(n){return evalAST(n,vars)}); return fn.apply(null,a); }
+    return 0;
+  }
+  function compileExpr(str) {
+    try { var ast = parseExpr(str || '0'); return function(x,y) { return evalAST(ast,{x:x,y:y}); }; }
+    catch(e) { return function(){return 0;}; }
+  }
+
+  // ---- RK4 Integrator ----
+  function integrate(fx,fy,x0,y0,dt,steps,xMin,xMax,yMin,yMax) {
+    var pts = [{x:x0,y:y0}];
+    var x=x0,y=y0, margin=2;
+    var xLo=xMin-margin, xHi=xMax+margin, yLo=yMin-margin, yHi=yMax+margin;
+    for (var i=0; i<steps; i++) {
+      var k1x=fx(x,y), k1y=fy(x,y);
+      var k2x=fx(x+dt/2*k1x,y+dt/2*k1y), k2y=fy(x+dt/2*k1x,y+dt/2*k1y);
+      var k3x=fx(x+dt/2*k2x,y+dt/2*k2y), k3y=fy(x+dt/2*k2x,y+dt/2*k2y);
+      var k4x=fx(x+dt*k3x,y+dt*k3y), k4y=fy(x+dt*k3x,y+dt*k3y);
+      x += dt/6*(k1x+2*k2x+2*k3x+k4x);
+      y += dt/6*(k1y+2*k2y+2*k3y+k4y);
+      if (isNaN(x)||isNaN(y)||x<xLo||x>xHi||y<yLo||y>yHi) break;
+      pts.push({x:x,y:y});
+    }
+    return pts;
+  }
+  function integrateBoth(fx,fy,x0,y0,dt,steps,xMin,xMax,yMin,yMax) {
+    var fwd = integrate(fx,fy,x0,y0,dt,steps,xMin,xMax,yMin,yMax);
+    var bwd = integrate(fx,fy,x0,y0,-dt,steps,xMin,xMax,yMin,yMax);
+    bwd.reverse();
+    bwd.pop();
+    return bwd.concat(fwd);
+  }
+
+  // ---- Fixed point finder (Newton's method from grid samples) ----
+  function findFixedPoints(fx,fy,xMin,xMax,yMin,yMax) {
+    var pts = [], n=12;
+    var dx=(xMax-xMin)/n, dy=(yMax-yMin)/n;
+    for (var i=0;i<=n;i++) for (var j=0;j<=n;j++) {
+      var x=xMin+i*dx, y=yMin+j*dy;
+      for (var k=0;k<20;k++) {
+        var f=fx(x,y), g=fy(x,y);
+        if (Math.abs(f)<1e-10 && Math.abs(g)<1e-10) break;
+        var h=1e-6;
+        var fx1=(fx(x+h,y)-f)/h, fx2=(fx(x,y+h)-f)/h;
+        var fy1=(fy(x+h,y)-g)/h, fy2=(fy(x,y+h)-g)/h;
+        var det=fx1*fy2-fx2*fy1;
+        if (Math.abs(det)<1e-14) break;
+        x -= (fy2*f-fx2*g)/det;
+        y -= (fx1*g-fy1*f)/det;
+      }
+      if (Math.abs(fx(x,y))<1e-6 && Math.abs(fy(x,y))<1e-6 && x>=xMin && x<=xMax && y>=yMin && y<=yMax) {
+        var dup = false;
+        for (var m=0;m<pts.length;m++) if (Math.abs(pts[m].x-x)<0.05 && Math.abs(pts[m].y-y)<0.05) { dup=true; break; }
+        if (!dup) {
+          var h2=1e-5;
+          var J11=(fx(x+h2,y)-fx(x-h2,y))/(2*h2), J12=(fx(x,y+h2)-fx(x,y-h2))/(2*h2);
+          var J21=(fy(x+h2,y)-fy(x-h2,y))/(2*h2), J22=(fy(x,y+h2)-fy(x,y-h2))/(2*h2);
+          var tr=J11+J22, det2=J11*J22-J12*J21, disc=tr*tr-4*det2;
+          var cls='unknown';
+          if (det2<0) cls='saddle';
+          else if (disc<0) cls=tr<0?'stable-spiral':'unstable-spiral';
+          else cls=tr<0?'stable-node':'unstable-node';
+          if (Math.abs(tr)<1e-8 && det2>0) cls='center';
+          pts.push({x:x,y:y,type:cls});
+        }
+      }
+    }
+    return pts;
+  }
+
+  // ---- Nullcline renderer (marching squares) ----
+  function drawNullcline(fn, xMin, xMax, yMin, yMax, color) {
+    var res = 80;
+    var dx = (xMax - xMin) / res, dy = (yMax - yMin) / res;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    for (var i = 0; i < res; i++) for (var j = 0; j < res; j++) {
+      var x0 = xMin + i * dx, y0 = yMin + j * dy;
+      var v00 = fn(x0, y0), v10 = fn(x0 + dx, y0), v01 = fn(x0, y0 + dy), v11 = fn(x0 + dx, y0 + dy);
+      var edges = [];
+      if (v00 * v10 < 0) edges.push({x: x0 + dx * (-v00) / (v10 - v00), y: y0});
+      if (v10 * v11 < 0) edges.push({x: x0 + dx, y: y0 + dy * (-v10) / (v11 - v10)});
+      if (v01 * v11 < 0) edges.push({x: x0 + dx * (-v01) / (v11 - v01), y: y0 + dy});
+      if (v00 * v01 < 0) edges.push({x: x0, y: y0 + dy * (-v00) / (v01 - v00)});
+      if (edges.length >= 2) {
+        ctx.moveTo(toSx(edges[0].x), toSy(edges[0].y));
+        ctx.lineTo(toSx(edges[1].x), toSy(edges[1].y));
+      }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // ---- Coordinate transforms ----
+  var W, H, padL=0, padT=0;
+  function toSx(x) { return padL + (x - data.xMin) / (data.xMax - data.xMin) * W; }
+  function toSy(y) { return padT + (1 - (y - data.yMin) / (data.yMax - data.yMin)) * H; }
+  function toWx(sx) { return data.xMin + (sx - padL) / W * (data.xMax - data.xMin); }
+  function toWy(sy) { return data.yMin + (1 - (sy - padT) / H) * (data.yMax - data.yMin); }
+
+  // ---- Drawing ----
+  function drawArrow(x1,y1,x2,y2,size) {
+    var dx=x2-x1, dy=y2-y1, len=Math.sqrt(dx*dx+dy*dy);
+    if (len<0.5) return;
+    var ux=dx/len, uy=dy/len;
+    ctx.beginPath();
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-ux*size+uy*size*0.4, y2-uy*size-ux*size*0.4);
+    ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-ux*size-uy*size*0.4, y2-uy*size+ux*size*0.4);
+    ctx.stroke();
+  }
+
+  function render(d) {
+    data = d || data;
+    var dpr = window.devicePixelRatio || 1;
+    var cw = cv.parentElement ? cv.parentElement.clientWidth : api.width;
+    var ch = cv.parentElement ? cv.parentElement.clientHeight : api.height;
+    cv.width = cw * dpr; cv.height = ch * dpr;
+    cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    ctrlH = showControls ? ctrls.offsetHeight : 0;
+    padL = 0; padT = ctrlH;
+    W = cw; H = ch - ctrlH;
+
+    var fx = compileExpr(data.dxdt);
+    var fy = compileExpr(data.dydt);
+
+    // Background
+    ctx.fillStyle = data.bgColor || '#0f0f1a';
+    ctx.fillRect(0, 0, cw, ch);
+
+    // Grid + axes
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(padL, padT, W, H);
+    ctx.clip();
+
+    var axColor = 'rgba(255,255,255,0.08)';
+    var labelColor = 'rgba(255,255,255,0.25)';
+    ctx.strokeStyle = axColor; ctx.lineWidth = 0.5;
+    ctx.font = '10px -apple-system, sans-serif'; ctx.fillStyle = labelColor;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+
+    var xRange = data.xMax - data.xMin, yRange = data.yMax - data.yMin;
+    var xStep = niceStep(xRange), yStep = niceStep(yRange);
+
+    for (var gx = Math.ceil(data.xMin / xStep) * xStep; gx <= data.xMax; gx += xStep) {
+      var sx = toSx(gx);
+      ctx.beginPath(); ctx.moveTo(sx, padT); ctx.lineTo(sx, padT + H); ctx.stroke();
+      ctx.fillText(fmt(gx), sx, padT + H - 14);
+    }
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (var gy = Math.ceil(data.yMin / yStep) * yStep; gy <= data.yMax; gy += yStep) {
+      var sy = toSy(gy);
+      ctx.beginPath(); ctx.moveTo(padL, sy); ctx.lineTo(padL + W, sy); ctx.stroke();
+      ctx.fillText(fmt(gy), padL + 28, sy);
+    }
+
+    // Axes at origin
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
+    if (data.xMin <= 0 && data.xMax >= 0) {
+      var ox = toSx(0);
+      ctx.beginPath(); ctx.moveTo(ox, padT); ctx.lineTo(ox, padT + H); ctx.stroke();
+    }
+    if (data.yMin <= 0 && data.yMax >= 0) {
+      var oy = toSy(0);
+      ctx.beginPath(); ctx.moveTo(padL, oy); ctx.lineTo(padL + W, oy); ctx.stroke();
+    }
+
+    // Vector field
+    if (data.showField !== false) {
+      var gd = data.gridDensity || 18;
+      var arrowLen = Math.min(W, H) / gd * 0.38;
+      ctx.strokeStyle = data.fieldColor || 'rgba(100,160,255,0.35)';
+      ctx.lineWidth = 1;
+      for (var i = 0; i <= gd; i++) for (var j = 0; j <= gd; j++) {
+        var wx = data.xMin + (i + 0.5) / (gd + 1) * xRange;
+        var wy = data.yMin + (j + 0.5) / (gd + 1) * yRange;
+        var vx = fx(wx, wy), vy = fy(wx, wy);
+        var mag = Math.sqrt(vx * vx + vy * vy);
+        if (mag < 1e-12) continue;
+        var nx = vx / mag, ny = vy / mag;
+        var sx = toSx(wx), sy = toSy(wy);
+        drawArrow(sx - nx * arrowLen * 0.4, sy + ny * arrowLen * 0.4,
+                  sx + nx * arrowLen * 0.6, sy - ny * arrowLen * 0.6, 3.5);
+      }
+    }
+
+    // Nullclines
+    if (data.showNullclines) {
+      drawNullcline(fx, data.xMin, data.xMax, data.yMin, data.yMax, 'rgba(251,191,36,0.6)');
+      drawNullcline(fy, data.xMin, data.xMax, data.yMin, data.yMax, 'rgba(244,114,182,0.6)');
+    }
+
+    // Trajectories
+    var trajs = data.trajectories || [];
+    var dt = data.dt || 0.03, maxS = data.maxSteps || 2000;
+    for (var ti = 0; ti < trajs.length; ti++) {
+      var t = trajs[ti];
+      var pts = integrateBoth(fx, fy, t.x, t.y, dt, maxS, data.xMin, data.xMax, data.yMin, data.yMax);
+      if (pts.length < 2) continue;
+      var col = TRAJ_COLORS[ti % TRAJ_COLORS.length];
+      ctx.strokeStyle = col; ctx.lineWidth = 1.8; ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(toSx(pts[0].x), toSy(pts[0].y));
+      for (var pi = 1; pi < pts.length; pi++) ctx.lineTo(toSx(pts[pi].x), toSy(pts[pi].y));
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      // Starting point dot
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(toSx(t.x), toSy(t.y), 4, 0, 2 * Math.PI); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(toSx(t.x), toSy(t.y), 4, 0, 2 * Math.PI); ctx.stroke();
+    }
+
+    // Fixed points
+    if (data.showFixedPoints) {
+      var fps = findFixedPoints(fx, fy, data.xMin, data.xMax, data.yMin, data.yMax);
+      for (var fi = 0; fi < fps.length; fi++) {
+        var fp = fps[fi];
+        var fpx = toSx(fp.x), fpy = toSy(fp.y);
+        var r = 5;
+        var fpColor = fp.type === 'saddle' ? '#ef4444'
+          : fp.type === 'stable-node' || fp.type === 'stable-spiral' ? '#22c55e'
+          : fp.type === 'center' ? '#60a5fa'
+          : '#f59e0b';
+        ctx.fillStyle = fpColor; ctx.globalAlpha = 0.8;
+        if (fp.type === 'saddle' || fp.type === 'unstable-node' || fp.type === 'unstable-spiral') {
+          ctx.beginPath(); ctx.arc(fpx, fpy, r, 0, 2 * Math.PI); ctx.fill();
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(fpx, fpy, r, 0, 2 * Math.PI); ctx.stroke();
+        } else {
+          ctx.beginPath(); ctx.arc(fpx, fpy, r, 0, 2 * Math.PI); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    ctx.restore();
+
+    // Axis labels
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '12px -apple-system, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('x', padL + W / 2, padT + H - 1);
+    ctx.save(); ctx.translate(padL + 14, padT + H / 2);
+    ctx.rotate(-Math.PI / 2); ctx.textBaseline = 'top'; ctx.fillText('y', 0, 0);
+    ctx.restore();
+  }
+
+  function niceStep(range) {
+    var raw = range / 6;
+    var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    var norm = raw / mag;
+    if (norm <= 1.5) return mag;
+    if (norm <= 3) return 2 * mag;
+    if (norm <= 7) return 5 * mag;
+    return 10 * mag;
+  }
+  function fmt(v) { return Math.abs(v) < 1e-10 ? '0' : (Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0)) ? v.toExponential(1) : parseFloat(v.toPrecision(4)).toString(); }
+
+  // ---- Controls ----
+  function syncControls() {
+    inpDx.value = data.dxdt || '';
+    inpDy.value = data.dydt || '';
+    btnField.className = 'ctrl-btn' + (data.showField !== false ? ' active' : '');
+    btnNull.className = 'ctrl-btn' + (data.showNullclines ? ' active' : '');
+    btnFp.className = 'ctrl-btn' + (data.showFixedPoints ? ' active' : '');
+  }
+
+  function applyInputs() {
+    api.updateData({ dxdt: inpDx.value, dydt: inpDy.value });
+  }
+  inpDx.addEventListener('change', applyInputs);
+  inpDy.addEventListener('change', applyInputs);
+  inpDx.addEventListener('keydown', function(e) { if (e.key === 'Enter') applyInputs(); });
+  inpDy.addEventListener('keydown', function(e) { if (e.key === 'Enter') applyInputs(); });
+
+  var PRESETS = {
+    pendulum: { dxdt:'y', dydt:'-sin(x) - 0.3*y', xMin:-8,xMax:8,yMin:-5,yMax:5, trajectories:[{x:1,y:0},{x:-3,y:2},{x:5,y:-1}] },
+    vanderpol: { dxdt:'y', dydt:'2*(1 - x^2)*y - x', xMin:-5,xMax:5,yMin:-5,yMax:5, trajectories:[{x:0.1,y:0},{x:3,y:3},{x:-2,y:-4}] },
+    lotka: { dxdt:'x*(1.5 - y)', dydt:'y*(x - 1)', xMin:-0.5,xMax:5,yMin:-0.5,yMax:5, trajectories:[{x:1,y:1},{x:2,y:3},{x:0.5,y:0.5}] },
+    saddle: { dxdt:'x', dydt:'-y', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:1,y:1},{x:-1,y:2},{x:2,y:-1},{x:-2,y:-2}] },
+    spiral: { dxdt:'-0.5*x + y', dydt:'-x - 0.5*y', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:3,y:0},{x:-2,y:2},{x:0,y:-3}] },
+    center: { dxdt:'y', dydt:'-x', xMin:-4,xMax:4,yMin:-4,yMax:4, trajectories:[{x:1,y:0},{x:2,y:0},{x:3,y:0}] },
+    duffing: { dxdt:'y', dydt:'x - x^3 - 0.2*y', xMin:-3,xMax:3,yMin:-2,yMax:2, trajectories:[{x:0.1,y:0},{x:-0.1,y:0},{x:1.5,y:1}] },
+  };
+  presetSel.addEventListener('change', function() {
+    var p = PRESETS[presetSel.value];
+    if (!p) return;
+    api.updateData(Object.assign({}, p, {showField:data.showField!==false, showNullclines:!!data.showNullclines, showFixedPoints:!!data.showFixedPoints, gridDensity:data.gridDensity||18, dt:data.dt||0.03, maxSteps:data.maxSteps||2000, fieldColor:data.fieldColor, bgColor:data.bgColor}));
+    presetSel.value = '';
+  });
+
+  btnField.addEventListener('click', function() { api.updateData({showField: data.showField === false}); });
+  btnNull.addEventListener('click', function() { api.updateData({showNullclines: !data.showNullclines}); });
+  btnFp.addEventListener('click', function() { api.updateData({showFixedPoints: !data.showFixedPoints}); });
+  btnClear.addEventListener('click', function() { api.updateData({trajectories: []}); });
+
+  // ---- Click to add/remove trajectories ----
+  cv.addEventListener('click', function(e) {
+    var rect = cv.getBoundingClientRect();
+    var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    if (my < ctrlH) return;
+    var wx = toWx(mx), wy = toWy(my);
+    if (wx < data.xMin || wx > data.xMax || wy < data.yMin || wy > data.yMax) return;
+
+    var trajs = (data.trajectories || []).slice();
+    if (e.shiftKey) {
+      // Remove nearest
+      var best = -1, bestD = Infinity;
+      for (var i = 0; i < trajs.length; i++) {
+        var d = Math.pow(toSx(trajs[i].x) - mx, 2) + Math.pow(toSy(trajs[i].y) - my, 2);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      if (best >= 0 && bestD < 400) trajs.splice(best, 1);
+    } else {
+      trajs.push({x: Math.round(wx * 100) / 100, y: Math.round(wy * 100) / 100});
+    }
+    api.updateData({trajectories: trajs});
+  });
+
+  // Show/hide controls on pointer proximity
+  var controlsVisible = false;
+  document.addEventListener('pointermove', function(e) {
+    var rect = cv.getBoundingClientRect();
+    var my = e.clientY - rect.top;
+    var shouldShow = my < 60;
+    if (shouldShow !== controlsVisible) {
+      controlsVisible = shouldShow;
+      showControls = shouldShow;
+      ctrls.className = 'controls' + (shouldShow ? '' : ' hidden');
+      hint.className = 'hint' + (shouldShow ? '' : ' show');
+      requestAnimationFrame(function() { render(); });
+    }
+  });
+
+  // Show hint briefly on load
+  setTimeout(function() { hint.className = 'hint show'; }, 300);
+  setTimeout(function() { hint.className = 'hint'; }, 3500);
+
+  // ---- Init ----
+  function onData(d) {
+    data = d;
+    syncControls();
+    render(d);
+  }
+  onData(api.data);
+  api.onDataChanged(onData);
+  api.onResize(function() { render(); });
+
+  // Snapshot for export
+  api.onCaptureSnapshot(function() {
+    return { dataUrl: cv.toDataURL('image/png') };
+  });
+})();
+</script>
+</body>
+</html>
