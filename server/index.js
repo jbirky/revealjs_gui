@@ -20,6 +20,7 @@ const storage = createStorage()
 const { authStack, requireUser, IS_CLOUD, PLAN_LIMITS } = require('./middleware/auth')
 const { isR2Enabled, streamFromR2, putBufferToR2, deleteFromR2 } = require('./services/r2')
 const { handleUpload: r2Upload, deleteUploadsForPresentation } = require('./services/upload-service')
+const { ingestDataset, readDatasetFile, applyQuery, deleteDatasetFile } = require('./services/dataset-service')
 const {
   corsConfig, helmetConfig, apiLimiter, uploadLimiter, authLimiter,
   requireValidId, requireValidSlug, requireValidSHA, validateUpload,
@@ -1516,6 +1517,130 @@ app.delete('/api/uploads/:id', requireValidId(), async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
+})
+
+// --- Datasets ---
+
+// POST /api/datasets — upload a dataset (CSV, JSON, TSV)
+app.post('/api/datasets', uploadLimiter, upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+  try {
+    const name = req.body.name || undefined
+    const result = await ingestDataset(req.file.path, req.file.originalname, {
+      userId: req.userId, storage, localDir: DATA_DIR,
+    })
+    if (name) result.name = name.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase()
+    const ds = await storage.createDataset(result, req.userId)
+    res.status(201).json(ds)
+  } catch (err) {
+    if (req.file && req.file.path) fs.removeSync(req.file.path)
+    res.status(400).json({ error: err.message })
+  }
+})
+
+// GET /api/datasets — list user's datasets
+app.get('/api/datasets', async (req, res) => {
+  try {
+    res.json(await storage.listDatasets(req.userId))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/datasets/:id — get dataset metadata
+app.get('/api/datasets/:id', requireValidId(), async (req, res) => {
+  try {
+    const ds = await storage.getDataset(req.params.id, req.userId)
+    if (!ds) return res.status(404).json({ error: 'Dataset not found' })
+    res.json(ds)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/datasets/:id/data — fetch dataset rows (column-oriented)
+app.get('/api/datasets/:id/data', requireValidId(), async (req, res) => {
+  try {
+    const ds = await storage.getDataset(req.params.id, req.userId)
+    if (!ds) return res.status(404).json({ error: 'Dataset not found' })
+    const rows = await readDatasetFile(ds.storageKey, ds.format, DATA_DIR)
+    const opts = {}
+    if (req.query.columns) opts.columns = req.query.columns.split(',')
+    if (req.query.limit) opts.limit = parseInt(req.query.limit)
+    if (req.query.offset) opts.offset = parseInt(req.query.offset)
+    if (req.query.orderBy) opts.orderBy = req.query.orderBy
+    if (req.query.where) {
+      try { opts.where = JSON.parse(req.query.where) } catch {}
+    }
+    const result = applyQuery(rows, ds.columns, opts)
+    res.json(result)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// PATCH /api/datasets/:id — rename a dataset
+app.patch('/api/datasets/:id', requireValidId(), async (req, res) => {
+  try {
+    const ds = await storage.updateDataset(req.params.id, { name: req.body.name }, req.userId)
+    if (!ds) return res.status(404).json({ error: 'Dataset not found' })
+    res.json(ds)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /api/datasets/:id — delete a dataset and its stored file
+app.delete('/api/datasets/:id', requireValidId(), async (req, res) => {
+  try {
+    const ds = await storage.deleteDataset(req.params.id, req.userId)
+    if (!ds) return res.status(404).json({ error: 'Dataset not found' })
+    try { await deleteDatasetFile(ds.storageKey, DATA_DIR) } catch (e) {
+      console.error('Dataset file cleanup failed:', e.message)
+    }
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/presentations/:pid/datasets — link a dataset to a presentation
+app.post('/api/presentations/:pid/datasets', async (req, res) => {
+  const { pid } = req.params
+  const { datasetId, alias } = req.body
+  if (!datasetId) return res.status(400).json({ error: 'datasetId is required' })
+  try {
+    const pres = await storage.getPresentation(pid, req.userId)
+    if (!pres) return res.status(404).json({ error: 'Presentation not found' })
+    const ds = await storage.getDataset(datasetId, req.userId)
+    if (!ds) return res.status(404).json({ error: 'Dataset not found' })
+    await storage.linkDatasetToPresentation(pid, datasetId, alias)
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /api/presentations/:pid/datasets/:did — unlink a dataset
+app.delete('/api/presentations/:pid/datasets/:did', async (req, res) => {
+  try {
+    await storage.unlinkDatasetFromPresentation(req.params.pid, req.params.did)
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/presentations/:pid/datasets — list datasets linked to a presentation
+app.get('/api/presentations/:pid/datasets', async (req, res) => {
+  try {
+    res.json(await storage.getPresentationDatasets(req.params.pid))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/presentations/:pid/datasets/:did/data — fetch data for a linked dataset
+app.get('/api/presentations/:pid/datasets/:did/data', async (req, res) => {
+  try {
+    const ds = await storage.getDataset(req.params.did, req.userId)
+    if (!ds) return res.status(404).json({ error: 'Dataset not found' })
+    const rows = await readDatasetFile(ds.storageKey, ds.format, DATA_DIR)
+    const opts = {}
+    if (req.query.columns) opts.columns = req.query.columns.split(',')
+    if (req.query.limit) opts.limit = parseInt(req.query.limit)
+    if (req.query.offset) opts.offset = parseInt(req.query.offset)
+    if (req.query.orderBy) opts.orderBy = req.query.orderBy
+    if (req.query.where) {
+      try { opts.where = JSON.parse(req.query.where) } catch {}
+    }
+    const result = applyQuery(rows, ds.columns, opts)
+    res.json(result)
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // --- Custom Fonts ---

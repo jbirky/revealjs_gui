@@ -434,6 +434,93 @@ class PgStorage extends StorageInterface {
   async deletePluginStorage(userId, pluginId, key) {
     await this.query(`DELETE FROM plugin_storage WHERE user_id = $1 AND plugin_id = $2 AND key = $3`, [userId, pluginId, key])
   }
+
+  // --- Datasets ---
+
+  async createDataset(data, userId) {
+    const id = uuidv4()
+    const now = new Date().toISOString()
+    await this.query(
+      `INSERT INTO datasets (id, user_id, name, filename, format, storage_key, columns, row_count, byte_size, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+       ON CONFLICT (user_id, name) DO UPDATE SET
+         filename = EXCLUDED.filename, format = EXCLUDED.format, storage_key = EXCLUDED.storage_key,
+         columns = EXCLUDED.columns, row_count = EXCLUDED.row_count, byte_size = EXCLUDED.byte_size, updated_at = EXCLUDED.updated_at`,
+      [id, userId, data.name, data.filename, data.format, data.storageKey, JSON.stringify(data.columns), data.rowCount, data.byteSize, now]
+    )
+    const { rows } = await this.query('SELECT * FROM datasets WHERE user_id = $1 AND name = $2', [userId, data.name])
+    const r = rows[0]
+    return { id: r.id, name: r.name, filename: r.filename, format: r.format, storageKey: r.storage_key, columns: r.columns, rowCount: r.row_count, byteSize: r.byte_size, createdAt: r.created_at, updatedAt: r.updated_at }
+  }
+
+  async listDatasets(userId) {
+    const { rows } = await this.query(
+      'SELECT id, name, filename, format, columns, row_count, byte_size, created_at, updated_at FROM datasets WHERE user_id = $1 ORDER BY updated_at DESC',
+      [userId]
+    )
+    return rows.map(r => ({ id: r.id, name: r.name, filename: r.filename, format: r.format, columns: r.columns, rowCount: r.row_count, byteSize: r.byte_size, createdAt: r.created_at, updatedAt: r.updated_at }))
+  }
+
+  async getDataset(id, userId) {
+    const { rows } = await this.query(
+      'SELECT id, name, filename, format, storage_key, columns, row_count, byte_size, created_at, updated_at FROM datasets WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    )
+    if (!rows.length) return null
+    const r = rows[0]
+    return { id: r.id, name: r.name, filename: r.filename, format: r.format, storageKey: r.storage_key, columns: r.columns, rowCount: r.row_count, byteSize: r.byte_size, createdAt: r.created_at, updatedAt: r.updated_at }
+  }
+
+  async getDatasetByName(name, userId) {
+    const { rows } = await this.query(
+      'SELECT id, name, filename, format, storage_key, columns, row_count, byte_size, created_at, updated_at FROM datasets WHERE name = $1 AND user_id = $2',
+      [name, userId]
+    )
+    if (!rows.length) return null
+    const r = rows[0]
+    return { id: r.id, name: r.name, filename: r.filename, format: r.format, storageKey: r.storage_key, columns: r.columns, rowCount: r.row_count, byteSize: r.byte_size, createdAt: r.created_at, updatedAt: r.updated_at }
+  }
+
+  async updateDataset(id, data, userId) {
+    const sets = []
+    const params = []
+    let i = 1
+    if (data.name) { sets.push(`name = $${i++}`); params.push(data.name) }
+    if (!sets.length) return this.getDataset(id, userId)
+    sets.push(`updated_at = NOW()`)
+    params.push(id, userId)
+    await this.query(`UPDATE datasets SET ${sets.join(', ')} WHERE id = $${i++} AND user_id = $${i}`, params)
+    return this.getDataset(id, userId)
+  }
+
+  async deleteDataset(id, userId) {
+    const ds = await this.getDataset(id, userId)
+    if (!ds) return null
+    await this.query('DELETE FROM datasets WHERE id = $1 AND user_id = $2', [id, userId])
+    return ds
+  }
+
+  async linkDatasetToPresentation(presentationId, datasetId, alias) {
+    await this.query(
+      `INSERT INTO presentation_datasets (presentation_id, dataset_id, alias) VALUES ($1, $2, $3)
+       ON CONFLICT (presentation_id, dataset_id) DO UPDATE SET alias = $3`,
+      [presentationId, datasetId, alias || null]
+    )
+  }
+
+  async unlinkDatasetFromPresentation(presentationId, datasetId) {
+    await this.query('DELETE FROM presentation_datasets WHERE presentation_id = $1 AND dataset_id = $2', [presentationId, datasetId])
+  }
+
+  async getPresentationDatasets(presentationId) {
+    const { rows } = await this.query(
+      `SELECT d.id, d.name, d.filename, d.format, d.storage_key, d.columns, d.row_count, d.byte_size, d.created_at, d.updated_at, pd.alias
+       FROM datasets d INNER JOIN presentation_datasets pd ON pd.dataset_id = d.id
+       WHERE pd.presentation_id = $1 ORDER BY d.name`,
+      [presentationId]
+    )
+    return rows.map(r => ({ id: r.id, name: r.name, filename: r.filename, format: r.format, storageKey: r.storage_key, columns: r.columns, rowCount: r.row_count, byteSize: r.byte_size, createdAt: r.created_at, updatedAt: r.updated_at, alias: r.alias }))
+  }
 }
 
 module.exports = PgStorage

@@ -293,6 +293,98 @@ class FileStorage extends StorageInterface {
     delete store[`${userId}:${pluginId}:${key}`]
     fs.writeJsonSync(this._pluginStorageFile(), store, { spaces: 2 })
   }
+
+  // --- Datasets ---
+
+  _datasetsFile() {
+    const file = path.join(this.dataDir, 'datasets.json')
+    if (!fs.existsSync(file)) fs.writeJsonSync(file, [])
+    return file
+  }
+
+  _presDatasetLinksFile() {
+    const file = path.join(this.dataDir, 'presentation-datasets.json')
+    if (!fs.existsSync(file)) fs.writeJsonSync(file, {})
+    return file
+  }
+
+  async createDataset(data) {
+    const all = fs.readJsonSync(this._datasetsFile())
+    const existing = all.findIndex(d => d.name === data.name)
+    const now = new Date().toISOString()
+    const ds = { id: uuidv4(), ...data, createdAt: now, updatedAt: now }
+    if (existing >= 0) {
+      ds.id = all[existing].id
+      ds.createdAt = all[existing].createdAt
+      all[existing] = ds
+    } else {
+      all.push(ds)
+    }
+    fs.writeJsonSync(this._datasetsFile(), all, { spaces: 2 })
+    return ds
+  }
+
+  async listDatasets() {
+    return fs.readJsonSync(this._datasetsFile()).map(({ storageKey, ...rest }) => rest)
+  }
+
+  async getDataset(id) {
+    return fs.readJsonSync(this._datasetsFile()).find(d => d.id === id) || null
+  }
+
+  async getDatasetByName(name) {
+    return fs.readJsonSync(this._datasetsFile()).find(d => d.name === name) || null
+  }
+
+  async updateDataset(id, data) {
+    const all = fs.readJsonSync(this._datasetsFile())
+    const i = all.findIndex(d => d.id === id)
+    if (i === -1) return null
+    if (data.name) all[i].name = data.name
+    all[i].updatedAt = new Date().toISOString()
+    fs.writeJsonSync(this._datasetsFile(), all, { spaces: 2 })
+    return all[i]
+  }
+
+  async deleteDataset(id) {
+    const all = fs.readJsonSync(this._datasetsFile())
+    const i = all.findIndex(d => d.id === id)
+    if (i === -1) return null
+    const [ds] = all.splice(i, 1)
+    fs.writeJsonSync(this._datasetsFile(), all, { spaces: 2 })
+    return ds
+  }
+
+  async linkDatasetToPresentation(presentationId, datasetId, alias) {
+    const links = fs.readJsonSync(this._presDatasetLinksFile())
+    if (!links[presentationId]) links[presentationId] = []
+    const existing = links[presentationId].findIndex(l => l.datasetId === datasetId)
+    if (existing >= 0) {
+      links[presentationId][existing].alias = alias || null
+    } else {
+      links[presentationId].push({ datasetId, alias: alias || null })
+    }
+    fs.writeJsonSync(this._presDatasetLinksFile(), links, { spaces: 2 })
+  }
+
+  async unlinkDatasetFromPresentation(presentationId, datasetId) {
+    const links = fs.readJsonSync(this._presDatasetLinksFile())
+    if (!links[presentationId]) return
+    links[presentationId] = links[presentationId].filter(l => l.datasetId !== datasetId)
+    fs.writeJsonSync(this._presDatasetLinksFile(), links, { spaces: 2 })
+  }
+
+  async getPresentationDatasets(presentationId) {
+    const links = fs.readJsonSync(this._presDatasetLinksFile())
+    const presLinks = links[presentationId] || []
+    const all = fs.readJsonSync(this._datasetsFile())
+    return presLinks.map(l => {
+      const ds = all.find(d => d.id === l.datasetId)
+      if (!ds) return null
+      const { storageKey, ...rest } = ds
+      return { ...rest, alias: l.alias }
+    }).filter(Boolean)
+  }
 }
 
 module.exports = FileStorage

@@ -46,6 +46,16 @@ class StorageInterface {
   async getPluginStorage(userId, pluginId, key) { throw new Error('Not implemented') }
   async setPluginStorage(userId, pluginId, key, value) { throw new Error('Not implemented') }
   async deletePluginStorage(userId, pluginId, key) { throw new Error('Not implemented') }
+
+  async createDataset(data, userId) { throw new Error('Not implemented') }
+  async listDatasets(userId) { throw new Error('Not implemented') }
+  async getDataset(id, userId) { throw new Error('Not implemented') }
+  async getDatasetByName(name, userId) { throw new Error('Not implemented') }
+  async updateDataset(id, data, userId) { throw new Error('Not implemented') }
+  async deleteDataset(id, userId) { throw new Error('Not implemented') }
+  async linkDatasetToPresentation(presentationId, datasetId, alias) { throw new Error('Not implemented') }
+  async unlinkDatasetFromPresentation(presentationId, datasetId) { throw new Error('Not implemented') }
+  async getPresentationDatasets(presentationId) { throw new Error('Not implemented') }
 }
 
 module.exports = StorageInterface

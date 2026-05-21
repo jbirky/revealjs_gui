@@ -181,6 +181,33 @@ export const api = {
   }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Failed'); return b }),
   deleteFont: (id) => authFetch(`${BASE}/fonts/${id}`, { method: 'DELETE' }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Failed'); return b }),
 
+  // Datasets
+  getDatasets: () => authFetch(`${BASE}/datasets`).then(safeJson),
+  getDataset: (id) => authFetch(`${BASE}/datasets/${id}`).then(safeJson),
+  uploadDataset: (file, name) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (name) fd.append('name', name)
+    return authFetch(`${BASE}/datasets`, { method: 'POST', body: fd }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Upload failed'); return b })
+  },
+  getDatasetData: (id, params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return authFetch(`${BASE}/datasets/${id}/data${qs ? '?' + qs : ''}`).then(safeJson)
+  },
+  renameDataset: (id, name) => authFetch(`${BASE}/datasets/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  }).then(safeJson),
+  deleteDataset: (id) => authFetch(`${BASE}/datasets/${id}`, { method: 'DELETE' }).then(async r => { const b = await safeJson(r); if (!r.ok) throw new Error(b.error || 'Delete failed'); return b }),
+  getPresentationDatasets: (pid) => authFetch(`${BASE}/presentations/${pid}/datasets`).then(safeJson),
+  linkDataset: (pid, datasetId, alias) => authFetch(`${BASE}/presentations/${pid}/datasets`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ datasetId, alias }),
+  }).then(safeJson),
+  unlinkDataset: (pid, datasetId) => authFetch(`${BASE}/presentations/${pid}/datasets/${datasetId}`, { method: 'DELETE' }).then(safeJson),
+
   // File management
   getUploads: () => authFetch(`${BASE}/uploads`).then(safeJson),
   getPresentationUploads: (presentationId) => authFetch(`${BASE}/presentations/${presentationId}/uploads`).then(safeJson),

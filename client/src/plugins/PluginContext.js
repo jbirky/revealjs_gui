@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Jessica Birky
 
 import registry from './PluginRegistry'
+import datasetManager from '../datasets/DatasetManager'
 
 export function createPluginContext(manifest, { getElement, updateElement, getPresentation, showToast }) {
   const disposables = []
@@ -94,6 +95,26 @@ export function createPluginContext(manifest, { getElement, updateElement, getPr
     data: {
       registerProcessor(config) {
         const unsub = registry.registerDataProcessor(manifest.id, config)
+        dispose(unsub)
+        return unsub
+      },
+    },
+
+    datasets: {
+      list() {
+        return datasetManager.list()
+      },
+      schema(name) {
+        return datasetManager.schema(name)
+      },
+      async load(name) {
+        return datasetManager.load(name)
+      },
+      async query(name, opts) {
+        return datasetManager.query(name, opts)
+      },
+      onChange(name, callback) {
+        const unsub = datasetManager.onChange(name, callback)
         dispose(unsub)
         return unsub
       },
